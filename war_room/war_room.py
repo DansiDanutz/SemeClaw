@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so paperclip_bridge is importable directly
 
 from paperclip_bridge import PaperclipBridge, AGENT_ASSIGNEES, load_bridge
+from research_tools import ResearchTools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +57,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 # ---------------------------------------------------------------------------
 # LLM config (reads from SemeClaw workspace config if available)
 # ---------------------------------------------------------------------------
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
+DEFAULT_MODEL = "alibaba/qwen3.6-plus"
 
 def _load_model() -> str:
     cfg_path = ROOT / "default_workspace" / "config.yaml"
@@ -98,6 +99,7 @@ async def call_agent(
     task: str,
     context: str = "",
     model: str | None = None,
+    tools: ResearchTools | None = None,
 ) -> str:
     """
     Call a War Room agent with a task.
@@ -113,6 +115,10 @@ async def call_agent(
 
     logger.info("🤖 Calling agent [%s] with model %s", agent_id, model)
 
+    # For research agent, inject tools description and do tool-use loop
+    if agent_id == "research" and tools:
+        system += tools.get_available_tools_description()
+
     messages = [{"role": "user", "content": user_msg}]
 
     response = await litellm.acompletion(
@@ -123,8 +129,89 @@ async def call_agent(
         temperature=0.3,
     )
     result = response.choices[0].message.content or ""
+
+    # Tool-use loop for research agent
+    if agent_id == "research" and tools:
+        tool_iterations = 0
+        max_tool_iterations = 5
+        while tool_iterations < max_tool_iterations:
+            # Check if the response contains tool use instructions
+            tool_call = _parse_tool_call(result, tools)
+            if not tool_call:
+                break
+
+            tool_name, tool_args = tool_call
+            logger.info("🔧 Research agent using tool: %s(%s)", tool_name, tool_args[:80])
+
+            # Execute the tool
+            if tool_name == "search":
+                tool_result = await tools.search(tool_args.strip('"').strip("'"))
+            elif tool_name == "extract":
+                # Parse URLs from args
+                import re
+                urls = re.findall(r'https?://[^\s"\']+', tool_args)
+                if urls:
+                    tool_result = await tools.extract(urls)
+                else:
+                    tool_result = "[No URLs found in extract request]"
+            elif tool_name == "browser_navigate":
+                url = tool_args.strip('"').strip("'").strip()
+                tool_result = await tools.browser_navigate(url)
+            elif tool_name == "run_code":
+                tool_result = await tools.run_code(tool_args)
+            elif tool_name == "run_shell":
+                tool_result = await tools.run_shell(tool_args)
+            else:
+                tool_result = f"[Unknown tool: {tool_name}]"
+
+            # Feed tool result back to the model
+            messages.append({"role": "assistant", "content": result})
+            messages.append({
+                "role": "user",
+                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue your research with this information.",
+            })
+
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                system=system,
+                max_tokens=4096,
+                temperature=0.3,
+            )
+            result = response.choices[0].message.content or ""
+            tool_iterations += 1
+            logger.info("✅ Tool iteration %d/%d complete", tool_iterations, max_tool_iterations)
+
     logger.info("✅ Agent [%s] responded (%d chars)", agent_id, len(result))
     return result
+
+
+def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | None:
+    """
+    Parse tool use from agent response.
+    Looks for patterns like: search("query"), extract(["url1", "url2"]), etc.
+    """
+    import re
+
+    tool_patterns = [
+        (r'search\(["\'](.+?)["\']\)', 'search'),
+        (r'extract\((.+?)\)', 'extract'),
+        (r'browser_navigate\(["\'](.+?)["\']\)', 'browser_navigate'),
+        (r'run_code\((.+?)\)', 'run_code'),
+        (r'run_shell\((.+?)\)', 'run_shell'),
+    ]
+
+    for pattern, tool_name in tool_patterns:
+        match = re.search(pattern, response, re.DOTALL)
+        if match:
+            return tool_name, match.group(1)
+
+    # Also check for XML-style tool calls: <tool>search</tool><args>query</args>
+    xml_tool = re.search(r'<tool>(\w+)</tool>\s*<args>(.+?)</args>', response, re.DOTALL)
+    if xml_tool:
+        return xml_tool.group(1), xml_tool.group(2)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +248,11 @@ class WarRoomPipeline:
 
         context = ""
         self.results = {}
+        research_tools = ResearchTools()
 
         for agent_id in agents:
             logger.info("▶️  Running agent: %s", agent_id)
-            output = await call_agent(agent_id, task, context=context, model=self.model)
+            output = await call_agent(agent_id, task, context=context, model=self.model, tools=research_tools)
             self.results[agent_id] = output
             context += f"\n\n## Output from {agent_id.capitalize()} Agent\n\n{output}"
 
@@ -177,7 +265,8 @@ class WarRoomPipeline:
 
         # Create Paperclip issue from writer output
         paperclip_issue = None
-        async with PaperclipBridge(mock=True) as bridge:
+        bridge = load_bridge()
+        async with bridge:
             writer_output = self.results.get("writer", "")
             title, description, ac = self._parse_writer_output(writer_output, task)
             assignee = AGENT_ASSIGNEES.get(agents[-1], "Hermes")
@@ -356,7 +445,8 @@ async def cmd_status():
 
 
 async def cmd_board():
-    async with PaperclipBridge(mock=True) as bridge:
+    bridge = load_bridge()
+    async with bridge:
         board = await bridge.get_board_state()
     print("\n🏛  Paperclip Board")
     print(f"   Mode: {board.get('mode', 'live')}")

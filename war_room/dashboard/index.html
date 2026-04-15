@@ -45,6 +45,8 @@
     box-shadow: 0 0 6px var(--accent2);
     animation: pulse 2s infinite;
   }
+  .status-dot.disconnected { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .status-dot.connecting { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
   main {
@@ -265,6 +267,25 @@
   .report-name { font-size: 13px; font-weight: 600; color: var(--accent); }
   .report-preview { color: var(--muted); font-size: 11px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+  /* Live activity feed */
+  .activity-feed {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .activity-feed h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+  .activity-item {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-item .time { color: var(--accent); font-weight: 600; margin-right: 8px; }
+
   /* Modal */
   .modal-overlay {
     display: none;
@@ -324,10 +345,10 @@
 <body>
 
 <header>
-  <div class="status-dot"></div>
+  <div class="status-dot" id="ws-dot"></div>
   <div>
     <h1>🏛 War Room</h1>
-    <div class="subtitle">Dan's Lab · Paperclip Agent Fleet</div>
+    <div class="subtitle">Dan's Lab · Paperclip Agent Fleet · <span id="ws-status">Connecting...</span></div>
   </div>
   <div class="spacer"></div>
   <span id="last-updated" style="color:var(--muted);font-size:11px;">Loading…</span>
@@ -384,11 +405,21 @@
       <div class="pipeline" id="pipeline">
         <div class="pipeline-step" id="step-research">Research</div>
         <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" id="step-architect">Architect</div>
+        <div class="pipeline-arrow">→</div>
         <div class="pipeline-step" id="step-strategist">Strategist</div>
         <div class="pipeline-arrow">→</div>
         <div class="pipeline-step" id="step-writer">Writer</div>
         <div class="pipeline-arrow">→</div>
         <div class="pipeline-step" id="step-paperclip">Paperclip Issue</div>
+      </div>
+    </div>
+
+    <!-- Live Activity Feed (new - WebSocket powered) -->
+    <div class="activity-feed">
+      <h3>📡 Live Activity</h3>
+      <div id="activity-list">
+        <div class="activity-item"><span class="time">--:--:--</span> Connecting to server...</div>
       </div>
     </div>
 
@@ -444,14 +475,110 @@ const AGENTS_DEF = [
 
 let allRuns = [];
 let allReports = [];
+let activityItems = [];
+
+// ------------------------------------------------------------------ //
+// WebSocket connection
+// ------------------------------------------------------------------ //
+let ws = null;
+let wsReconnectTimer = null;
+
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/ws`;
+
+  document.getElementById('ws-dot').className = 'status-dot connecting';
+  document.getElementById('ws-status').textContent = 'Connecting...';
+
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    document.getElementById('ws-dot').className = 'status-dot';
+    document.getElementById('ws-status').textContent = 'Live (WebSocket)';
+    addActivity('🟢 WebSocket connected');
+    // Send ping to keep alive
+    setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 30000);
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleWebSocketMessage(msg);
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').className = 'status-dot disconnected';
+    document.getElementById('ws-status').textContent = 'Disconnected';
+    addActivity('🔴 WebSocket disconnected — reconnecting in 5s...');
+    wsReconnectTimer = setTimeout(connectWebSocket, 5000);
+  };
+
+  ws.onerror = () => {
+    addActivity('⚠️ WebSocket error');
+    ws.close();
+  };
+}
+
+function handleWebSocketMessage(msg) {
+  switch (msg.type) {
+    case 'initial_state':
+      updateMetrics(msg.state, allReports);
+      updateLastUpdated(msg.state);
+      addActivity('📊 Initial state loaded');
+      break;
+    case 'state_update':
+      updateMetrics(msg.state, allReports);
+      updateLastUpdated(msg.state);
+      addActivity('📊 State updated');
+      break;
+    case 'task_started':
+      addActivity(`🚀 Task started: "${msg.task}" [${msg.agents.join(' → ')}]`);
+      animatePipeline(msg.agents);
+      toast(`🚀 Task started: ${msg.task.substring(0, 50)}...`);
+      break;
+    case 'task_completed':
+      addActivity(`✅ Task completed (exit ${msg.exit_code})`);
+      resetPipeline();
+      refresh(); // Full refresh to pick up new state
+      break;
+    case 'new_log':
+      addActivity('📝 New log entry');
+      refresh();
+      break;
+    case 'new_report':
+      addActivity('📄 New research report created');
+      refresh();
+      break;
+    case 'pong':
+      // Keepalive response, ignore
+      break;
+    default:
+      addActivity(`📨 ${msg.type}`);
+  }
+}
+
+function addActivity(text) {
+  const now = new Date().toLocaleTimeString();
+  activityItems.unshift({ time: now, text });
+  if (activityItems.length > 50) activityItems.pop();
+  renderActivity();
+}
+
+function renderActivity() {
+  const el = document.getElementById('activity-list');
+  el.innerHTML = activityItems.slice(0, 20).map(a =>
+    `<div class="activity-item"><span class="time">${a.time}</span>${a.text}</div>`
+  ).join('');
+}
 
 // ------------------------------------------------------------------ //
 // Init
 // ------------------------------------------------------------------ //
 async function init() {
   renderAgents();
+  connectWebSocket();
   await refresh();
-  setInterval(refresh, 15000);  // auto-refresh every 15s
+  // Fallback polling every 30s in case WebSocket misses something
+  setInterval(refresh, 30000);
 }
 
 function renderAgents() {
@@ -481,7 +608,6 @@ async function refresh() {
     updateLastUpdated(state);
   } catch (e) {
     console.error('Refresh error:', e);
-    toast('⚠️ Could not reach War Room server');
   }
 }
 
@@ -546,7 +672,6 @@ async function runTask() {
   btn.disabled = true;
   btn.textContent = '⏳ Starting…';
 
-  // Animate pipeline
   const steps = agents.split(',');
   animatePipeline(steps);
 
@@ -560,7 +685,7 @@ async function runTask() {
     if (data.error) {
       toast(`❌ ${data.error}`);
     } else {
-      toast(`🚀 Task started (PID ${data.pid}) — refresh in a minute`);
+      toast(`🚀 Task started (PID ${data.pid})`);
       document.getElementById('task-input').value = '';
     }
   } catch (e) {
@@ -568,7 +693,7 @@ async function runTask() {
   } finally {
     btn.disabled = false;
     btn.textContent = '▶ Run';
-    resetPipeline();
+    // Don't reset pipeline here — let WebSocket task_completed handle it
   }
 }
 
@@ -580,7 +705,7 @@ function animatePipeline(steps) {
   });
   steps.forEach((s, i) => {
     const el = document.getElementById('step-' + s);
-    if (el) setTimeout(() => el.classList.add('active'), i * 300);
+    if (el) setTimeout(() => { el.classList.add('active'); }, i * 300);
   });
   const pcEl = document.getElementById('step-paperclip');
   if (pcEl) setTimeout(() => pcEl.classList.add('active'), steps.length * 300);
@@ -589,8 +714,14 @@ function animatePipeline(steps) {
 function resetPipeline() {
   ['research','architect','strategist','writer','paperclip'].forEach(s => {
     const el = document.getElementById('step-' + s);
-    if (el) el.classList.remove('active','done');
+    if (el) { el.classList.remove('active'); el.classList.add('done'); }
   });
+  setTimeout(() => {
+    ['research','architect','strategist','writer','paperclip'].forEach(s => {
+      const el = document.getElementById('step-' + s);
+      if (el) el.classList.remove('done');
+    });
+  }, 3000);
 }
 
 // ------------------------------------------------------------------ //

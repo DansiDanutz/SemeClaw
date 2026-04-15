@@ -1,0 +1,6 @@
+{
+  "paperclip_url": "http://127.0.0.1:3100",
+  "mock": false,
+  "company_id": "e2c3ad73-d2f8-4396-adc5-4ea855df0143",
+  "dashboard_port": 8765
+}

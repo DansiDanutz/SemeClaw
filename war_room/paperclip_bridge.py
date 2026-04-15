@@ -278,11 +278,12 @@ class PaperclipBridge:
 def load_bridge(workspace_path: Path | None = None) -> "PaperclipBridge":
     """
     Create a PaperclipBridge.
-    Reads PAPERCLIP_URL from war_room/config.json if present.
+    Reads PAPERCLIP_URL and mock flag from war_room/config.json if present.
+    On Mac Studio (where Paperclip API runs on port 3100), defaults to live mode.
     """
     config_path = (workspace_path or Path(".")) / "war_room" / "config.json"
     url = PAPERCLIP_BASE
-    mock = False
+    mock = False  # Default to live mode on Mac Studio
 
     if config_path.exists():
         try:

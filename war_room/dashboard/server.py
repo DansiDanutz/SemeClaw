@@ -1,25 +1,44 @@
 """
-War Room Dashboard — Flask server (port 8765)
+War Room Dashboard — FastAPI + WebSocket server (port 8765)
 
-Serves the real-time dashboard and provides a JSON API.
+Replaces the Flask polling dashboard with real-time WebSocket updates.
+Clients connect via WebSocket and receive push notifications when:
+- A new task run completes
+- New research reports are created
+- Paperclip board state changes
+- Agent status changes
 
 Run:
   python war_room/dashboard/server.py
+
+API endpoints:
+  GET  /              — Dashboard HTML
+  GET  /api/state     — Current state
+  GET  /api/reports   — Research reports
+  GET  /api/logs      — Run logs
+  GET  /api/agents    — Agent definitions
+  POST /api/run       — Start a task
+  GET  /api/board     — Paperclip board state
+  WS   /ws            — WebSocket for real-time updates
 """
 
+import asyncio
 import json
 import logging
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Set
 
-# Flask — installed with: pip install flask
+# FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
-    from flask import Flask, jsonify, render_template_string, request
-    from flask_cors import CORS
+    from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
+    import uvicorn
 except ImportError:
-    print("Flask not installed. Run: pip install flask flask-cors")
+    print("FastAPI not installed. Run: pip install fastapi uvicorn")
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
@@ -30,38 +49,105 @@ STATE_FILE   = WAR_ROOM_DIR / "shared_state.json"
 LOGS_DIR     = WAR_ROOM_DIR / "logs"
 RESEARCH_DIR = WAR_ROOM_DIR / "research"
 AGENTS_DIR   = WAR_ROOM_DIR / "agents"
+CONFIG_FILE  = WAR_ROOM_DIR / "config.json"
 
 ROOT = WAR_ROOM_DIR.parent
 
 logger = logging.getLogger("war_room.dashboard")
-app = Flask(__name__)
-try:
-    CORS(app)
-except Exception:
-    pass  # flask-cors optional
-
 
 # ---------------------------------------------------------------------------
-# API endpoints
+# App
+# ---------------------------------------------------------------------------
+app = FastAPI(title="War Room Dashboard")
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Set[WebSocket] = set()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.discard(websocket)
+
+    async def broadcast(self, message: dict):
+        """Send a message to all connected clients."""
+        data = json.dumps(message)
+        dead = set()
+        for ws in self.active_connections:
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.add(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+manager = ConnectionManager()
+
+# ---------------------------------------------------------------------------
+# File watcher: polls for changes and broadcasts updates
+# ---------------------------------------------------------------------------
+_last_state_hash = ""
+_last_log_count = 0
+_last_report_count = 0
+
+async def file_watcher():
+    """Background task that polls for file changes and broadcasts updates."""
+    global _last_state_hash, _last_log_count, _last_report_count
+    while True:
+        try:
+            # Check state file
+            if STATE_FILE.exists():
+                content = STATE_FILE.read_text()
+                state_hash = hash(content)
+                if state_hash != _last_state_hash:
+                    _last_state_hash = state_hash
+                    await manager.broadcast({
+                        "type": "state_update",
+                        "state": json.loads(content),
+                    })
+
+            # Check for new log entries
+            log_files = sorted(LOGS_DIR.glob("run-*.jsonl"), reverse=True)
+            total_entries = sum(len(f.read_text().splitlines()) for f in log_files if f.exists())
+            if total_entries != _last_log_count:
+                _last_log_count = total_entries
+                await manager.broadcast({"type": "new_log"})
+
+            # Check for new reports
+            report_count = len(list(RESEARCH_DIR.glob("*.md")))
+            if report_count != _last_report_count:
+                _last_report_count = report_count
+                await manager.broadcast({"type": "new_report"})
+
+        except Exception as e:
+            logger.error("File watcher error: %s", e)
+
+        await asyncio.sleep(3)  # Poll every 3 seconds
+
+# ---------------------------------------------------------------------------
+# REST API endpoints
 # ---------------------------------------------------------------------------
 
-@app.route("/")
-def index():
+@app.get("/", response_class=HTMLResponse)
+async def index():
     html_file = Path(__file__).parent / "index.html"
     if html_file.exists():
-        return html_file.read_text(encoding="utf-8")
-    return "<h1>War Room Dashboard</h1><p>index.html not found.</p>"
+        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>War Room Dashboard</h1><p>index.html not found.</p>")
 
 
-@app.route("/api/state")
-def api_state():
+@app.get("/api/state")
+async def api_state():
     if STATE_FILE.exists():
-        return jsonify(json.loads(STATE_FILE.read_text()))
-    return jsonify({"error": "No state file", "metrics": {}, "completed_tasks": []})
+        return JSONResponse(json.loads(STATE_FILE.read_text()))
+    return JSONResponse({"error": "No state file", "metrics": {}, "completed_tasks": []})
 
 
-@app.route("/api/reports")
-def api_reports():
+@app.get("/api/reports")
+async def api_reports():
     files = sorted(RESEARCH_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
     reports = []
     for f in files[:20]:
@@ -71,11 +157,11 @@ def api_reports():
             "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
             "preview":  f.read_text(encoding="utf-8")[:300],
         })
-    return jsonify(reports)
+    return JSONResponse(reports)
 
 
-@app.route("/api/logs")
-def api_logs():
+@app.get("/api/logs")
+async def api_logs():
     entries = []
     for log_file in sorted(LOGS_DIR.glob("run-*.jsonl"), reverse=True)[:3]:
         for line in log_file.read_text(encoding="utf-8").splitlines():
@@ -84,36 +170,43 @@ def api_logs():
             except Exception:
                 pass
     entries.sort(key=lambda x: x.get("completed", ""), reverse=True)
-    return jsonify(entries[:50])
+    return JSONResponse(entries[:50])
 
 
-@app.route("/api/agents")
-def api_agents():
+@app.get("/api/agents")
+async def api_agents():
     agents = {}
     for md_file in AGENTS_DIR.glob("*.md"):
         agent_id = md_file.stem
         text = md_file.read_text(encoding="utf-8")
-        # Extract front-matter name
         name = agent_id.capitalize()
         for line in text.splitlines():
             if line.startswith("name:"):
                 name = line.split(":", 1)[1].strip()
                 break
         agents[agent_id] = {"id": agent_id, "name": name}
-    return jsonify(agents)
+    return JSONResponse(agents)
 
 
-@app.route("/api/run", methods=["POST"])
-def api_run():
-    data = request.get_json() or {}
+@app.post("/api/run")
+async def api_run(request: Request):
+    data = await request.json()
     task = data.get("task", "").strip()
     if not task:
-        return jsonify({"error": "task required"}), 400
+        return JSONResponse({"error": "task required"}, status_code=400)
 
     agents = data.get("agents", "research,strategist,writer")
     project = data.get("project", "NERVIX")
 
-    # Run war_room.py as a subprocess so it doesn't block Flask
+    # Broadcast that a task is starting
+    await manager.broadcast({
+        "type": "task_started",
+        "task": task,
+        "agents": agents.split(","),
+        "project": project,
+    })
+
+    # Run war_room.py as a subprocess so it doesn't block
     war_room_script = WAR_ROOM_DIR / "war_room.py"
     cmd = [
         sys.executable,
@@ -131,28 +224,104 @@ def api_run():
             stderr=subprocess.STDOUT,
             text=True,
         )
-        # Return immediately — task runs in background
-        return jsonify({"status": "started", "pid": proc.pid, "task": task})
+        # Monitor the subprocess and broadcast completion
+        asyncio.create_task(_monitor_subprocess(proc, task))
+        return JSONResponse({"status": "started", "pid": proc.pid, "task": task})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route("/api/board")
-def api_board():
-    """Return mock Paperclip board state."""
-    # Read from state file's paperclip section
+async def _monitor_subprocess(proc: subprocess.Popen, task: str):
+    """Monitor a background war_room process and broadcast when it completes."""
+    stdout, _ = proc.communicate()
+    await manager.broadcast({
+        "type": "task_completed",
+        "task": task,
+        "exit_code": proc.returncode,
+        "output": stdout[-1000:] if stdout else "",
+    })
+    # Trigger a state refresh broadcast
+    if STATE_FILE.exists():
+        await manager.broadcast({
+            "type": "state_update",
+            "state": json.loads(STATE_FILE.read_text()),
+        })
+
+
+@app.get("/api/board")
+async def api_board():
+    """Return Paperclip board state via the bridge."""
+    # Try to load bridge config
+    paperclip_url = "http://127.0.0.1:3100"
+    use_mock = True
+    if CONFIG_FILE.exists():
+        try:
+            cfg = json.loads(CONFIG_FILE.read_text())
+            paperclip_url = cfg.get("paperclip_url", paperclip_url)
+            use_mock = cfg.get("mock", True)
+        except Exception:
+            pass
+
+    # Try live API
+    if not use_mock:
+        import httpx
+        try:
+            async with httpx.AsyncClient(base_url=paperclip_url, timeout=5.0) as client:
+                r = await client.get("/health")
+                r.raise_for_status()
+                # Try to get board
+                try:
+                    r = await client.get("/board")
+                    r.raise_for_status()
+                    return JSONResponse(r.json())
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Fallback: return from state file or mock
     state = {}
     if STATE_FILE.exists():
         state = json.loads(STATE_FILE.read_text())
-    return jsonify(state.get("paperclip", {
+    return JSONResponse(state.get("paperclip", {
         "connected": False,
+        "mode": "mock",
         "agents": {
             "Dexter":  {"role": "Research",    "status": "idle"},
             "David":   {"role": "Architect",   "status": "idle"},
             "Memo":    {"role": "Strategist",  "status": "idle"},
             "Hermes":  {"role": "Writer",      "status": "idle"},
+            "Sienna":  {"role": "Crypto",      "status": "idle"},
+            "Nano":    {"role": "AgentCreator","status": "idle"},
         }
     }))
+
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        # Send initial state
+        if STATE_FILE.exists():
+            await websocket.send_text(json.dumps({
+                "type": "initial_state",
+                "state": json.loads(STATE_FILE.read_text()),
+            }))
+        # Keep connection alive
+        while True:
+            # Echo ping back as pong
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error("WebSocket error: %s", e)
+        manager.disconnect(websocket)
 
 
 # ---------------------------------------------------------------------------
@@ -161,5 +330,12 @@ def api_board():
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-    print(f"🏛  War Room Dashboard → http://127.0.0.1:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    print(f"🏛  War Room Dashboard (WebSocket) → http://127.0.0.1:{port}")
+    print(f"    WebSocket → ws://127.0.0.1:{port}/ws")
+
+    # Start the file watcher background task
+    @app.on_event("startup")
+    async def startup():
+        asyncio.create_task(file_watcher())
+
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
