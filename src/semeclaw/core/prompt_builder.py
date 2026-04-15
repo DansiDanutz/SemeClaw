@@ -50,14 +50,19 @@ class PromptBuilder:
         if bootstrap:
             layers.append(bootstrap)
 
-        # Layer 4: Runtime context
+        # Layer 4: Memory context (what Seme already knows)
+        memory_ctx = self._build_memory_context()
+        if memory_ctx:
+            layers.append(memory_ctx)
+
+        # Layer 5: Runtime context
         runtime = self._build_runtime_context(
             state.agent.agent_def.id, time.time()
         )
         if runtime:
             layers.append(runtime)
 
-        # Layer 5: Channel hint
+        # Layer 6: Channel hint
         if source:
             channel = self._build_channel_hint(source)
             if channel:
@@ -168,6 +173,45 @@ class PromptBuilder:
         for cron_id in sorted(cron_ids):
             cron_list += f"- `{cron_id}`\n"
         return cron_list
+
+    def _build_memory_context(self) -> str | None:
+        """Build a summary of what's in memory so the agent knows what it knows.
+
+        Returns:
+            Memory overview prompt or None if no memories exist.
+        """
+        memories_path = self.workspace_path / "memories"
+        if not memories_path.exists():
+            return None
+
+        sections = []
+
+        for axis in ("topics", "projects", "daily-notes"):
+            axis_path = memories_path / axis
+            if not axis_path.exists():
+                continue
+            keys = sorted(f.stem for f in axis_path.glob("*.md"))
+            if keys:
+                sections.append(f"- **{axis}**: {', '.join(keys)}")
+
+        # Check reflections
+        reflections_path = memories_path / "reflections"
+        if reflections_path.exists():
+            reflection_files = sorted(reflections_path.glob("*.md"))
+            if reflection_files:
+                sections.append(f"- **reflections**: {len(reflection_files)} entries")
+
+        # Check learning journal
+        journal_path = memories_path / "learning-journal"
+        if journal_path.exists():
+            journal_files = sorted(journal_path.glob("*.md"))
+            if journal_files:
+                sections.append(f"- **learning-journal**: {len(journal_files)} months")
+
+        if not sections:
+            return None
+
+        return "## Your Memory\n\nYou have stored knowledge available. Use `memory_search` and `memory_recall` to access it.\n\n" + "\n".join(sections)
 
     def _build_runtime_context(self, agent_id: str, timestamp: float) -> str | None:
         """Build runtime context with current agent and timestamp info.

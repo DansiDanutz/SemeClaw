@@ -34,6 +34,13 @@ class Agent:
         """Build tool registry for this agent."""
         registry = ToolRegistry.with_builtins()
 
+        # Add memory tools — these give the agent the ability to remember,
+        # recall, search, reflect, and maintain a learning journal
+        from semeclaw.tools.memory_tools import create_memory_tools
+
+        for memory_tool in create_memory_tools(self.config.workspace):
+            registry.register(memory_tool)
+
         # Add skill tool if skills are enabled
         if hasattr(self.agent_def, "allow_skills") and self.agent_def.allow_skills:
             from semeclaw.tools.skill_tool import create_skill_tool
