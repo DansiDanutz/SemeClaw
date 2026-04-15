@@ -34,7 +34,7 @@ def workspace_callback(ctx: typer.Context, workspace: str) -> Path:
 def main(
     ctx: typer.Context,
     workspace: str = typer.Option(
-        "../default_workspace",
+        "default_workspace",
         "--workspace",
         "-w",
         help="Path to workspace directory",
