@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "last_updated": null,
+  "active_tasks": [],
+  "completed_tasks": [],
+  "paperclip": {
+    "connected": false,
+    "last_sync": null,
+    "projects": [],
+    "agents": {}
+  },
+  "metrics": {
+    "tasks_run": 0,
+    "tasks_succeeded": 0,
+    "tasks_failed": 0,
+    "paperclip_issues_created": 0
+  }
+}

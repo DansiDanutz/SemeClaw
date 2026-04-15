@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🏛 War Room — Dan's Lab</title>
+<style>
+  :root {
+    --bg:      #0d0f14;
+    --surface: #161b22;
+    --border:  #21262d;
+    --accent:  #6366f1;
+    --accent2: #10b981;
+    --warn:    #f59e0b;
+    --danger:  #ef4444;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --card:    #1c2128;
+    --glow:    rgba(99,102,241,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* Layout */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  header .subtitle { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  main {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: auto auto 1fr;
+    gap: 0;
+    height: calc(100vh - 53px);
+  }
+
+  /* Sidebar */
+  aside {
+    grid-row: 1 / 4;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .section-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* Agent cards */
+  .agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .agent-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .agent-info { flex: 1; min-width: 0; }
+  .agent-name { font-weight: 600; font-size: 13px; }
+  .agent-role { color: var(--muted); font-size: 11px; }
+  .agent-status {
+    font-size: 10px; padding: 2px 7px;
+    border-radius: 20px; font-weight: 600;
+  }
+  .status-idle    { background: rgba(139,148,158,.15); color: var(--muted); }
+  .status-busy    { background: rgba(245,158,11,.15);  color: var(--warn); }
+  .status-done    { background: rgba(16,185,129,.15);  color: var(--accent2); }
+
+  /* Metrics */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .metric-value { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .metric-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* Content area */
+  .content {
+    grid-column: 2;
+    padding: 20px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Task runner */
+  .task-runner {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .task-runner h2 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  .task-form { display: flex; flex-direction: column; gap: 10px; }
+  .task-form input, .task-form select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 14px;
+    width: 100%;
+    outline: none;
+    transition: border .2s;
+  }
+  .task-form input:focus, .task-form select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--glow);
+  }
+  .task-form .row { display: flex; gap: 10px; }
+  .task-form .row > * { flex: 1; }
+  .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-sm {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* Pipeline visual */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .pipeline-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: all .3s;
+  }
+  .pipeline-step.active { border-color: var(--accent); color: var(--accent); background: var(--glow); }
+  .pipeline-step.done   { border-color: var(--accent2); color: var(--accent2); }
+  .pipeline-arrow { color: var(--muted); font-size: 16px; }
+
+  /* Recent runs */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-header .count {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .panel-content { padding: 0; }
+  .run-item {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .run-item:last-child { border-bottom: none; }
+  .run-item:hover { background: var(--surface); }
+  .run-badge {
+    background: var(--glow);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .run-info { flex: 1; min-width: 0; }
+  .run-task { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .run-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+
+  /* Reports */
+  .report-item {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .report-item:last-child { border-bottom: none; }
+  .report-item:hover { background: var(--surface); }
+  .report-name { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .report-preview { color: var(--muted); font-size: 11px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 760px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .modal-title { flex: 1; font-size: 14px; font-weight: 700; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .modal-body pre {
+    white-space: pre-wrap; word-break: break-word;
+    font-size: 12px; line-height: 1.6;
+    color: var(--text); font-family: 'Cascadia Code','Fira Code',monospace;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 13px;
+    display: none;
+    z-index: 200;
+    max-width: 300px;
+  }
+  #toast.show { display: block; animation: slidein .3s ease; }
+  @keyframes slidein { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+  .empty { color: var(--muted); padding: 20px 18px; font-size: 12px; }
+  .loading { color: var(--muted); padding: 12px 18px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot"></div>
+  <div>
+    <h1>🏛 War Room</h1>
+    <div class="subtitle">Dan's Lab · Paperclip Agent Fleet</div>
+  </div>
+  <div class="spacer"></div>
+  <span id="last-updated" style="color:var(--muted);font-size:11px;">Loading…</span>
+  <button class="btn-sm" onclick="refresh()">↺ Refresh</button>
+</header>
+
+<main>
+  <!-- Sidebar -->
+  <aside>
+    <div>
+      <div class="section-title">📊 Metrics</div>
+      <div class="metrics-grid">
+        <div class="metric"><div class="metric-value" id="m-tasks">0</div><div class="metric-label">Tasks Run</div></div>
+        <div class="metric"><div class="metric-value" id="m-ok">0</div><div class="metric-label">Succeeded</div></div>
+        <div class="metric"><div class="metric-value" id="m-issues">0</div><div class="metric-label">PC Issues</div></div>
+        <div class="metric"><div class="metric-value" id="m-reports">0</div><div class="metric-label">Reports</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">🤖 Paperclip Agents</div>
+      <div id="agents-list">
+        <!-- populated by JS -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="content">
+
+    <!-- Task runner -->
+    <div class="task-runner">
+      <h2>🚀 Run a War Room Task</h2>
+      <div class="task-form">
+        <input type="text" id="task-input" placeholder="e.g. Research open-source AI agent marketplaces and draft a NERVIX strategy" />
+        <div class="row">
+          <select id="agents-select">
+            <option value="research,strategist,writer">Research → Strategist → Writer</option>
+            <option value="research,architect,writer">Research → Architect → Writer</option>
+            <option value="research,writer">Research → Writer</option>
+            <option value="research">Research only</option>
+            <option value="strategist,writer">Strategist → Writer</option>
+          </select>
+          <select id="project-select">
+            <option value="NERVIX">NERVIX</option>
+            <option value="CrawdBot">CrawdBot</option>
+            <option value="MyWork AI">MyWork AI</option>
+            <option value="ZmartyChat">ZmartyChat</option>
+            <option value="DansLab OS">DansLab OS</option>
+          </select>
+          <button class="btn" id="run-btn" onclick="runTask()">▶ Run</button>
+        </div>
+      </div>
+      <div class="pipeline" id="pipeline">
+        <div class="pipeline-step" id="step-research">Research</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" id="step-strategist">Strategist</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" id="step-writer">Writer</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" id="step-paperclip">Paperclip Issue</div>
+      </div>
+    </div>
+
+    <!-- Recent runs -->
+    <div class="panel">
+      <div class="panel-header">
+        🏃 Recent Runs <span class="count" id="runs-count">0</span>
+      </div>
+      <div class="panel-content" id="runs-list">
+        <div class="loading">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="panel">
+      <div class="panel-header">
+        📄 Research Reports <span class="count" id="reports-count">0</span>
+      </div>
+      <div class="panel-content" id="reports-list">
+        <div class="loading">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Report</span>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre id="modal-content"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+const API = '';  // same origin
+
+// Agent definitions (static — matches agents/*.md)
+const AGENTS_DEF = [
+  { id:'research',   name:'Research Agent',   paperclip:'Dexter', role:'Senior Researcher',  color:'#6366f1', emoji:'🔬' },
+  { id:'architect',  name:'Architect Agent',  paperclip:'David',  role:'CTO / Architect',     color:'#f59e0b', emoji:'🏗' },
+  { id:'strategist', name:'Strategist Agent', paperclip:'Memo',   role:'PM / Strategist',     color:'#10b981', emoji:'🎯' },
+  { id:'writer',     name:'Writer Agent',     paperclip:'Hermes', role:'Brain / Writer',      color:'#3b82f6', emoji:'✍️' },
+];
+
+let allRuns = [];
+let allReports = [];
+
+// ------------------------------------------------------------------ //
+// Init
+// ------------------------------------------------------------------ //
+async function init() {
+  renderAgents();
+  await refresh();
+  setInterval(refresh, 15000);  // auto-refresh every 15s
+}
+
+function renderAgents() {
+  const el = document.getElementById('agents-list');
+  el.innerHTML = AGENTS_DEF.map(a => `
+    <div class="agent-card">
+      <div class="agent-avatar" style="background:${a.color}22;color:${a.color}">${a.emoji}</div>
+      <div class="agent-info">
+        <div class="agent-name">${a.paperclip}</div>
+        <div class="agent-role">${a.role}</div>
+      </div>
+      <span class="agent-status status-idle" id="agent-status-${a.id}">idle</span>
+    </div>
+  `).join('');
+}
+
+async function refresh() {
+  try {
+    const [state, logs, reports] = await Promise.all([
+      fetch(`${API}/api/state`).then(r => r.json()),
+      fetch(`${API}/api/logs`).then(r => r.json()),
+      fetch(`${API}/api/reports`).then(r => r.json()),
+    ]);
+    updateMetrics(state, reports);
+    updateRuns(logs);
+    updateReports(reports);
+    updateLastUpdated(state);
+  } catch (e) {
+    console.error('Refresh error:', e);
+    toast('⚠️ Could not reach War Room server');
+  }
+}
+
+function updateMetrics(state, reports) {
+  const m = state.metrics || {};
+  document.getElementById('m-tasks').textContent   = m.tasks_run || 0;
+  document.getElementById('m-ok').textContent      = m.tasks_succeeded || 0;
+  document.getElementById('m-issues').textContent  = m.paperclip_issues_created || 0;
+  document.getElementById('m-reports').textContent = reports.length || 0;
+}
+
+function updateLastUpdated(state) {
+  const lu = state.last_updated;
+  document.getElementById('last-updated').textContent = lu
+    ? 'Updated ' + new Date(lu).toLocaleTimeString()
+    : 'Never synced';
+}
+
+function updateRuns(logs) {
+  allRuns = logs;
+  const el = document.getElementById('runs-list');
+  document.getElementById('runs-count').textContent = logs.length;
+  if (!logs.length) { el.innerHTML = '<div class="empty">No runs yet — submit a task above.</div>'; return; }
+  el.innerHTML = logs.slice(0, 20).map(r => `
+    <div class="run-item" onclick="showRunDetail(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+      <div class="run-badge">${r.issue_id || 'no issue'}</div>
+      <div class="run-info">
+        <div class="run-task">${r.task || '?'}</div>
+        <div class="run-meta">
+          ${(r.agents || []).join(' → ')} &nbsp;·&nbsp;
+          ${r.completed ? new Date(r.completed).toLocaleString() : '?'}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateReports(reports) {
+  allReports = reports;
+  const el = document.getElementById('reports-list');
+  document.getElementById('reports-count').textContent = reports.length;
+  if (!reports.length) { el.innerHTML = '<div class="empty">No reports yet.</div>'; return; }
+  el.innerHTML = reports.map(r => `
+    <div class="report-item" onclick="showReport('${r.name}', ${JSON.stringify(r.preview).replace(/"/g,'&quot;')})">
+      <div class="report-name">📄 ${r.name}</div>
+      <div class="report-preview">${r.preview.replace(/[<>&]/g,'')}</div>
+    </div>
+  `).join('');
+}
+
+// ------------------------------------------------------------------ //
+// Task runner
+// ------------------------------------------------------------------ //
+async function runTask() {
+  const task = document.getElementById('task-input').value.trim();
+  if (!task) { toast('⚠️ Please enter a task'); return; }
+
+  const agents  = document.getElementById('agents-select').value;
+  const project = document.getElementById('project-select').value;
+  const btn = document.getElementById('run-btn');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting…';
+
+  // Animate pipeline
+  const steps = agents.split(',');
+  animatePipeline(steps);
+
+  try {
+    const resp = await fetch(`${API}/api/run`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ task, agents, project }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      toast(`❌ ${data.error}`);
+    } else {
+      toast(`🚀 Task started (PID ${data.pid}) — refresh in a minute`);
+      document.getElementById('task-input').value = '';
+    }
+  } catch (e) {
+    toast('❌ Failed to start task: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run';
+    resetPipeline();
+  }
+}
+
+function animatePipeline(steps) {
+  const stepIds = ['research','architect','strategist','writer','paperclip'];
+  stepIds.forEach(s => {
+    const el = document.getElementById('step-' + s);
+    if (el) { el.classList.remove('active','done'); }
+  });
+  steps.forEach((s, i) => {
+    const el = document.getElementById('step-' + s);
+    if (el) setTimeout(() => el.classList.add('active'), i * 300);
+  });
+  const pcEl = document.getElementById('step-paperclip');
+  if (pcEl) setTimeout(() => pcEl.classList.add('active'), steps.length * 300);
+}
+
+function resetPipeline() {
+  ['research','architect','strategist','writer','paperclip'].forEach(s => {
+    const el = document.getElementById('step-' + s);
+    if (el) el.classList.remove('active','done');
+  });
+}
+
+// ------------------------------------------------------------------ //
+// Modals
+// ------------------------------------------------------------------ //
+function showRunDetail(run) {
+  document.getElementById('modal-title').textContent = run.task || 'Run Detail';
+  document.getElementById('modal-content').textContent = JSON.stringify(run, null, 2);
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function showReport(name, preview) {
+  document.getElementById('modal-title').textContent = name;
+  document.getElementById('modal-content').textContent = preview + '\n\n[… open the file for full content …]';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(event) {
+  if (event.target === document.getElementById('modal-overlay')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ------------------------------------------------------------------ //
+// Toast
+// ------------------------------------------------------------------ //
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ------------------------------------------------------------------ //
+// Boot
+// ------------------------------------------------------------------ //
+init();
+</script>
+</body>
+</html>

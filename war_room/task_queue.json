@@ -1,0 +1,5 @@
+{
+  "version": "1.0",
+  "description": "War Room task queue — tasks pending dispatch to agents",
+  "tasks": []
+}
