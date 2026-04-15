@@ -92,12 +92,15 @@ class Channel(ABC):
         """
         channels = {}
 
+        if not config.channels or not config.channels.enabled:
+            return channels
+
         # Import specific channel implementations
         try:
             from semeclaw.channel.telegram_channel import TelegramChannel
 
-            if hasattr(config, "telegram") and config.telegram:
-                channels["telegram"] = TelegramChannel.from_config(config)
+            if config.channels.telegram:
+                channels["telegram"] = TelegramChannel.from_config_inner(config)
         except ImportError:
             pass
 

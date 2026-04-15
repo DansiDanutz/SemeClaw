@@ -44,6 +44,20 @@ class WebReadConfig(BaseModel):
     provider: str = "crawl4ai"
 
 
+class TelegramConfig(BaseModel):
+    """Telegram channel configuration."""
+
+    bot_token: str
+    allowed_user_ids: list[str] = Field(default_factory=list)
+
+
+class ChannelsConfig(BaseModel):
+    """Channels configuration."""
+
+    enabled: bool = False
+    telegram: TelegramConfig | None = None
+
+
 class Config(BaseModel):
     """Main configuration for SemeClaw."""
 
@@ -55,6 +69,7 @@ class Config(BaseModel):
     history_path: Path = Field(default=Path(".history"))
     websearch: WebSearchConfig | None = None
     webread: WebReadConfig | None = None
+    channels: ChannelsConfig | None = None
 
     @model_validator(mode="after")
     def resolve_paths(self) -> "Config":

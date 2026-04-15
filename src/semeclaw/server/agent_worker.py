@@ -13,6 +13,7 @@ from semeclaw.core.events import (
     OutboundEvent,
     DispatchResultEvent,
 )
+from semeclaw.core.agent import Agent
 
 if TYPE_CHECKING:
     from semeclaw.core.eventbus import EventBus
@@ -68,8 +69,9 @@ class AgentWorker(SubscriberWorker):
                 f"source={event.source})"
             )
 
-            # Load or create agent session
-            agent = self.agent_loader.load(self.config.default_agent)
+            # Load agent definition and create agent instance
+            agent_def = self.agent_loader.load(self.config.default_agent)
+            agent = Agent(agent_def, self.config)
             session = agent.new_session(event.session_id)
 
             # Run the chat
@@ -95,7 +97,8 @@ class AgentWorker(SubscriberWorker):
 
             # Load the agent to dispatch to (from the source agent_id if available)
             agent_id = event.source.agent_id if event.source.is_agent else self.config.default_agent
-            agent = self.agent_loader.load(agent_id)
+            agent_def = self.agent_loader.load(agent_id)
+            agent = Agent(agent_def, self.config)
             session = agent.new_session(event.session_id)
 
             # Run the chat

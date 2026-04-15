@@ -135,17 +135,16 @@ class Server:
                 )
 
             # Create a task for the FastAPI server
-            config = uvicorn.Config(
+            uvi_config = uvicorn.Config(
                 self.app,
                 host=host,
                 port=port,
                 log_level="info",
             )
-            server = uvicorn.Server(config)
+            uvi_server = uvicorn.Server(uvi_config)
 
-            # Run the server in a task
-            uvicorn.Server(config).install_signal_handlers()
-            await asyncio.create_task(server.serve())
+            # Run the uvicorn server as a task
+            await asyncio.create_task(uvi_server.serve())
 
             # Wait for all tasks (should block indefinitely)
             await asyncio.gather(*tasks)

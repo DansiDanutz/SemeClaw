@@ -15,18 +15,17 @@ if TYPE_CHECKING:
 class TelegramChannel(Channel):
     """Telegram platform channel."""
 
-    def __init__(self, api_token: str):
+    def __init__(self, bot_token: str, allowed_user_ids: list[str] | None = None):
         """Initialize the Telegram channel.
 
         Args:
-            api_token: The Telegram bot API token.
+            bot_token: The Telegram bot API token.
+            allowed_user_ids: List of allowed Telegram user IDs. Empty = allow all.
         """
         super().__init__()
-        self.api_token = api_token
+        self.bot_token = bot_token
+        self.allowed_user_ids = allowed_user_ids or []
         self.logger = logging.getLogger(__name__)
-
-        # Lazy import to avoid hard dependency
-        self._bot = None
         self._application = None
 
     @property
@@ -34,19 +33,48 @@ class TelegramChannel(Channel):
         """Get platform name."""
         return "telegram"
 
+    def _is_user_allowed(self, user_id: str) -> bool:
+        """Check if a user ID is allowed."""
+        if not self.allowed_user_ids:
+            return True  # No restrictions if list is empty
+        return user_id in self.allowed_user_ids
+
     async def _run(self) -> None:
-        """Run the Telegram bot."""
+        """Run the Telegram bot using low-level async API (no event loop conflict)."""
+        import asyncio
+
         try:
             from telegram.ext import Application
 
-            self._application = Application.builder().token(self.api_token).build()
+            self._application = Application.builder().token(self.bot_token).build()
 
             # Register message handler
             self._application.add_handler(
                 self._create_message_handler(),
             )
 
-            await self._application.run_polling(allowed_updates=["message"])
+            self.logger.info("Telegram bot starting polling...")
+
+            # Use low-level async methods instead of run_polling()
+            # which tries to manage its own event loop and conflicts
+            await self._application.initialize()
+            await self._application.start()
+            await self._application.updater.start_polling(allowed_updates=["message"])
+
+            self.logger.info("Telegram bot is now polling for messages!")
+
+            # Keep running until stopped
+            try:
+                while self._running:
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self.logger.info("Telegram bot stopping...")
+                await self._application.updater.stop()
+                await self._application.stop()
+                await self._application.shutdown()
+
         except ImportError:
             self.logger.error(
                 "python-telegram-bot is not installed. "
@@ -65,6 +93,23 @@ class TelegramChannel(Channel):
             if update.message and update.message.text:
                 user_id = str(update.message.from_user.id)
                 chat_id = str(update.message.chat_id)
+
+                # Check if user is allowed
+                if not self._is_user_allowed(user_id):
+                    self.logger.warning(
+                        f"Unauthorized Telegram user: {user_id} "
+                        f"(@{update.message.from_user.username})"
+                    )
+                    await update.message.reply_text(
+                        "Sorry, you are not authorized to use this bot."
+                    )
+                    return
+
+                self.logger.info(
+                    f"Message from Telegram user {user_id} "
+                    f"(@{update.message.from_user.username}): "
+                    f"{update.message.text[:50]}..."
+                )
 
                 source = TelegramEventSource(user_id=user_id, chat_id=chat_id)
 
@@ -105,12 +150,16 @@ class TelegramChannel(Channel):
         """Create from configuration.
 
         Args:
-            config: Configuration object with telegram.api_token.
+            config: Configuration object with channels.telegram config.
 
         Returns:
             Configured TelegramChannel instance.
         """
-        if not hasattr(config, "telegram") or not config.telegram:
-            raise ValueError("Telegram config not found")
+        if not config.channels or not config.channels.telegram:
+            raise ValueError("Telegram config not found in channels config")
 
-        return cls(api_token=config.telegram["api_token"])
+        tg_config = config.channels.telegram
+        return cls(
+            bot_token=tg_config.bot_token,
+            allowed_user_ids=tg_config.allowed_user_ids,
+        )

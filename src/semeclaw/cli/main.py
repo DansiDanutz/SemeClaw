@@ -125,8 +125,8 @@ def server(
         from semeclaw.server.server import Server
 
         # Initialize components
-        agent_loader = AgentLoader(config.agents_path)
-        logger.info(f"Agent loader initialized with {len(agent_loader)} agents")
+        agent_loader = AgentLoader(config)
+        logger.info("Agent loader initialized")
 
         crons_path = workspace_dir / "crons"
         cron_loader = CronLoader(crons_path)
