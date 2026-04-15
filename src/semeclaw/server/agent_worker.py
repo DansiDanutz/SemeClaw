@@ -69,8 +69,9 @@ class AgentWorker(SubscriberWorker):
                 f"source={event.source})"
             )
 
-            # Load agent definition and create agent instance
-            agent_def = self.agent_loader.load(self.config.default_agent)
+            # Load agent — cron events may specify a target_agent
+            target = getattr(event, "target_agent", None) or self.config.default_agent
+            agent_def = self.agent_loader.load(target)
             agent = Agent(agent_def, self.config)
             session = agent.new_session(event.session_id)
 

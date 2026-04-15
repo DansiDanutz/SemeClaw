@@ -1,0 +1,34 @@
+id: weekly-digest
+schedule: "0 9 * * 1"
+agent: researcher
+description: "Monday morning weekly digest — what we learned and what changed"
+enabled: true
+prompt: |
+  It's Monday morning. Compile the weekly digest for Dan.
+
+  1. Call get_experiment_summary(period="week") to get all findings from the past 7 days
+  2. Identify the top 3 most important findings of the week
+  3. Identify any patterns or themes across the week's research
+  4. Pull relevant memories with memory_search to add context
+  5. Send a weekly digest via telegram_notify in this format:
+
+  ## 📊 Weekly Intelligence Report — Week of [DATE]
+
+  ### 🏆 Top 3 Findings This Week
+  1. [finding + why it matters]
+  2. [finding + why it matters]
+  3. [finding + why it matters]
+
+  ### 🔗 Patterns & Themes
+  [What recurring themes appeared? What's the market telling us?]
+
+  ### ✅ Actions Completed
+  [Any recommended actions from last week that were acted on]
+
+  ### 🎯 Focus for This Week
+  [Top 2-3 research directions for the coming week]
+
+  ### 📈 Research Stats
+  - Total findings: X | High impact: X | Actions recommended: X
+
+  Save the weekly summary to memory under projects/weekly-digest-[DATE].

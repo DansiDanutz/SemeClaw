@@ -1,0 +1,16 @@
+id: daily-research
+schedule: "0 7 * * *"
+agent: researcher
+description: "Daily autonomous research on AI trends, competitors, and NERVIX opportunities"
+enabled: true
+prompt: |
+  Run your full daily research loop for today.
+
+  Focus areas for this cycle:
+  1. AI agent frameworks and marketplaces — what's new, what's gaining traction
+  2. NERVIX competitors — any updates, funding news, new features
+  3. Opportunities for NERVIX — gaps in the market, integrations to build
+  4. Technical gems — tools, APIs, or methods worth knowing
+
+  Log every finding with log_experiment. Save the best insights to memory.
+  End with a telegram_notify summary Dan can read in 2 minutes.

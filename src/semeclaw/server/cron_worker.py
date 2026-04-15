@@ -1,14 +1,16 @@
-"""Cron worker for scheduling and dispatching cron jobs."""
+"""Cron worker — schedules and dispatches cron jobs using real cron expressions."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
+import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from semeclaw.server.worker import Worker
-from semeclaw.core.events import DispatchEvent, CronEventSource
+from semeclaw.core.events import InboundEvent, CronEventSource
 
 if TYPE_CHECKING:
     from semeclaw.core.cron_loader import CronLoader
@@ -16,29 +18,19 @@ if TYPE_CHECKING:
 
 
 class CronWorker(Worker):
-    """Worker that manages scheduled cron jobs."""
+    """Worker that manages scheduled cron jobs using real cron expressions."""
 
-    # Check for due jobs every N seconds
-    TICK_INTERVAL = 60
+    TICK_INTERVAL = 60  # check every minute
 
     def __init__(self, eventbus: EventBus, cron_loader: CronLoader):
-        """Initialize the cron worker.
-
-        Args:
-            eventbus: The event bus.
-            cron_loader: The cron loader for discovering jobs.
-        """
         super().__init__()
         self.eventbus = eventbus
         self.cron_loader = cron_loader
         self.logger = logging.getLogger(__name__)
-        self._last_run: dict[str, float] = {}
+        self._last_run: dict[str, datetime] = {}
 
     async def run(self) -> None:
-        """Run the cron worker.
-
-        Periodically checks for due jobs and dispatches them.
-        """
+        """Run the cron worker — ticks every minute and fires due jobs."""
         self.logger.info(f"CronWorker starting with {len(self.cron_loader)} crons")
 
         try:
@@ -50,58 +42,66 @@ class CronWorker(Worker):
             raise
 
     async def _check_due_crons(self) -> None:
-        """Check for cron jobs that are due and dispatch them."""
         crons = self.cron_loader.discover_crons()
-        current_time = time.time()
+        now = datetime.now()
 
         for cron_id, cron_def in crons.items():
             try:
-                if self._is_due(cron_id, cron_def.schedule, current_time):
+                if self._is_due(cron_id, cron_def.schedule, now):
                     await self._dispatch_cron(cron_id, cron_def)
             except Exception as e:
                 self.logger.exception(f"Error checking cron {cron_id}: {e}")
 
-    def _is_due(self, cron_id: str, schedule: str, current_time: float) -> bool:
-        """Check if a cron job is due to run.
+    def _is_due(self, cron_id: str, schedule: str, now: datetime) -> bool:
+        """Check whether a cron is due using croniter for real cron expressions."""
+        try:
+            from croniter import croniter
 
-        Args:
-            cron_id: The cron ID.
-            schedule: The cron schedule expression.
-            current_time: Current Unix timestamp.
+            last_run = self._last_run.get(cron_id)
+            if last_run is None:
+                # Never run — check if it should have run in the last tick window
+                cron = croniter(schedule, now)
+                prev = cron.get_prev(datetime)
+                # Due if scheduled time was within the last TICK_INTERVAL seconds
+                return (now - prev).total_seconds() <= self.TICK_INTERVAL
 
-        Returns:
-            True if the cron is due to run.
-        """
-        # Very simplified cron check - in production would use croniter
-        # This is a placeholder that assumes daily crons
-        last_run = self._last_run.get(cron_id, 0)
+            # Already ran — check if next scheduled time is now or past
+            cron = croniter(schedule, last_run)
+            next_run = cron.get_next(datetime)
+            return now >= next_run
 
-        # Simple check: if last run was more than 23 hours ago, due for daily crons
-        if current_time - last_run > 82800:  # 23 hours
-            return True
+        except ImportError:
+            # croniter not installed — fall back to daily (23h) check
+            last = self._last_run.get(cron_id)
+            if last is None:
+                return True
+            return (now - last).total_seconds() > 82800
 
-        return False
+        except Exception as e:
+            self.logger.warning(f"Schedule parse error for {cron_id} ('{schedule}'): {e}")
+            return False
 
     async def _dispatch_cron(self, cron_id: str, cron_def) -> None:
-        """Dispatch a cron job.
-
-        Args:
-            cron_id: The cron ID.
-            cron_def: The cron definition.
-        """
+        """Dispatch a cron job as an InboundEvent targeting the right agent."""
         try:
             source = CronEventSource(cron_id=cron_id)
+            session_id = f"cron-{cron_id}-{uuid.uuid4().hex[:8]}"
 
-            event = DispatchEvent(
-                session_id=f"cron-{cron_id}-{time.time()}",
+            # Use InboundEvent so AgentWorker routes it to the correct agent
+            # (stored in cron_def.agent, used by AgentWorker to select the agent)
+            event = InboundEvent(
+                session_id=session_id,
                 source=source,
                 content=cron_def.prompt,
-                parent_session_id="",
             )
+            # Attach target agent to the event so AgentWorker can read it
+            event.target_agent = getattr(cron_def, "agent", None)
 
             await self.eventbus.publish(event)
-            self._last_run[cron_id] = time.time()
+            self._last_run[cron_id] = datetime.now()
 
-            self.logger.info(f"Dispatched cron job: {cron_id} to agent {cron_def.agent}")
+            self.logger.info(
+                f"Dispatched cron '{cron_id}' → agent '{event.target_agent}'"
+            )
         except Exception as e:
             self.logger.exception(f"Failed to dispatch cron {cron_id}: {e}")

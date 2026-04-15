@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -34,12 +35,15 @@ class Agent:
         """Build tool registry for this agent."""
         registry = ToolRegistry.with_builtins()
 
-        # Add memory tools — these give the agent the ability to remember,
-        # recall, search, reflect, and maintain a learning journal
+        # Memory tools — remember, recall, search, reflect, learning journal
         from semeclaw.tools.memory_tools import create_memory_tools
-
         for memory_tool in create_memory_tools(self.config.workspace):
             registry.register(memory_tool)
+
+        # Experiment & notification tools — research tracker + Telegram notify
+        from semeclaw.tools.experiment_tools import create_experiment_tools
+        for exp_tool in create_experiment_tools(self.config.workspace):
+            registry.register(exp_tool)
 
         # Add skill tool if skills are enabled
         if hasattr(self.agent_def, "allow_skills") and self.agent_def.allow_skills:
@@ -105,40 +109,54 @@ class AgentSession:
 
         # Tool loop: keep calling LLM and executing tools until no more tool calls
         tool_schemas = self.agent.tool_registry.get_tool_schemas()
+        response = ""
         while True:
             messages = self.state.build_messages()
             response, tool_calls = await self.agent.llm.chat(
                 messages, tool_schemas=tool_schemas if tool_schemas else None
             )
 
-            # If we got text response, add it and break
-            if response:
-                assistant_msg: Message = {"role": "assistant", "content": response}
+            if tool_calls:
+                # Save assistant message WITH tool_calls field intact so the
+                # API can match tool_use blocks to tool_result blocks.
+                assistant_msg: Message = {
+                    "role": "assistant",
+                    "content": response or None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments),
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
+                }
                 self.state.add_message(assistant_msg)
 
-            # Execute tool calls if any
-            if tool_calls:
+                # Execute each tool and save its result
                 for tool_call in tool_calls:
                     tool = self.agent.tool_registry.get(tool_call.name)
                     if tool:
                         tool_result = await tool.execute(tool_call.arguments, self)
-                        tool_result_msg: Message = {
-                            "role": "tool",
-                            "content": tool_result,
-                            "tool_call_id": tool_call.id,
-                            "name": tool_call.name,
-                        }
-                        self.state.add_message(tool_result_msg)
                     else:
-                        error_msg: Message = {
-                            "role": "tool",
-                            "content": f"Tool not found: {tool_call.name}",
-                            "tool_call_id": tool_call.id,
-                            "name": tool_call.name,
-                        }
-                        self.state.add_message(error_msg)
+                        tool_result = f"Tool not found: {tool_call.name}"
+
+                    tool_result_msg: Message = {
+                        "role": "tool",
+                        "content": tool_result,
+                        "tool_call_id": tool_call.id,
+                        "name": tool_call.name,
+                    }
+                    self.state.add_message(tool_result_msg)
+
             else:
-                # No more tool calls, exit loop
+                # No tool calls — final text response
+                if response:
+                    assistant_msg = {"role": "assistant", "content": response}
+                    self.state.add_message(assistant_msg)
                 break
 
         return response

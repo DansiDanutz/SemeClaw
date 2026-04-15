@@ -253,6 +253,19 @@ You are running as a background cron job. Your response will not be sent to user
 
 You are running as a dispatched subagent called by agent '{source.agent_id}'. Your response will be sent back to the parent agent."""
 
+        if source.is_platform and source.platform_name == "telegram":
+            return """## Execution Context — Telegram
+
+You are responding via Telegram. Format all responses using standard Markdown:
+- **bold** with `**text**`
+- *italic* with `*text*`
+- Bullet lists with `- item`
+- Headers with `## Header`
+- Inline code with backticks
+- Code blocks with triple backticks
+
+Structure every response clearly: use headers to separate sections, bullet points for lists, bold for key terms. Make it visually clean and easy to scan on a phone."""
+
         if source.is_platform:
             platform_name = source.platform_name or "Unknown"
             return f"""## Execution Context
