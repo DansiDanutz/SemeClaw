@@ -1,0 +1,23 @@
+id: weekly-competitor-report
+schedule: "0 10 * * 1"
+agent: researcher
+description: "Monday morning competitor intelligence report — weekly analysis sent to Telegram"
+enabled: true
+prompt: |
+  It's Monday morning — time for the weekly competitor intelligence report.
+
+  1. Call fetch_competitor_videos with max_videos=15 to ensure we have fresh data.
+  2. Call get_competitor_insights with period_days=7 to get the full weekly analysis.
+  3. Generate the report using competitor_report with period_days=7.
+     This will automatically send a Telegram notification.
+
+  The report should cover:
+  - Top performing videos across all competitors this week
+  - Most successful title patterns (which formats got the most engagement)
+  - Thumbnail style trends
+  - Posting frequency changes (who's posting more/less)
+  - Trending topics and tags in the niche
+  - Actionable recommendations for our own content strategy
+
+  After sending the report, save a summary to memory under projects/competitor-report-[DATE].
+  Log the report as an experiment with category "competitor" and impact "medium".

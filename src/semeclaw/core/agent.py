@@ -45,6 +45,11 @@ class Agent:
         for exp_tool in create_experiment_tools(self.config.workspace):
             registry.register(exp_tool)
 
+        # Competitor intelligence tools — YouTube competitor analysis
+        from semeclaw.tools.competitor_tools import create_competitor_tools
+        for comp_tool in create_competitor_tools(self.config):
+            registry.register(comp_tool)
+
         # Add skill tool if skills are enabled
         if hasattr(self.agent_def, "allow_skills") and self.agent_def.allow_skills:
             from semeclaw.tools.skill_tool import create_skill_tool

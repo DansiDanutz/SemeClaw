@@ -27,3 +27,17 @@ default_agent: seme
 #     bot_token: your-bot-token
 #     allowed_user_ids:
 #       - "your_user_id"
+
+# Supabase - for storing competitor intelligence data
+# Get your URL and key at https://supabase.com/dashboard
+# supabase_url: https://your-project.supabase.co
+# supabase_key: your-supabase-anon-or-service-role-key
+
+# Competitor Intelligence Module
+# competitor_analysis:
+#   enabled: true
+#   default_channels:
+#     - "https://youtube.com/@competitor1"
+#     - "https://youtube.com/@competitor2"
+#   fetch_schedule: "0 8 * * *"  # Daily at 8 AM
+#   report_schedule: "0 10 * * 1"  # Weekly on Monday at 10 AM

@@ -1,0 +1,18 @@
+id: daily-competitor-fetch
+schedule: "0 8 * * *"
+agent: researcher
+description: "Daily fetch of competitor YouTube channel data — videos, titles, views, tags"
+enabled: true
+prompt: |
+  It's time for the daily competitor intelligence sweep.
+
+  1. Call fetch_competitor_videos with max_videos=10 to get the latest videos from all tracked competitor channels.
+  2. Check if any new videos were posted in the last 24 hours.
+  3. If new videos found, call get_competitor_insights with period_days=1 for a quick snapshot.
+  4. Log any significant findings with log_experiment:
+     - New video from a competitor that got high views quickly
+     - Interesting title patterns or thumbnail changes
+     - Competitors who changed posting frequency
+  5. Send a brief Telegram notification if there's anything noteworthy.
+
+  Keep it brief — only flag what Dan needs to know.
