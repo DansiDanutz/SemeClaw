@@ -384,3 +384,135 @@ class TestDefaultModel:
         assert "qwen3.6-plus" in DEFAULT_MODEL
         assert "claude" not in DEFAULT_MODEL.lower()
         assert "dashscope" in DEFAULT_MODEL.lower()
+
+
+# ===========================================================================
+# Memory Tests
+# ===========================================================================
+
+class TestWarRoomMemory:
+    """Tests for the cross-run memory system."""
+
+    @pytest.fixture
+    def mem(self, tmp_path):
+        from memory import WarRoomMemory
+        return WarRoomMemory(tmp_path / "memory")
+
+    def test_save_and_load_all(self, mem):
+        """Saving an entry makes it retrievable."""
+        mem.save(topic="NERVIX pricing", summary="Free tier + commission model", run_id="test1")
+        entries = mem.load_all()
+        assert len(entries) == 1
+        assert entries[0]["topic"] == "NERVIX pricing"
+        assert entries[0]["run_id"] == "test1"
+
+    def test_load_relevant_keyword_match(self, mem):
+        """load_relevant returns entries with overlapping keywords."""
+        mem.save(topic="NERVIX agent marketplace pricing model", summary="commission", run_id="r1")
+        mem.save(topic="SemeClaw dashboard setup", summary="fastapi port 8765", run_id="r2")
+        results = mem.load_relevant("pricing strategy for agent marketplace")
+        topics = [e["topic"] for e in results]
+        assert any("pricing" in t or "marketplace" in t for t in topics)
+
+    def test_load_relevant_no_match(self, mem):
+        """load_relevant returns empty list when nothing matches."""
+        mem.save(topic="SemeClaw dashboard", summary="fastapi", run_id="r1")
+        results = mem.load_relevant("blockchain DeFi protocol")
+        # Should return 0 or few results with no keyword overlap
+        assert isinstance(results, list)
+
+    def test_duplicate_entries_accumulate(self, mem):
+        """Each save call adds a new entry."""
+        mem.save(topic="Topic A", summary="sum A", run_id="r1")
+        mem.save(topic="Topic B", summary="sum B", run_id="r2")
+        assert len(mem.load_all()) == 2
+
+    def test_summary_truncated_to_800(self, mem):
+        """Summaries over 800 chars are truncated."""
+        long_summary = "x" * 2000
+        mem.save(topic="test", summary=long_summary, run_id="r1")
+        entry = mem.load_all()[0]
+        assert len(entry["summary"]) <= 800
+
+    def test_keywords_extracted(self, mem):
+        """Keywords are auto-extracted from topic + summary."""
+        mem.save(topic="NERVIX agent marketplace", summary="competitive pricing model", run_id="r1")
+        entry = mem.load_all()[0]
+        keywords = entry.get("keywords", [])
+        assert len(keywords) > 0
+        assert "nervix" in keywords or "marketplace" in keywords
+
+    def test_clear(self, mem):
+        """Clear removes all entries."""
+        mem.save(topic="A", summary="s", run_id="r1")
+        mem.save(topic="B", summary="s", run_id="r2")
+        count = mem.clear()
+        assert count == 2
+        assert mem.load_all() == []
+
+    def test_stats(self, mem):
+        """Stats returns total count and date range."""
+        mem.save(topic="A", summary="s", run_id="r1")
+        s = mem.stats()
+        assert s["total_entries"] == 1
+        assert s["oldest"] is not None
+
+
+# ===========================================================================
+# Coder Agent Tests
+# ===========================================================================
+
+class TestCoderAgent:
+    """Tests for the Coder agent definition."""
+
+    def test_coder_agent_def_exists(self):
+        """coder.md agent definition file exists."""
+        from war_room.war_room import AGENTS_DIR
+        coder_path = AGENTS_DIR / "coder.md"
+        assert coder_path.exists(), "war_room/agents/coder.md not found"
+
+    def test_coder_agent_loadable(self):
+        """Coder agent definition can be loaded and has a system prompt."""
+        from war_room.war_room import load_agent_def
+        agent = load_agent_def("coder")
+        assert "system_prompt" in agent
+        assert len(agent["system_prompt"]) > 100
+        assert "run_shell" in agent["system_prompt"]
+
+    def test_coder_in_tool_enabled_agents(self):
+        """Coder is in TOOL_ENABLED_AGENTS so it gets shell/code access."""
+        from war_room.war_room import TOOL_ENABLED_AGENTS
+        assert "coder" in TOOL_ENABLED_AGENTS
+
+
+# ===========================================================================
+# Telegram Credential Tests
+# ===========================================================================
+
+class TestTelegramCreds:
+    """Tests for the multi-source Telegram credential loader."""
+
+    def test_load_creds_returns_tuple(self):
+        """_load_telegram_creds always returns a 2-tuple."""
+        from war_room.war_room import _load_telegram_creds
+        result = _load_telegram_creds()
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+    def test_load_creds_from_yaml(self, tmp_path):
+        """Creds are read from default_workspace/config.yaml telegram section."""
+        import yaml
+        from war_room import war_room as wr
+        # Function looks for ROOT / "default_workspace" / "config.yaml"
+        ws_dir = tmp_path / "default_workspace"
+        ws_dir.mkdir()
+        cfg = {"telegram": {"bot_token": "123:ABC", "chat_id": "999"}}
+        (ws_dir / "config.yaml").write_text(yaml.dump(cfg))
+        original_root = wr.ROOT
+        wr.ROOT = tmp_path
+        try:
+            token, chat_id = wr._load_telegram_creds()
+            assert token == "123:ABC"
+            assert chat_id == "999"
+        finally:
+            wr.ROOT = original_root

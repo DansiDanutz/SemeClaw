@@ -3,17 +3,20 @@ War Room — Orchestrator
 Dan's Lab Paperclip Agent Fleet coordinator.
 
 Pipeline:
-  User task → Research → Architect|Strategist → Writer → Paperclip issue
+  User task → [Memory context] → Research → Architect|Strategist → [Coder] → Writer → Paperclip issue
 
 Usage:
   python war_room/war_room.py run "Research open-source AI agent marketplaces"
+  python war_room/war_room.py run "Build X feature" --agents=research,architect,coder,writer
   python war_room/war_room.py status
   python war_room/war_room.py board
+  python war_room/war_room.py memory
 """
 
 import asyncio
 import json
 import logging
+import os
 import sys
 import uuid
 from datetime import datetime
@@ -29,10 +32,11 @@ import litellm
 ROOT = Path(__file__).parent.parent
 WAR_ROOM_DIR_BOOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so paperclip_bridge is importable directly
+sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so local modules are importable directly
 
 from paperclip_bridge import PaperclipBridge, AGENT_ASSIGNEES, load_bridge
 from research_tools import ResearchTools
+from memory import WarRoomMemory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +62,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 # LLM config (reads from SemeClaw workspace config if available)
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "dashscope/qwen3.6-plus"
+DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 def _load_model() -> str:
     cfg_path = ROOT / "default_workspace" / "config.yaml"
@@ -69,6 +74,69 @@ def _load_model() -> str:
         return cfg.get("model", DEFAULT_MODEL)
     except Exception:
         return DEFAULT_MODEL
+
+
+def _load_telegram_creds() -> tuple[str | None, str | None]:
+    """
+    Load Telegram bot token + Dan's chat ID from multiple fallback sources:
+    1. SemeClaw config.yaml
+    2. /etc/openclaw-env (fleet env)
+    3. ~/.openclaw/fleet.env
+    4. env vars TELEGRAM_BOT_TOKEN / DLS_DAN_CHAT_ID
+    Returns (bot_token, chat_id) — either may be None.
+    """
+    bot_token = None
+    chat_id = None
+
+    # 1. SemeClaw config.yaml
+    cfg_path = ROOT / "default_workspace" / "config.yaml"
+    if cfg_path.exists():
+        try:
+            import yaml
+            cfg = yaml.safe_load(cfg_path.read_text())
+            tg = cfg.get("telegram", {})
+            bot_token = tg.get("bot_token") or tg.get("token")
+            chat_id = tg.get("chat_id") or tg.get("dan_chat_id")
+        except Exception:
+            pass
+
+    # 2. ~/.telegram_chat_id file (legacy)
+    chat_id_file = ROOT / ".telegram_chat_id"
+    if not chat_id and chat_id_file.exists():
+        chat_id = chat_id_file.read_text().strip()
+
+    # 3. Fleet env files
+    fleet_env_paths = [
+        Path("/etc/openclaw-env"),
+        Path.home() / ".openclaw" / "fleet.env",
+    ]
+    for env_path in fleet_env_paths:
+        if env_path.exists() and (not bot_token or not chat_id):
+            try:
+                for line in env_path.read_text().splitlines():
+                    line = line.strip()
+                    if line.startswith("export "):
+                        line = line[7:]
+                    if "=" not in line or line.startswith("#"):
+                        continue
+                    k, v = line.split("=", 1)
+                    v = v.strip().strip('"').strip("'")
+                    if not v or "${" in v:
+                        continue
+                    if k == "DLS_TELEGRAM_BOT_TOKEN" and not bot_token:
+                        bot_token = v
+                    elif k == "DLS_DAN_CHAT_ID" and not chat_id:
+                        chat_id = v
+            except Exception:
+                pass
+
+    # 4. Environment variables (last resort)
+    if not bot_token:
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("DLS_TELEGRAM_BOT_TOKEN")
+    if not chat_id:
+        chat_id = os.environ.get("DLS_DAN_CHAT_ID")
+
+    return bot_token, chat_id
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +162,9 @@ def load_agent_def(agent_id: str) -> dict:
 # Single agent call
 # ---------------------------------------------------------------------------
 
+# Agents that get access to tools (run_shell, run_code, search, etc.)
+TOOL_ENABLED_AGENTS = {"research", "coder"}
+
 async def call_agent(
     agent_id: str,
     task: str,
@@ -115,13 +186,11 @@ async def call_agent(
 
     logger.info("🤖 Calling agent [%s] with model %s", agent_id, model)
 
-    # For research agent, inject tools description and do tool-use loop
-    if agent_id == "research" and tools:
+    # Inject tool descriptions for tool-enabled agents
+    if agent_id in TOOL_ENABLED_AGENTS and tools:
         system += tools.get_available_tools_description()
 
     messages = [{"role": "user", "content": user_msg}]
-
-    DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
     response = await litellm.acompletion(
         model=model,
@@ -133,45 +202,37 @@ async def call_agent(
     )
     result = response.choices[0].message.content or ""
 
-    # Tool-use loop for research agent
-    if agent_id == "research" and tools:
+    # Tool-use loop for tool-enabled agents
+    if agent_id in TOOL_ENABLED_AGENTS and tools:
         tool_iterations = 0
-        max_tool_iterations = 5
+        max_tool_iterations = 8 if agent_id == "coder" else 5
         while tool_iterations < max_tool_iterations:
-            # Check if the response contains tool use instructions
             tool_call = _parse_tool_call(result, tools)
             if not tool_call:
                 break
 
             tool_name, tool_args = tool_call
-            logger.info("🔧 Research agent using tool: %s(%s)", tool_name, tool_args[:80])
+            logger.info("🔧 [%s] using tool: %s(%s)", agent_id, tool_name, tool_args[:80])
 
-            # Execute the tool
             if tool_name == "search":
                 tool_result = await tools.search(tool_args.strip('"').strip("'"))
             elif tool_name == "extract":
-                # Parse URLs from args
                 import re
                 urls = re.findall(r'https?://[^\s"\']+', tool_args)
-                if urls:
-                    tool_result = await tools.extract(urls)
-                else:
-                    tool_result = "[No URLs found in extract request]"
+                tool_result = await tools.extract(urls) if urls else "[No URLs found in extract request]"
             elif tool_name == "browser_navigate":
-                url = tool_args.strip('"').strip("'").strip()
-                tool_result = await tools.browser_navigate(url)
+                tool_result = await tools.browser_navigate(tool_args.strip('"').strip("'").strip())
             elif tool_name == "run_code":
                 tool_result = await tools.run_code(tool_args)
             elif tool_name == "run_shell":
-                tool_result = await tools.run_shell(tool_args)
+                tool_result = await tools.run_shell(tool_args.strip('"').strip("'"))
             else:
                 tool_result = f"[Unknown tool: {tool_name}]"
 
-            # Feed tool result back to the model
             messages.append({"role": "assistant", "content": result})
             messages.append({
                 "role": "user",
-                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue your research with this information.",
+                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue your work with this information.",
             })
 
             response = await litellm.acompletion(
@@ -184,7 +245,7 @@ async def call_agent(
             )
             result = response.choices[0].message.content or ""
             tool_iterations += 1
-            logger.info("✅ Tool iteration %d/%d complete", tool_iterations, max_tool_iterations)
+            logger.info("✅ [%s] tool iteration %d/%d done", agent_id, tool_iterations, max_tool_iterations)
 
     logger.info("✅ Agent [%s] responded (%d chars)", agent_id, len(result))
     return result
@@ -193,16 +254,17 @@ async def call_agent(
 def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | None:
     """
     Parse tool use from agent response.
-    Looks for patterns like: search("query"), extract(["url1", "url2"]), etc.
+    Supports call-style: search("query"), run_shell("cmd")
+    Supports XML-style: <tool>search</tool><args>query</args>
     """
     import re
 
     tool_patterns = [
-        (r'search\(["\'](.+?)["\']\)', 'search'),
-        (r'extract\((.+?)\)', 'extract'),
+        (r'search\(["\'](.+?)["\']\)',           'search'),
+        (r'extract\((.+?)\)',                    'extract'),
         (r'browser_navigate\(["\'](.+?)["\']\)', 'browser_navigate'),
-        (r'run_code\((.+?)\)', 'run_code'),
-        (r'run_shell\((.+?)\)', 'run_shell'),
+        (r'run_code\((.+?)\)',                   'run_code'),
+        (r'run_shell\(["\'](.+?)["\']\)',        'run_shell'),
     ]
 
     for pattern, tool_name in tool_patterns:
@@ -210,7 +272,7 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
         if match:
             return tool_name, match.group(1)
 
-    # Also check for XML-style tool calls: <tool>search</tool><args>query</args>
+    # XML-style: <tool>search</tool><args>query</args>
     xml_tool = re.search(r'<tool>(\w+)</tool>\s*<args>(.+?)</args>', response, re.DOTALL)
     if xml_tool:
         return xml_tool.group(1), xml_tool.group(2)
@@ -224,13 +286,17 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
 
 class WarRoomPipeline:
     """
-    Orchestrates a full Research → Architect/Strategist → Writer pipeline
-    and creates a Paperclip issue from the output.
+    Orchestrates the full pipeline:
+      [Memory] → Research → Architect|Strategist → [Coder] → Writer → Paperclip issue
+
+    Default pipeline: research → strategist → writer
+    With coder:       research → architect → coder → writer
     """
 
     def __init__(self, model: str | None = None):
         self.model = model or _load_model()
         self.results: dict[str, str] = {}
+        self.memory = WarRoomMemory(WAR_ROOM_DIR / "memory")
 
     async def run(
         self,
@@ -248,24 +314,54 @@ class WarRoomPipeline:
         run_id = str(uuid.uuid4())[:8]
         started = datetime.utcnow().isoformat()
 
-        logger.info("🚀 War Room pipeline started | task=%s | run_id=%s", task[:60], run_id)
+        logger.info("🚀 War Room pipeline | run_id=%s | agents=%s", run_id, " → ".join(agents))
+        logger.info("   Task: %s", task[:80])
 
+        # Load relevant memory from prior runs
+        prior_memory = self.memory.load_relevant(task)
+        if prior_memory:
+            logger.info("🧠 Loaded %d prior memory entries for context", len(prior_memory))
+
+        # Build initial context with memory
         context = ""
+        if prior_memory:
+            mem_lines = ["## Prior Research from Memory\n"]
+            for entry in prior_memory:
+                mem_lines.append(
+                    f"### [{entry['date']}] {entry['topic']}\n{entry['summary']}\n"
+                    f"_(Full report: {entry.get('file', 'n/a')})_\n"
+                )
+            context = "\n".join(mem_lines)
+
         self.results = {}
         research_tools = ResearchTools()
 
         for agent_id in agents:
             logger.info("▶️  Running agent: %s", agent_id)
-            output = await call_agent(agent_id, task, context=context, model=self.model, tools=research_tools)
+            output = await call_agent(
+                agent_id, task,
+                context=context,
+                model=self.model,
+                tools=research_tools,
+            )
             self.results[agent_id] = output
             context += f"\n\n## Output from {agent_id.capitalize()} Agent\n\n{output}"
 
-        # Save all outputs to research dir
+        # Save report
         date_str = datetime.utcnow().strftime("%Y-%m-%d")
         slug = task[:40].lower().replace(" ", "-").replace("/", "-")
         out_file = RESEARCH_DIR / f"{slug}-{date_str}.md"
         out_file.write_text(self._build_report(task, agents, started), encoding="utf-8")
         logger.info("📄 Saved report: %s", out_file.name)
+
+        # Save to memory for future runs
+        self.memory.save(
+            topic=task[:80],
+            summary=self._build_memory_summary(task, agents),
+            run_id=run_id,
+            file=str(out_file),
+        )
+        logger.info("🧠 Saved to memory")
 
         # Create Paperclip issue from writer output
         paperclip_issue = None
@@ -280,29 +376,27 @@ class WarRoomPipeline:
                 description=description,
                 project=project,
                 assignee=assignee,
-                labels=["war-room", "research", "auto-generated"],
+                labels=["war-room", "auto-generated"],
                 priority="medium",
                 acceptance_criteria=ac,
             )
             logger.info("📌 Paperclip issue: %s", paperclip_issue.get("id"))
 
-        # Notify via Telegram if available
+        # Notify via Telegram
         if notify_telegram:
-            await self._telegram_notify(task, out_file, paperclip_issue)
+            await self._telegram_notify(task, out_file, paperclip_issue, agents)
 
-        # Update shared state
         self._update_state(run_id, task, agents, paperclip_issue)
-
-        # Log run
         self._log_run(run_id, task, agents, started, paperclip_issue)
 
         return {
-            "run_id":         run_id,
-            "task":           task,
-            "agents_run":     agents,
-            "output_file":    str(out_file),
+            "run_id":          run_id,
+            "task":            task,
+            "agents_run":      agents,
+            "output_file":     str(out_file),
             "paperclip_issue": paperclip_issue,
-            "results":        {k: v[:200] + "…" for k, v in self.results.items()},
+            "memory_entries":  len(prior_memory),
+            "results":         {k: v[:200] + "…" for k, v in self.results.items()},
         }
 
     # ------------------------------------------------------------------ #
@@ -311,7 +405,7 @@ class WarRoomPipeline:
 
     def _build_report(self, task: str, agents: list[str], started: str) -> str:
         lines = [
-            f"# War Room Report",
+            "# War Room Report",
             f"**Task:** {task}",
             f"**Date:** {started[:10]}",
             f"**Agents:** {' → '.join(a.capitalize() for a in agents)}",
@@ -322,16 +416,21 @@ class WarRoomPipeline:
             lines += [f"\n---\n\n## {agent_id.capitalize()} Agent Output\n\n{output}"]
         return "\n".join(lines)
 
+    def _build_memory_summary(self, task: str, agents: list[str]) -> str:
+        """Build a compact summary for memory storage."""
+        parts = [f"Task: {task}"]
+        # Prefer research output for memory, fall back to any agent
+        for agent_id in ["research", "strategist", "architect", "writer", "coder"]:
+            if agent_id in self.results:
+                # Take first 500 chars of each agent output
+                parts.append(f"\n[{agent_id.capitalize()}]:\n{self.results[agent_id][:500]}")
+        return "\n".join(parts)
+
     def _parse_writer_output(self, writer_output: str, fallback_task: str) -> tuple[str, str, list[str]]:
-        """
-        Try to extract a Paperclip issue title/description/AC from Writer output.
-        Falls back to task string if not structured.
-        """
         title = f"[War Room] {fallback_task[:70]}"
         description = writer_output[:1000] if writer_output else fallback_task
         ac: list[str] = []
 
-        # Try to find a "Title:" line in the writer output
         for line in writer_output.splitlines():
             stripped = line.strip()
             if stripped.lower().startswith("title:"):
@@ -341,40 +440,41 @@ class WarRoomPipeline:
 
         return title, description, ac
 
-    async def _telegram_notify(self, task: str, report_file: Path, issue: dict | None):
-        """Send Telegram notification if .telegram_chat_id exists."""
-        chat_id_file = ROOT / ".telegram_chat_id"
-        if not chat_id_file.exists():
+    async def _telegram_notify(
+        self,
+        task: str,
+        report_file: Path,
+        issue: dict | None,
+        agents: list[str],
+    ):
+        """Send Telegram notification — reads credentials from multiple sources."""
+        bot_token, chat_id = _load_telegram_creds()
+
+        if not bot_token or not chat_id:
+            logger.debug("Telegram notify skipped — no credentials found")
             return
 
-        cfg_path = ROOT / "default_workspace" / "config.yaml"
-        bot_token = None
-        if cfg_path.exists():
-            try:
-                import yaml
-                cfg = yaml.safe_load(cfg_path.read_text())
-                bot_token = cfg.get("telegram", {}).get("bot_token")
-            except Exception:
-                pass
-
-        if not bot_token:
-            return
-
-        chat_id = chat_id_file.read_text().strip()
         issue_id = issue.get("id", "?") if issue else "?"
+        pipeline_str = " → ".join(a.capitalize() for a in agents)
+
         msg = (
             f"🏛 <b>War Room complete</b>\n"
             f"<b>Task:</b> {task[:80]}\n"
+            f"<b>Pipeline:</b> {pipeline_str}\n"
             f"<b>Paperclip:</b> {issue_id}\n"
             f"<b>Report:</b> {report_file.name}"
         )
         try:
             async with httpx.AsyncClient() as client:
-                await client.post(
+                r = await client.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
                     timeout=10,
                 )
+                if r.status_code == 200:
+                    logger.info("📱 Telegram notification sent to chat %s", chat_id)
+                else:
+                    logger.warning("Telegram notify HTTP %d: %s", r.status_code, r.text[:200])
         except Exception as e:
             logger.warning("Telegram notify failed: %s", e)
 
@@ -384,10 +484,10 @@ class WarRoomPipeline:
             state.setdefault("completed_tasks", [])
             state.setdefault("metrics", {"tasks_run": 0, "tasks_succeeded": 0, "paperclip_issues_created": 0})
             state["completed_tasks"].append({
-                "run_id":  run_id,
-                "task":    task,
-                "agents":  agents,
-                "issue_id": issue.get("id") if issue else None,
+                "run_id":       run_id,
+                "task":         task,
+                "agents":       agents,
+                "issue_id":     issue.get("id") if issue else None,
                 "completed_at": datetime.utcnow().isoformat(),
             })
             state["metrics"]["tasks_run"] += 1
@@ -417,17 +517,26 @@ class WarRoomPipeline:
 # CLI
 # ---------------------------------------------------------------------------
 
-async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERVIX"):
-    agents = agents_str.split(",") if agents_str else None
+async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERVIX", with_coder: bool = False):
+    if agents_str:
+        agents = agents_str.split(",")
+    elif with_coder:
+        agents = ["research", "architect", "coder", "writer"]
+    else:
+        agents = None  # default
+
     pipeline = WarRoomPipeline()
     result = await pipeline.run(task, agents=agents, project=project)
+
     print("\n" + "=" * 60)
     print("✅ War Room pipeline complete")
-    print(f"   Run ID:  {result['run_id']}")
-    print(f"   Report:  {result['output_file']}")
+    print(f"   Run ID:       {result['run_id']}")
+    print(f"   Agents:       {' → '.join(result['agents_run'])}")
+    print(f"   Report:       {result['output_file']}")
+    print(f"   Memory used:  {result['memory_entries']} prior entries")
     if result.get("paperclip_issue"):
         issue = result["paperclip_issue"]
-        print(f"   Issue:   {issue['id']} → {issue['assignee']} ({issue['project']})")
+        print(f"   Paperclip:    {issue['id']} → {issue['assignee']} ({issue['project']})")
     print("=" * 60)
 
 
@@ -437,10 +546,15 @@ async def cmd_status():
         state = json.loads(STATE_FILE.read_text())
     metrics = state.get("metrics", {})
     completed = state.get("completed_tasks", [])
+
+    mem = WarRoomMemory(WAR_ROOM_DIR / "memory")
+    mem_count = len(mem.load_all())
+
     print("\n🏛  War Room Status")
     print(f"   Tasks run:       {metrics.get('tasks_run', 0)}")
     print(f"   Tasks succeeded: {metrics.get('tasks_succeeded', 0)}")
     print(f"   Paperclip issues:{metrics.get('paperclip_issues_created', 0)}")
+    print(f"   Memory entries:  {mem_count}")
     print(f"   Last updated:    {state.get('last_updated', 'never')}")
     if completed:
         print("\n   Recent tasks:")
@@ -465,11 +579,26 @@ async def cmd_board():
             print(f"     [{i['id']}] {i['title'][:55]} → {i['assignee']}")
 
 
+async def cmd_memory(limit: int = 10):
+    mem = WarRoomMemory(WAR_ROOM_DIR / "memory")
+    entries = mem.load_all()
+    print(f"\n🧠  War Room Memory ({len(entries)} entries)\n")
+    for e in entries[-limit:]:
+        print(f"  [{e['date'][:10]}] {e['topic'][:70]}")
+        print(f"           run_id={e.get('run_id','?')}  file={Path(e.get('file','')).name}")
+        print()
+
+
 def main():
-    import sys
     args = sys.argv[1:]
     if not args:
-        print("Usage: war_room.py <run|status|board> [task] [--agents=a,b,c] [--project=NERVIX]")
+        print(
+            "Usage: war_room.py <run|status|board|memory> [task]\n"
+            "  run   'task'  [--agents=a,b,c] [--project=NERVIX] [--with-coder]\n"
+            "  status\n"
+            "  board\n"
+            "  memory [--limit=10]\n"
+        )
         sys.exit(1)
 
     cmd = args[0]
@@ -478,18 +607,28 @@ def main():
         task = args[1] if len(args) > 1 else "Research AI agent marketplace landscape"
         agents_str = None
         project = "NERVIX"
+        with_coder = False
         for a in args[2:]:
             if a.startswith("--agents="):
                 agents_str = a.split("=", 1)[1]
             elif a.startswith("--project="):
                 project = a.split("=", 1)[1]
-        asyncio.run(cmd_run(task, agents_str, project))
+            elif a == "--with-coder":
+                with_coder = True
+        asyncio.run(cmd_run(task, agents_str, project, with_coder))
 
     elif cmd == "status":
         asyncio.run(cmd_status())
 
     elif cmd == "board":
         asyncio.run(cmd_board())
+
+    elif cmd == "memory":
+        limit = 10
+        for a in args[1:]:
+            if a.startswith("--limit="):
+                limit = int(a.split("=", 1)[1])
+        asyncio.run(cmd_memory(limit))
 
     else:
         print(f"Unknown command: {cmd}")
