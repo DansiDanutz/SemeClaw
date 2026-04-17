@@ -132,6 +132,34 @@ header::before{
 .badge-error{background:var(--red-dim);color:var(--red);border-color:rgba(239,68,68,.32);box-shadow:0 0 10px rgba(239,68,68,.2)}
 .badge-paused{background:rgba(139,92,246,.12);color:var(--violet);border-color:rgba(139,92,246,.28)}
 
+/* ══ AGENT RUN DOTS ══ */
+.dot-track{display:flex;gap:3px;margin-top:6px;align-items:center;flex-wrap:wrap}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;cursor:default;transition:transform .15s}
+.dot:hover{transform:scale(1.6)}
+.dot-empty{background:var(--border);opacity:.35}
+.dot-success{background:var(--green);box-shadow:0 0 5px rgba(16,185,129,.5)}
+.dot-failed{background:var(--red);box-shadow:0 0 5px rgba(239,68,68,.5);cursor:pointer}
+.dot-running{background:var(--amber);box-shadow:0 0 8px var(--amber-glow);animation:dot-pulse 1s ease-in-out infinite}
+@keyframes dot-pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--amber-glow)}50%{opacity:.4;box-shadow:none}}
+.health-row{display:flex;align-items:center;gap:6px;margin-top:4px}
+.health-bar-wrap{flex:1;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.health-bar-fill{height:100%;border-radius:1px;transition:width .8s var(--ease-out)}
+.health-pct{font-size:8px;font-family:var(--mono);font-weight:700;min-width:26px;text-align:right;letter-spacing:.3px}
+/* Dot tooltip */
+.dot-failed[title]{position:relative}
+/* System health badge in header */
+.sys-health{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.5px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.08);color:var(--green);transition:all .4s}
+.sys-health.warn{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:var(--amber)}
+.sys-health.danger{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:var(--red)}
+/* Profile dot history (full 100) */
+.profile-dots{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
+.profile-dot{width:8px;height:8px;border-radius:50%;cursor:default;transition:transform .15s}
+.profile-dot:hover{transform:scale(1.7)}
+.profile-dot.dot-empty{background:var(--border);opacity:.3}
+.profile-dot.dot-success{background:var(--green);box-shadow:0 0 5px rgba(16,185,129,.5)}
+.profile-dot.dot-failed{background:var(--red);box-shadow:0 0 5px rgba(239,68,68,.5)}
+.profile-dot.dot-running{background:var(--amber);animation:dot-pulse 1s ease-in-out infinite}
+
 /* ══ PROFILE VIEW ══ */
 .profile-back{display:flex;align-items:center;gap:7px;color:var(--text-3);font-size:11px;font-family:var(--mono);cursor:pointer;margin-bottom:14px;transition:color .2s}
 .profile-back:hover{color:var(--amber)}
@@ -360,6 +388,7 @@ header::before{
   </div>
   <div class="hdr-space"></div>
   <span class="hdr-time" id="last-updated">—</span>
+  <div class="sys-health" id="sys-health-badge" title="System health: avg agent success rate">⬡ <span id="sys-health-val">—</span></div>
   <div class="ws-pill connecting" id="ws-pill"><div class="ws-dot"></div><span id="ws-label">Connecting</span></div>
   <button class="hdr-btn" onclick="refresh()">↺ Refresh</button>
   <button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" title="Toggle fleet panel">☰</button>
@@ -611,7 +640,9 @@ function init() {
   connectWS();
   refresh();
   loadMeeting();
+  loadAgentHealth();                       // initial dot track load
   setInterval(refresh, 30000);
+  setInterval(loadAgentHealth, 60000);     // refresh dots every 60s
   if ('speechSynthesis' in window) {
     speechSynthesis.getVoices();
     speechSynthesis.onvoiceschanged = () => {};
@@ -900,21 +931,164 @@ function agentRow(a,i) {
   const pct=budget>0?Math.round(spent/budget*100):0;
   const color=statusColor(a.status), emoji=AVATAR[a.name]||'🤖';
   const role=ROLE_MAP[a.name]||adapter.replace(/_/g,' ');
+  const health=agentHealth[a.name]||null;
+  const dotHtml=dotTrackHTML(a.name, health, 20);
+  const healthHtml=healthBarHTML(health);
   return `<div class="agent" style="animation-delay:${i*.04}s" onclick='openProfile(${JSON.stringify(a.id)})'>
     <div class="av-wrap">
       <div class="av" style="background:${color}18;color:${color}">${emoji}</div>
       <div class="av-ring${a.status==='running'?' spin':''}" id="ring-${a.id}" style="border-top-color:${color}"></div>
     </div>
-    <div class="ag-info">
-      <div class="ag-name">${a.name}</div>
+    <div class="ag-info" style="min-width:0;flex:1">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <div class="ag-name">${a.name}</div>
+        <span class="badge badge-${a.status}" id="badge-${a.id}">${a.status}</span>
+      </div>
       <div class="ag-role">${role}</div>
       <div class="budget-wrap">
         <div class="budget-bar"><div class="budget-fill${pct>90?' warn':''}" style="width:${Math.min(pct,100)}%"></div></div>
         <span class="budget-pct">${pct>0?pct+'%':'—'}</span>
       </div>
+      ${dotHtml}
+      ${healthHtml}
     </div>
-    <span class="badge badge-${a.status}" id="badge-${a.id}">${a.status}</span>
   </div>`;
+}
+
+/* ══════ AGENT HEALTH / DOT TRACK ══════ */
+let agentHealth = {};   // { agentName: { dots:[…], health_pct, successes, failures, total_runs } }
+
+function dotTrackHTML(agentName, health, count=20) {
+  // Current live status — show orange if agent is currently running
+  const liveAgent = allAgents.find(a=>a.name===agentName);
+  const isRunning = liveAgent && liveAgent.status==='running';
+
+  const dots = health ? [...(health.dots||[])] : [];
+  // Pad left with empties
+  while(dots.length < count) dots.unshift(null);
+  const recent = dots.slice(-count);
+
+  let html = '<div class="dot-track" id="dots-'+agentName+'">';
+  // If currently running, append a live orange dot at the end
+  const showDots = isRunning ? [...recent.slice(0,-1), {status:'running'}] : recent;
+  showDots.forEach(d => {
+    if(!d) { html += '<div class="dot dot-empty" title="no data"></div>'; return; }
+    if(d.status==='running')  { html += '<div class="dot dot-running" title="Running…"></div>'; return; }
+    if(d.status==='success')  { html += '<div class="dot dot-success" title="✓ success"></div>'; return; }
+    if(d.status==='failed')   {
+      const r = d.reason ? d.reason.replace(/"/g,'&quot;') : 'failed';
+      html += `<div class="dot dot-failed" title="${r}"></div>`;
+      return;
+    }
+    html += '<div class="dot dot-empty"></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function healthBarHTML(health) {
+  if(!health || health.total_runs==null || health.total_runs===0) return '';
+  const pct = parseFloat(health.health_pct)||0;
+  const color = pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
+  return `<div class="health-row">
+    <div class="health-bar-wrap"><div class="health-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="health-pct" style="color:${color}">${pct}%</span>
+  </div>`;
+}
+
+async function loadAgentHealth() {
+  try {
+    const d = await fetch('/api/agent/health').then(r=>r.json());
+    if(d.error) return;
+    // Index by agent name
+    agentHealth = {};
+    (d.agents||[]).forEach(a => { agentHealth[a.agent_name] = a; });
+    // Update system health badge
+    updateSysHealthBadge(d.system_health);
+    // Re-render the agent list to show updated dots
+    if(allAgents.length) renderAgentList(allAgents);
+  } catch(_) {}
+}
+
+function updateSysHealthBadge(pct) {
+  const badge = document.getElementById('sys-health-badge');
+  const val   = document.getElementById('sys-health-val');
+  if(!badge||!val) return;
+  if(pct==null) { val.textContent='—'; return; }
+  val.textContent = pct+'%';
+  badge.className = 'sys-health' + (pct>=80?'':pct>=50?' warn':' danger');
+  badge.title = `System health: ${pct}% avg success rate across all agents`;
+}
+
+function updateAgentDots(agentName, health) {
+  agentHealth[agentName] = health;
+  // Re-render just this agent's dot track without full list re-render
+  const dotEl = document.getElementById('dots-'+agentName);
+  if(dotEl) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = dotTrackHTML(agentName, health, 20);
+    const newDots = tmp.querySelector('.dot-track');
+    if(newDots) dotEl.replaceWith(newDots);
+  }
+}
+
+function profileDotsHTML(agentName) {
+  // Use the full 100 history if available in agentHealth cache
+  const h = agentHealth[agentName];
+  const allDots = h ? (h.dots||[]) : [];
+  const pct = h ? parseFloat(h.health_pct)||0 : null;
+  const color = pct!=null?(pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)'):'var(--text-3)';
+
+  let statsHtml = '';
+  if(h && h.total_runs) {
+    statsHtml = `<div style="display:flex;gap:12px;margin-bottom:8px;font-size:9px;font-family:var(--mono)">
+      <span style="color:var(--green)">✓ ${h.successes||0} success</span>
+      <span style="color:var(--red)">✕ ${h.failures||0} failed</span>
+      <span style="color:${color};font-weight:700">${pct}% health</span>
+    </div>`;
+  }
+
+  if(!allDots.length) {
+    return statsHtml + '<div style="font-size:10px;color:var(--text-3);font-family:var(--mono)">No run history yet — assign tasks to build a track record.</div>';
+  }
+
+  // Pad to 100 with empties at the front
+  const padded = [...allDots];
+  while(padded.length < 100) padded.unshift(null);
+  const recent100 = padded.slice(-100);
+
+  let html = statsHtml + '<div class="profile-dots">';
+  recent100.forEach(d => {
+    if(!d) { html += '<div class="profile-dot dot-empty" title="no data"></div>'; return; }
+    if(d.status==='running') { html += '<div class="profile-dot dot-running" title="Running…"></div>'; return; }
+    if(d.status==='success') {
+      const ts = d.created_at ? new Date(d.created_at).toLocaleString() : '';
+      html += `<div class="profile-dot dot-success" title="✓ ${ts}"></div>`;
+      return;
+    }
+    if(d.status==='failed') {
+      const r = (d.reason||'failed').replace(/"/g,'&quot;');
+      const ts = d.created_at ? new Date(d.created_at).toLocaleString() : '';
+      html += `<div class="profile-dot dot-failed" title="✕ ${ts}&#10;${r}"></div>`;
+      return;
+    }
+    html += '<div class="profile-dot dot-empty"></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+async function loadProfileHistory(agentName) {
+  try {
+    const rows = await fetch(`/api/agent/history/${encodeURIComponent(agentName)}`).then(r=>r.json());
+    if(!Array.isArray(rows)) return;
+    // Merge into agentHealth cache (dots = last 100 from API, oldest first)
+    if(!agentHealth[agentName]) agentHealth[agentName] = {dots:[],total_runs:0,successes:0,failures:0,health_pct:null};
+    agentHealth[agentName].dots = [...rows].reverse();  // API returns newest first → reverse for left-to-right
+    // Refresh the profile dots section
+    const el = document.getElementById('profile-dots-section');
+    if(el) el.innerHTML = profileDotsHTML(agentName);
+  } catch(_) {}
 }
 const ROLE_MAP={
   'David':'Orchestrator','Dexter':'Senior Dev','Memo':'PM / Strategist','Sienna':'Crypto',
@@ -937,10 +1111,14 @@ async function openProfile(id) {
   renderProfileContent(base,null);
   document.getElementById('fleet-view').classList.add('hidden');
   document.getElementById('profile-view').classList.add('active');
-  try {
-    const full=await fetch(`/api/paperclip/agent/${id}`).then(r=>r.json());
-    if(!full.error) renderProfileContent(full,full.open_issues||[]);
-  } catch(_) {}
+  // Load full Paperclip profile and full 100-dot history in parallel
+  const agentName = base.name||id;
+  await Promise.allSettled([
+    fetch(`/api/paperclip/agent/${id}`).then(r=>r.json()).then(full=>{
+      if(!full.error) renderProfileContent(full,full.open_issues||[]);
+    }),
+    loadProfileHistory(agentName),
+  ]);
 }
 function renderProfileContent(a,issues) {
   const spent=(a.spentCents??a.spent_cents??0)/100, budget=(a.budgetCents??a.budget_cents??0)/100;
@@ -972,6 +1150,8 @@ function renderProfileContent(a,issues) {
     <div class="profile-desc">${desc}</div>
     <div class="profile-issues-title" style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Open Issues${issues?` (${issues.length})`:''}</div>
     ${issHtml}
+    <div class="profile-agents-label" style="margin-top:14px">Run History (last 100)</div>
+    <div id="profile-dots-section">${profileDotsHTML(a.name)}</div>
     <div class="profile-agents-label">Browse Fleet</div>
     <div class="agent-chips">${chips}</div>`;
 }
@@ -999,6 +1179,26 @@ function connectWS() {
     const m=JSON.parse(data);
     if(m.type==='initial_state'||m.type==='state_update'){
       updateMetrics(m.state,[]);
+    } else if(m.type==='agent_run_start'){
+      // Live orange dot: agent just got assigned
+      const name=m.agent_name;
+      addLog(`🟠 ${name} assigned — task started`);
+      setAgent(name,'running');
+      // Push a live running dot into the cached history and re-render track
+      if(!agentHealth[name]) agentHealth[name]={dots:[],total_runs:0,successes:0,failures:0,health_pct:null};
+      agentHealth[name].dots = [...(agentHealth[name].dots||[]),{status:'running',created_at:new Date().toISOString()}];
+      const dotEl=document.getElementById('dots-'+name);
+      if(dotEl){const tmp=document.createElement('div');tmp.innerHTML=dotTrackHTML(name,agentHealth[name],20);const nd=tmp.querySelector('.dot-track');if(nd)dotEl.replaceWith(nd);}
+    } else if(m.type==='agent_run_complete'){
+      // Swap the last running dot to green/red
+      const name=m.agent_name, ok=m.status==='success';
+      addLog(ok?`🟢 ${name} completed successfully`:`🔴 ${name} FAILED — ${(m.reason||'unknown').substring(0,60)}`);
+      if(ok) toast(`✅ ${name} done`);
+      else   toast(`❌ ${name}: ${(m.reason||'failed').substring(0,50)}`,'error');
+      // Update health cache with fresh data from server
+      if(m.health && Object.keys(m.health).length) updateAgentDots(name, m.health);
+      else loadAgentHealth();   // fallback: full reload
+      setAgent(name,'idle');
     } else if(m.type==='task_started'){
       addLog(`🚀 "${(m.task||'').substring(0,55)}"`);
       animatePipe(m.agents||[]);toast('🚀 '+(m.task||'').substring(0,60));
@@ -1056,6 +1256,8 @@ async function refresh() {
     const lu=state.last_updated;
     if(lu)document.getElementById('last-updated').textContent=new Date(lu).toLocaleTimeString('en-US',{hour12:false});
   } catch(e){addLog('⚠️ '+e.message);}
+  // Always refresh agent health dots (non-blocking)
+  loadAgentHealth();
 }
 function counter(el,target) {
   const from=parseInt(el.textContent)||0;if(from===target)return;

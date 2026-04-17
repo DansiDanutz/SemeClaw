@@ -58,6 +58,48 @@ ROOT = WAR_ROOM_DIR.parent
 logger = logging.getLogger("war_room.dashboard")
 
 # ---------------------------------------------------------------------------
+# Supabase — Moltbot project (okgwzwdtuhhpoyxyprzg)
+# ---------------------------------------------------------------------------
+SUPA_URL = "https://okgwzwdtuhhpoyxyprzg.supabase.co"
+SUPA_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rZ3d6d2R0dWhocG95eHlwcnpnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTY1NDg5MiwiZXhwIjoyMDg1MjMwODkyfQ."
+    "hBVka6E_soQPt97FX_tG-LNRxk5gmi8kpmCppeKxqG0"
+)
+SUPA_HEADERS = {
+    "apikey":        SUPA_KEY,
+    "Authorization": f"Bearer {SUPA_KEY}",
+    "Content-Type":  "application/json",
+    "Prefer":        "return=representation",
+}
+
+
+async def _supa(method: str, path: str, **kwargs):
+    """Generic Supabase REST helper."""
+    async with httpx.AsyncClient(base_url=SUPA_URL, timeout=10.0) as c:
+        r = await getattr(c, method)(f"/rest/v1/{path}", headers=SUPA_HEADERS, **kwargs)
+        r.raise_for_status()
+        return r.json() if r.content else []
+
+
+async def _prune_agent_history(agent_name: str):
+    """Keep only the 100 most recent terminal (success/failed) rows per agent."""
+    try:
+        rows = await _supa(
+            "get",
+            f"agent_run_history?agent_name=eq.{agent_name}"
+            "&status=in.(success,failed)"
+            "&order=created_at.desc&select=id",
+        )
+        ids_to_delete = [r["id"] for r in rows[100:]]
+        if ids_to_delete:
+            id_csv = "(" + ",".join(str(i) for i in ids_to_delete) + ")"
+            await _supa("delete", f"agent_run_history?id=in.{id_csv}")
+    except Exception as e:
+        logger.warning("_prune_agent_history: %s", e)
+
+
+# ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(title="War Room Dashboard")
@@ -536,6 +578,153 @@ async def api_board():
             "Nano":    {"role": "AgentCreator","status": "idle"},
         }
     }))
+
+
+# ---------------------------------------------------------------------------
+# Agent Run History — health tracking
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid
+
+@app.post("/api/agent/run-start")
+async def api_agent_run_start(request: Request):
+    """Record that an agent was assigned a task (status=running).
+    Returns the run_id to use when calling /run-complete."""
+    data      = await request.json()
+    agent     = data.get("agent_name", "").strip()
+    source    = data.get("agent_source", "unknown")
+    task_ref  = data.get("task_ref", "")
+    if not agent:
+        return JSONResponse({"error": "agent_name required"}, status_code=400)
+
+    run_id = str(_uuid.uuid4())
+    try:
+        rows = await _supa("post", "agent_run_history", json={
+            "agent_name":   agent,
+            "agent_source": source,
+            "status":       "running",
+            "task_ref":     task_ref or None,
+            "run_id":       run_id,
+        })
+        row = rows[0] if rows else {"run_id": run_id}
+    except Exception as e:
+        logger.error("run-start insert: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    await manager.broadcast({
+        "type":       "agent_run_start",
+        "agent_name": agent,
+        "run_id":     run_id,
+        "task_ref":   task_ref,
+    })
+    return JSONResponse({"run_id": run_id, "agent_name": agent})
+
+
+@app.post("/api/agent/run-complete")
+async def api_agent_run_complete(request: Request):
+    """Mark a run as success or failed. Prunes to last 100 and broadcasts health update."""
+    data    = await request.json()
+    run_id  = data.get("run_id", "").strip()
+    agent   = data.get("agent_name", "").strip()
+    status  = data.get("status", "success")   # success | failed
+    reason  = data.get("reason", "")          # failure reason
+
+    if status not in ("success", "failed"):
+        return JSONResponse({"error": "status must be success or failed"}, status_code=400)
+    if not agent:
+        return JSONResponse({"error": "agent_name required"}, status_code=400)
+
+    try:
+        patch = {"status": status}
+        if reason:
+            patch["reason"] = reason
+        if run_id:
+            await _supa("patch", f"agent_run_history?run_id=eq.{run_id}", json=patch)
+        else:
+            # Fallback: update the most recent running row for this agent
+            await _supa(
+                "patch",
+                f"agent_run_history?agent_name=eq.{agent}&status=eq.running&order=created_at.desc&limit=1",
+                json=patch,
+            )
+        # Prune to 100
+        await _prune_agent_history(agent)
+    except Exception as e:
+        logger.error("run-complete patch: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Fetch updated health for this agent and broadcast
+    health = await _get_agent_health_single(agent)
+    await manager.broadcast({
+        "type":       "agent_run_complete",
+        "agent_name": agent,
+        "run_id":     run_id,
+        "status":     status,
+        "reason":     reason,
+        "health":     health,
+    })
+    return JSONResponse({"ok": True, "health": health})
+
+
+async def _get_agent_health_single(agent_name: str) -> dict:
+    """Return health summary dict for one agent."""
+    try:
+        rows = await _supa(
+            "get",
+            f"agent_health_summary?agent_name=eq.{agent_name}&select=*",
+        )
+        return rows[0] if rows else {}
+    except Exception:
+        return {}
+
+
+@app.get("/api/agent/health")
+async def api_agent_health():
+    """Return health summary for all agents (from view), plus last 20 dot history each."""
+    try:
+        summary = await _supa("get", "agent_health_summary?select=*&order=health_pct.asc")
+    except Exception as e:
+        logger.error("api_agent_health: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Enrich each agent with last 20 dot entries (for the card track)
+    result = []
+    for row in summary:
+        name = row["agent_name"]
+        try:
+            dots = await _supa(
+                "get",
+                f"agent_run_history?agent_name=eq.{name}"
+                "&status=in.(success,failed,running)"
+                "&order=created_at.desc&limit=20&select=status,reason,created_at",
+            )
+            row["dots"] = list(reversed(dots))   # oldest first → left to right
+        except Exception:
+            row["dots"] = []
+        result.append(row)
+
+    # Compute system-wide health
+    valid = [r for r in result if r.get("health_pct") is not None]
+    system_health = (
+        round(sum(float(r["health_pct"]) for r in valid) / len(valid), 1)
+        if valid else None
+    )
+    return JSONResponse({"agents": result, "system_health": system_health})
+
+
+@app.get("/api/agent/history/{agent_name}")
+async def api_agent_history(agent_name: str):
+    """Last 100 run entries for one agent (for the profile expanded view)."""
+    try:
+        rows = await _supa(
+            "get",
+            f"agent_run_history?agent_name=eq.{agent_name}"
+            "&order=created_at.desc&limit=100"
+            "&select=id,status,reason,task_ref,created_at",
+        )
+        return JSONResponse(rows)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ---------------------------------------------------------------------------
