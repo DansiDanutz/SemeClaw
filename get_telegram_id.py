@@ -15,7 +15,17 @@ async def main():
         from telegram import Update
         from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-    BOT_TOKEN = "8685286530:AAHw5ZtRyeUdcPhoA5B7CCsDp7XT7fL5KBs"
+    import os as _os, pathlib as _pl
+    BOT_TOKEN = _os.environ.get("TELEGRAM_BOT_TOKEN") or _os.environ.get("DLS_DAVID_BOT_TOKEN") or ""
+    if not BOT_TOKEN:
+        fe = _pl.Path.home() / ".openclaw" / "fleet.env"
+        if fe.exists():
+            for _line in fe.read_text().splitlines():
+                if "=" in _line and "BOT_TOKEN" in _line and not _line.startswith("#"):
+                    BOT_TOKEN = _line.partition("=")[2].strip().strip('"').strip("'")
+                    break
+    if not BOT_TOKEN:
+        raise RuntimeError("Set TELEGRAM_BOT_TOKEN env var or add it to ~/.openclaw/fleet.env")
 
     print("=" * 50)
     print("  Telegram User ID Finder")

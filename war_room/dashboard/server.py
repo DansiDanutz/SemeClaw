@@ -59,13 +59,49 @@ logger = logging.getLogger("war_room.dashboard")
 
 # ---------------------------------------------------------------------------
 # Supabase — Moltbot project (okgwzwdtuhhpoyxyprzg)
+# Credentials loaded from environment / ~/.openclaw/fleet.env — NEVER hardcoded.
 # ---------------------------------------------------------------------------
-SUPA_URL = "https://okgwzwdtuhhpoyxyprzg.supabase.co"
-SUPA_KEY = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rZ3d6d2R0dWhocG95eHlwcnpnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTY1NDg5MiwiZXhwIjoyMDg1MjMwODkyfQ."
-    "hBVka6E_soQPt97FX_tG-LNRxk5gmi8kpmCppeKxqG0"
-)
+def _load_supa_creds() -> tuple[str, str]:
+    """Load Supabase URL + service-role key.
+    Resolution order:
+      1. Env vars  DLS_TEAM_SUPABASE_URL / DLS_TEAM_SUPABASE_SERVICE_KEY
+      2. ~/.openclaw/fleet.env
+    Raises RuntimeError if not found (server will fail fast rather than use wrong creds).
+    """
+    import os as _os
+    url = _os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip()
+    key = _os.environ.get("DLS_TEAM_SUPABASE_SERVICE_KEY", "").strip()
+
+    if not url or not key:
+        fe = Path.home() / ".openclaw" / "fleet.env"
+        if fe.exists():
+            for line in fe.read_text().splitlines():
+                if "=" in line and not line.startswith("#"):
+                    k, _, v = line.partition("=")
+                    k = k.strip(); v = v.strip().strip('"').strip("'")
+                    # strip shell 'export ' prefix
+                    if k.startswith("export "):
+                        k = k[7:].strip()
+                    if k == "DLS_TEAM_SUPABASE_URL" and not url:
+                        url = v
+                    elif k == "DLS_TEAM_SUPABASE_SERVICE_KEY" and not key:
+                        key = v
+
+    if not url or not key:
+        raise RuntimeError(
+            "Supabase credentials not found. "
+            "Set DLS_TEAM_SUPABASE_URL and DLS_TEAM_SUPABASE_SERVICE_KEY "
+            "in environment or ~/.openclaw/fleet.env"
+        )
+    return url, key
+
+
+try:
+    SUPA_URL, SUPA_KEY = _load_supa_creds()
+except RuntimeError as _e:
+    logger.warning("⚠ %s — Supabase features will be disabled", _e)
+    SUPA_URL, SUPA_KEY = "", ""
+
 SUPA_HEADERS = {
     "apikey":        SUPA_KEY,
     "Authorization": f"Bearer {SUPA_KEY}",
@@ -217,6 +253,33 @@ async def api_state():
     if STATE_FILE.exists():
         return JSONResponse(json.loads(STATE_FILE.read_text()))
     return JSONResponse({"error": "No state file", "metrics": {}, "completed_tasks": []})
+
+
+@app.get("/api/stats")
+async def api_stats():
+    """Aggregated real-time dashboard stats for the metrics cards."""
+    state: dict = {}
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text())
+        except Exception:
+            pass
+    completed  = state.get("completed_tasks", [])
+    active     = state.get("active_tasks", [])
+    metrics    = state.get("metrics", {})
+    today_str  = datetime.now(timezone.utc).date().isoformat()
+    today_count = sum(1 for t in completed if (t.get("completed_at") or "").startswith(today_str))
+    report_count = len(list(RESEARCH_DIR.glob("*.md")))
+    return JSONResponse({
+        "pipelines_total": len(completed),
+        "pipelines_today": today_count,
+        "active_now":      len(active),
+        "reports":         report_count,
+        "tasks_run":       metrics.get("tasks_run", 0),
+        "tasks_succeeded": metrics.get("tasks_succeeded", 0),
+        "tasks_failed":    metrics.get("tasks_failed", 0),
+        "pc_issues":       metrics.get("paperclip_issues_created", 0),
+    })
 
 
 @app.get("/api/reports")
@@ -377,6 +440,128 @@ async def api_paperclip_agent(agent_id: str):
 async def api_meeting():
     """Return shared meeting context history."""
     return JSONResponse(_meeting)
+
+
+def _get_tg_creds() -> tuple[str, str]:
+    """Return (bot_token, chat_id) for Dan alerts.
+    Resolution order:
+      1. Environment variables (DLS_DAVID_BOT_TOKEN, DLS_DAN_CHAT_ID)
+      2. ~/.openclaw/fleet.env
+      3. ~/.openclaw/openclaw.json  (danslabmodel account botToken + hardcoded chat_id)
+    """
+    import os, json as _json
+    token = os.environ.get("DLS_DAVID_BOT_TOKEN", "").strip()
+    chat  = os.environ.get("DLS_DAN_CHAT_ID", "").strip()
+
+    # 2. fleet.env
+    fleet_env = Path.home() / ".openclaw" / "fleet.env"
+    if fleet_env.exists():
+        for line in fleet_env.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                k = k.strip(); v = v.strip().strip('"').strip("'")
+                if k in ("DLS_DAVID_BOT_TOKEN", "DLS_TELEGRAM_BOT_TOKEN") and not token:
+                    token = v
+                elif k == "DLS_DAN_CHAT_ID" and not chat:
+                    chat = v
+
+    # 3. openclaw.json — use danslabmodel account (primary orchestrator bot)
+    if not token:
+        oc = Path.home() / ".openclaw" / "openclaw.json"
+        if oc.exists():
+            try:
+                cfg = _json.loads(oc.read_text())
+                accts = cfg.get("channels", {}).get("telegram", {}).get("accounts", {})
+                for acct_name in ("danslabmodel", "main", "default", "david"):
+                    tok = accts.get(acct_name, {}).get("botToken", "")
+                    if tok:
+                        token = tok
+                        break
+            except Exception:
+                pass
+
+    # 4. Hardcoded Dan chat ID fallback (known value)
+    if not chat:
+        chat = "424184493"
+
+    return token, chat
+
+
+@app.post("/api/alert-dan")
+async def api_alert_dan(request: Request):
+    """Send an urgent Telegram alert to Dan from the War Room quick-action button."""
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+
+    bot_token, chat_id = _get_tg_creds()
+    if not bot_token:
+        return JSONResponse({"error": "Telegram bot token not configured"}, status_code=503)
+
+    payload = f"🚨 *War Room Alert*\n\n{message}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": chat_id, "text": payload, "parse_mode": "Markdown"}
+            )
+        if r.status_code == 200:
+            return JSONResponse({"ok": True})
+        return JSONResponse({"error": r.text}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+@app.post("/api/morning-brief")
+async def api_morning_brief():
+    """Trigger a morning brief generation and send to Dan via Telegram."""
+    bot_token, chat_id = _get_tg_creds()
+    if not bot_token:
+        return JSONResponse({"error": "Telegram not configured"}, status_code=503)
+
+    # Build a brief from live state — fetch fresh data
+    total_agents = 0
+    healthy_pct  = None
+    active_now   = 0
+    try:
+        company_id = await _get_company_id()
+        if company_id:
+            async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=6.0) as c:
+                ra = await c.get(f"/api/companies/{company_id}/agents")
+                agents_list = ra.json() if ra.status_code == 200 and isinstance(ra.json(), list) else []
+                total_agents = len(agents_list)
+                active_now   = sum(1 for a in agents_list if a.get("status") == "running")
+    except Exception:
+        pass
+    try:
+        health_data = await _supa("get", "agent_health_summary?select=health_pct")
+        vals = [float(r["health_pct"]) for r in (health_data or []) if r.get("health_pct") is not None]
+        healthy_pct = round(sum(vals) / len(vals)) if vals else None
+    except Exception:
+        pass
+
+    active_str = f" ({active_now} running)" if active_now else ""
+    health_str = f"{healthy_pct}% avg" if healthy_pct is not None else "N/A"
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    brief = (
+        f"⚡ *War Room Morning Brief*\n_{now_str}_\n\n"
+        f"🤖 *Fleet:* {total_agents} agents{active_str}\n"
+        f"💚 *Health:* {health_str} success rate\n\n"
+        f"Dashboard → http://127.0.0.1:8765"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": chat_id, "text": brief, "parse_mode": "Markdown"}
+            )
+        if r.status_code == 200:
+            return JSONResponse({"ok": True})
+        return JSONResponse({"error": r.text}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
 
 
 @app.post("/api/meeting/say")
@@ -680,30 +865,92 @@ async def _get_agent_health_single(agent_name: str) -> dict:
 
 @app.get("/api/agent/health")
 async def api_agent_health():
-    """Return health summary for all agents (from view), plus last 20 dot history each."""
+    """Return health summary for ALL agents — merges Supabase tracked agents with
+    Paperclip heartbeat-runs so every agent card shows real dot history."""
+
+    # ── 1. Supabase tracked agents (war_room dispatch system) ──────────────────
+    supa_result: list[dict] = []
     try:
         summary = await _supa("get", "agent_health_summary?select=*&order=health_pct.asc")
+        for row in summary:
+            name = row["agent_name"]
+            try:
+                dots = await _supa(
+                    "get",
+                    f"agent_run_history?agent_name=eq.{name}"
+                    "&status=in.(success,failed,running)"
+                    "&order=created_at.desc&limit=20&select=status,reason,created_at",
+                )
+                row["dots"] = list(reversed(dots))
+            except Exception:
+                row["dots"] = []
+            row["agent_source"] = "supabase"
+            supa_result.append(row)
     except Exception as e:
-        logger.error("api_agent_health: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        logger.warning("api_agent_health Supabase: %s", e)
 
-    # Enrich each agent with last 20 dot entries (for the card track)
-    result = []
-    for row in summary:
-        name = row["agent_name"]
-        try:
-            dots = await _supa(
-                "get",
-                f"agent_run_history?agent_name=eq.{name}"
-                "&status=in.(success,failed,running)"
-                "&order=created_at.desc&limit=20&select=status,reason,created_at",
-            )
-            row["dots"] = list(reversed(dots))   # oldest first → left to right
-        except Exception:
-            row["dots"] = []
-        result.append(row)
+    supa_names = {r["agent_name"] for r in supa_result}
 
-    # Compute system-wide health
+    # ── 2. Paperclip heartbeat-runs for all other agents ──────────────────────
+    pc_result: list[dict] = []
+    try:
+        company_id = await _get_company_id()
+        if company_id:
+            async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=10.0) as c:
+                # Get id→name map
+                ar = await c.get(f"/api/companies/{company_id}/agents")
+                ar.raise_for_status()
+                id_to_name: dict[str, str] = {
+                    a["id"]: a["name"] for a in (ar.json() if isinstance(ar.json(), list) else [])
+                }
+                # Get last 200 heartbeat runs
+                hr = await c.get(
+                    f"/api/companies/{company_id}/heartbeat-runs",
+                    params={"limit": 200},
+                )
+                hr.raise_for_status()
+                runs = hr.json() if isinstance(hr.json(), list) else []
+
+            # Group runs by agentId, convert to dots format
+            from collections import defaultdict
+            by_agent: dict[str, list] = defaultdict(list)
+            for r in runs:
+                by_agent[r["agentId"]].append(r)
+
+            for agent_id, agent_runs in by_agent.items():
+                agent_name = id_to_name.get(agent_id, agent_id[:8])
+                if agent_name in supa_names:
+                    continue   # already covered by Supabase
+                # Sort oldest→newest
+                agent_runs.sort(key=lambda x: x.get("startedAt") or x.get("createdAt") or "")
+                dots = []
+                for r in agent_runs[-20:]:
+                    pc_status = r.get("status", "")
+                    dot_status = "success" if pc_status == "succeeded" else "failed" if pc_status == "failed" else "running"
+                    dots.append({
+                        "status": dot_status,
+                        "reason": r.get("error") or None,
+                        "created_at": r.get("startedAt") or r.get("createdAt"),
+                    })
+                total  = len(agent_runs)
+                succ   = sum(1 for r in agent_runs if r.get("status") == "succeeded")
+                fail   = total - succ
+                health = round(succ / total * 100, 1) if total else None
+                pc_result.append({
+                    "agent_name":   agent_name,
+                    "agent_source": "paperclip",
+                    "total_runs":   total,
+                    "successes":    succ,
+                    "failures":     fail,
+                    "health_pct":   health,
+                    "last_run_at":  agent_runs[-1].get("finishedAt") if agent_runs else None,
+                    "dots":         dots,
+                })
+    except Exception as e:
+        logger.warning("api_agent_health Paperclip: %s", e)
+
+    # ── 3. Merge and compute system health ────────────────────────────────────
+    result = supa_result + pc_result
     valid = [r for r in result if r.get("health_pct") is not None]
     system_health = (
         round(sum(float(r["health_pct"]) for r in valid) / len(valid), 1)
@@ -714,7 +961,11 @@ async def api_agent_health():
 
 @app.get("/api/agent/history/{agent_name}")
 async def api_agent_history(agent_name: str):
-    """Last 100 run entries for one agent (for the profile expanded view)."""
+    """Last 100 run entries for one agent.
+    Primary: Supabase agent_run_history (war_room dispatched agents).
+    Fallback: Paperclip heartbeat-runs (all other agents).
+    """
+    # 1. Try Supabase first
     try:
         rows = await _supa(
             "get",
@@ -722,8 +973,46 @@ async def api_agent_history(agent_name: str):
             "&order=created_at.desc&limit=100"
             "&select=id,status,reason,task_ref,created_at",
         )
-        return JSONResponse(rows)
+        if rows:
+            return JSONResponse(rows)
     except Exception as e:
+        logger.warning("api_agent_history Supabase: %s", e)
+
+    # 2. Fallback: Paperclip heartbeat-runs
+    try:
+        company_id = await _get_company_id()
+        if not company_id:
+            return JSONResponse([])
+        async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=8.0) as c:
+            # Build name→id map
+            ar = await c.get(f"/api/companies/{company_id}/agents")
+            ar.raise_for_status()
+            agents_list = ar.json() if isinstance(ar.json(), list) else []
+            agent = next((a for a in agents_list if a.get("name", "").lower() == agent_name.lower()), None)
+            if not agent:
+                return JSONResponse([])
+            agent_id = agent["id"]
+            hr = await c.get(
+                f"/api/companies/{company_id}/heartbeat-runs",
+                params={"agentId": agent_id, "limit": 100},
+            )
+            hr.raise_for_status()
+            runs = hr.json() if isinstance(hr.json(), list) else []
+        # Convert to the same schema as agent_run_history
+        converted = []
+        for r in sorted(runs, key=lambda x: x.get("startedAt") or "", reverse=True):
+            pc_status = r.get("status", "")
+            converted.append({
+                "id":         r.get("id"),
+                "status":     "success" if pc_status == "succeeded" else "failed" if pc_status == "failed" else pc_status,
+                "reason":     r.get("error") or None,
+                "task_ref":   r.get("wakeupRequestId") or None,
+                "created_at": r.get("startedAt") or r.get("createdAt"),
+                "source":     r.get("invocationSource", "timer"),
+            })
+        return JSONResponse(converted)
+    except Exception as e:
+        logger.error("api_agent_history Paperclip: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -759,7 +1048,8 @@ async def websocket_endpoint(websocket: WebSocket):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    import os as _os
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(_os.environ.get("PORT", 8765))
     print(f"🏛  War Room Dashboard (WebSocket) → http://127.0.0.1:{port}")
     print(f"    WebSocket → ws://127.0.0.1:{port}/ws")
 

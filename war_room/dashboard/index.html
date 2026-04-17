@@ -29,7 +29,9 @@
   --r:13px; --r-sm:8px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{height:100%}
+html{height:100%;font-size:15px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+::selection{background:rgba(245,158,11,.28);color:var(--text)}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:3px}
 body{
   min-height:100%;background:var(--bg);color:var(--text);
   font-family:var(--sans);font-size:14px;overflow:hidden;
@@ -82,7 +84,7 @@ header::before{
 .sidebar-overlay.visible{display:block}
 
 /* ══ SIDEBAR ══ */
-.sidebar{background:var(--bg-1);border-right:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;transition:transform .35s var(--ease-out)}
+.sidebar{background:var(--bg-1);border-right:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;transition:transform .35s var(--ease-out);position:relative}
 .sidebar-fleet,.sidebar-profile{position:absolute;inset:0;padding:18px 14px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent;display:flex;flex-direction:column;gap:20px;transition:transform .32s var(--ease-out),opacity .32s}
 .sidebar-fleet.hidden{transform:translateX(-24px);opacity:0;pointer-events:none}
 .sidebar-profile{transform:translateX(24px);opacity:0;pointer-events:none}
@@ -95,7 +97,9 @@ header::before{
 .metric{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px 12px;position:relative;overflow:hidden;cursor:default;transition:border-color .2s,box-shadow .3s,transform .2s}
 .metric::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--amber),var(--cyan));opacity:.75}
 .metric:hover{border-color:rgba(245,158,11,.3);box-shadow:0 0 26px rgba(245,158,11,.09),0 6px 22px rgba(0,0,0,.3);transform:translateY(-1px)}
-.metric-val{font-size:32px;font-weight:900;font-family:var(--mono);color:var(--amber);line-height:1;letter-spacing:-2px;text-shadow:0 0 34px var(--amber-glow)}
+.metric-live.has-active{border-color:rgba(245,158,11,.55)!important;box-shadow:0 0 28px rgba(245,158,11,.22),0 0 0 1px rgba(245,158,11,.1)!important;animation:metric-pulse 2s ease-in-out infinite}
+@keyframes metric-pulse{0%,100%{box-shadow:0 0 28px rgba(245,158,11,.22)}50%{box-shadow:0 0 44px rgba(245,158,11,.4)}}
+.metric-val{font-size:1.9rem;font-weight:800;font-family:var(--mono);color:var(--amber);line-height:1;letter-spacing:-1.5px;text-shadow:0 0 34px var(--amber-glow)}
 .metric-lbl{font-size:9px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-top:5px}
 
 .sync-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -151,6 +155,31 @@ header::before{
 .sys-health{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.5px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.08);color:var(--green);transition:all .4s;cursor:default}
 .sys-health.warn{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:var(--amber)}
 .sys-health.danger{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:var(--red)}
+/* P1: Live clock */
+.hdr-clock{font-size:11px;font-family:var(--mono);color:var(--text-2);letter-spacing:.5px;padding:4px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border)}
+/* P2: Fleet health alert strip */
+.alert-strip{display:none;margin-bottom:8px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:var(--r-sm);padding:7px 10px;flex-direction:column;gap:4px}
+.alert-strip.show{display:flex}
+.alert-strip-hdr{display:flex;align-items:center;justify-content:space-between;font-size:8px;font-family:var(--mono);color:var(--red);letter-spacing:.8px;text-transform:uppercase;font-weight:700;margin-bottom:2px}
+.alert-item{display:flex;align-items:center;gap:7px;font-size:9px;font-family:var(--mono);color:var(--text-2);cursor:pointer;padding:2px 0;transition:color .15s}
+.alert-item:hover{color:var(--text)}
+.alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+/* P3: Cost burn metric */
+.metric-cost{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:8px}
+.metric-cost-left{display:flex;flex-direction:column}
+.metric-cost-right{text-align:right}
+.burn-val{font-size:13px;font-weight:800;font-family:var(--mono);color:var(--amber)}
+.burn-lbl{font-size:7px;font-family:var(--mono);color:var(--text-3);letter-spacing:.7px;text-transform:uppercase;margin-top:2px}
+/* P4: Trend arrows on metrics */
+.metric-trend{font-size:8px;font-family:var(--mono);margin-top:2px;letter-spacing:.3px;height:10px}
+.trend-up{color:var(--green)}
+.trend-dn{color:var(--red)}
+.trend-fl{color:var(--text-3)}
+/* P5: Quick action buttons */
+.qa-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border-2);background:var(--surface);color:var(--text-2);font-size:9px;font-family:var(--mono);font-weight:600;cursor:pointer;letter-spacing:.3px;transition:all .15s;white-space:nowrap}
+.qa-btn:hover{border-color:var(--amber);color:var(--amber);background:var(--amber-soft)}
+.qa-btn.alert{border-color:rgba(239,68,68,.3);color:var(--red)}
+.qa-btn.alert:hover{border-color:var(--red);background:var(--red-dim)}
 /* ── Failure reason popover ── */
 .dot-popover{position:fixed;z-index:500;background:var(--surface-2);border:1px solid rgba(239,68,68,.5);border-radius:10px;padding:10px 14px;max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.7),0 0 0 1px rgba(239,68,68,.15);animation:pop-in .18s var(--ease-out);pointer-events:none}
 .dot-popover-label{font-size:8px;font-family:var(--mono);color:var(--red);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;font-weight:700}
@@ -213,6 +242,7 @@ header::before{
 
 /* ══ CARDS ══ */
 .card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;animation:fade-up .5s var(--ease-out) both;box-shadow:0 6px 30px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.028);position:relative}
+.main>.card{flex-shrink:0;overflow:visible}
 /* Per-card colored top edge */
 .card:nth-child(1)::before{background:linear-gradient(90deg,var(--amber) 0%,rgba(245,158,11,.1) 60%,transparent)}
 .card:nth-child(2)::before{background:linear-gradient(90deg,var(--cyan) 0%,rgba(34,211,238,.1) 60%,transparent)}
@@ -249,8 +279,8 @@ header::before{
 @keyframes flow{to{left:200%}}
 
 /* ══ ACTIVITY ══ */
-.activity-body{max-height:160px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent}
-.log-line{padding:7px 18px;font-size:11px;font-family:var(--mono);color:var(--text-2);border-bottom:1px solid rgba(255,255,255,.03);display:flex;align-items:baseline;gap:10px;animation:log-in .2s ease both}
+.activity-body{max-height:220px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent}
+.log-line{padding:7px 18px;font-size:0.82rem;line-height:1.55;font-family:var(--mono);color:var(--text-2);border-bottom:1px solid rgba(255,255,255,.03);display:flex;align-items:baseline;gap:10px;animation:log-in .2s ease both}
 @keyframes log-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
 .log-ts{font-size:10px;color:var(--cyan);font-weight:600;flex-shrink:0;opacity:.85}
 .cursor{display:inline-block;width:6px;height:11px;background:var(--amber);margin-left:3px;vertical-align:text-bottom;animation:cursor-blink .9s step-end infinite}
@@ -263,7 +293,7 @@ header::before{
 .run-item:hover::before{opacity:1}
 .run-id{font-size:9px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:5px;background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.22);white-space:nowrap;letter-spacing:.4px}
 .run-info{flex:1;min-width:0}
-.run-task{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.run-task{font-size:0.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 .run-meta{font-size:9px;color:var(--text-3);font-family:var(--mono);margin-top:3px}
 .run-chev{color:var(--text-3);font-size:14px;transition:color .2s}.run-item:hover .run-chev{color:var(--amber)}
 .rpt-item{padding:11px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:center;gap:12px}
@@ -309,7 +339,7 @@ header::before{
 .wf-stop:hover{background:var(--red);color:#fff}
 
 /* Chat log */
-.meeting-log{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent;min-height:120px;max-height:240px}
+.meeting-log{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent;min-height:120px;max-height:220px}
 .meeting-overlay .meeting-log{max-height:none;flex:1}
 .msg-row{padding:10px 18px;border-bottom:1px solid rgba(255,255,255,.025);display:flex;gap:11px;align-items:flex-start;animation:msg-in .3s var(--ease-out) both}
 .msg-row:last-child{border-bottom:none}
@@ -320,7 +350,7 @@ header::before{
 .msg-speaker{font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.3px}
 .msg-ts{font-size:9px;color:var(--text-3);font-family:var(--mono)}
 .msg-ai-tag{font-size:8px;padding:1px 5px;border-radius:3px;background:rgba(139,92,246,.15);color:var(--violet);border:1px solid rgba(139,92,246,.2);font-family:var(--mono);letter-spacing:.3px}
-.msg-text{font-size:12px;color:var(--text-2);line-height:1.62;word-break:break-word}
+.msg-text{font-size:0.83rem;color:var(--text-2);line-height:1.55;word-break:break-word}
 .msg-row.speaking-row .msg-text::after{content:'▌';display:inline;color:var(--amber);animation:cursor-blink .6s step-end infinite;margin-left:2px}
 
 /* Meeting input row */
@@ -367,38 +397,87 @@ header::before{
 /* ══ RESPONSIVE ══ */
 @media(max-width:1024px){.layout{grid-template-columns:240px 1fr}}
 
+/* ── Tablet / mobile drawer ── */
 @media(max-width:768px){
   body{overflow:auto}
   .layout{grid-template-columns:1fr;height:auto;overflow:visible}
   .sidebar{
-    position:fixed;left:0;top:56px;bottom:0;width:280px;z-index:40;
-    transform:translateX(-100%);border-right:1px solid var(--border);
-    box-shadow:6px 0 40px rgba(0,0,0,.6);
+    position:fixed;left:0;top:56px;bottom:0;
+    width:min(300px,85vw);z-index:40;
+    transform:translateX(-100%);
+    box-shadow:8px 0 48px rgba(0,0,0,.7);
   }
   .sidebar.mobile-open{transform:translateX(0)}
   .sidebar-fleet,.sidebar-profile{position:absolute}
-  .main{height:calc(100vh - 56px);overflow-y:auto;padding:14px;gap:12px}
+  .main{min-height:calc(100vh - 56px);height:auto;overflow-y:auto;padding:14px;gap:12px}
   .menu-toggle{display:flex}
   .hdr-time{display:none}
-  .meeting-log{max-height:180px}
+  .sys-health{display:none}
+  .meeting-log{max-height:200px}
   .launcher-row{flex-direction:column}
   .run-btn{width:100%;flex:unset;min-width:unset}
 }
 
+/* ── Large mobile: trim header further ── */
+@media(max-width:640px){
+  .hdr-btn{display:none}
+  #ws-label{display:none}
+  .ws-pill{gap:5px;padding:4px 9px}
+  .meeting-input-row{flex-wrap:wrap}
+  .speaker-sel,.meeting-field{flex:1;min-width:0}
+  .rpt-prev{display:none}
+}
+
+/* ── Small mobile ── */
 @media(max-width:480px){
   header{padding:0 12px;gap:8px}
-  .hdr-name{font-size:13px}
+  .hdr-brand{flex-shrink:0}
+  .hdr-name{font-size:12px;white-space:nowrap}
   .hdr-sub{display:none}
+  .hdr-icon{width:28px;height:28px;font-size:13px;border-radius:7px}
   .main{padding:10px;gap:10px}
-  .card-hdr{padding:10px 14px}
+  .card-hdr{padding:10px 14px;gap:8px}
+  .card-ttl{font-size:10px;letter-spacing:.6px}
   .launcher-body{padding:14px;gap:10px}
   .task-field{font-size:13px;padding:10px 14px}
   .metrics{grid-template-columns:1fr 1fr}
-  .metric-val{font-size:26px}
-  .meeting-table{gap:8px;padding:14px 10px}
+  .metric{padding:11px 10px}
+  .metric-val{font-size:1.5rem;letter-spacing:-1px}
+  .meeting-table{gap:6px;padding:12px 8px}
   .mt-av{width:38px;height:38px;font-size:17px}
+  .mt-name{font-size:8px}
   .meeting-input-row{gap:5px;padding:8px 10px}
-  .ai-respond-btn{padding:7px 8px;font-size:10px}
+  .ai-respond-btn{padding:6px 8px;font-size:10px;letter-spacing:0}
+  .run-item{padding:10px 14px;gap:8px}
+  .rpt-item{padding:9px 14px;gap:10px}
+  .msg-row{padding:8px 14px;gap:8px}
+  .log-line{padding:6px 14px}
+  .dh-modal{border-radius:14px;width:98%}
+  .dh-body{padding:14px;gap:14px}
+  .dh-stat{padding:8px 12px}
+  .dh-stat-val{font-size:18px}
+  .modal{width:97%;border-radius:13px}
+}
+
+/* ── Tiny mobile (iPhone SE, 320px) ── */
+@media(max-width:360px){
+  header{padding:0 10px;gap:6px}
+  .hdr-icon{width:24px;height:24px;font-size:11px;border-radius:6px}
+  .hdr-name{font-size:11px}
+  .ws-pill{padding:3px 7px;font-size:9px}
+  .main{padding:8px;gap:8px}
+  .card-hdr{padding:8px 12px;gap:6px}
+  .card-ttl{font-size:9px}
+  .launcher-body{padding:10px;gap:8px}
+  .task-field{padding:9px 12px;font-size:12px}
+  .metric-val{font-size:1.3rem}
+  .meeting-table{gap:5px;padding:10px 6px}
+  .mt-av{width:32px;height:32px;font-size:14px}
+  .run-item{padding:9px 12px}
+  .run-task{font-size:0.78rem}
+  .agent{padding:8px 10px;gap:8px}
+  .av,.av-wrap{width:28px;height:28px}
+  .av{font-size:12px}
 }
 
 @media(min-width:1400px){.layout{grid-template-columns:300px 1fr}}
@@ -412,6 +491,9 @@ header::before{
     <div><div class="hdr-name">War Room</div><div class="hdr-sub">Dan's Lab · Command Center</div></div>
   </div>
   <div class="hdr-space"></div>
+  <span class="hdr-clock" id="hdr-clock">—</span>
+  <button class="qa-btn" onclick="runMorningBrief()" title="Generate morning brief for Dan">⚡ Brief</button>
+  <button class="qa-btn alert" onclick="alertDan()" title="Send alert to Dan via Telegram">🚨 Alert</button>
   <span class="hdr-time" id="last-updated">—</span>
   <div class="sys-health" id="sys-health-badge" title="System health: avg agent success rate">⬡ <span id="sys-health-val">—</span></div>
   <div class="ws-pill connecting" id="ws-pill"><div class="ws-dot"></div><span id="ws-label">Connecting</span></div>
@@ -426,11 +508,25 @@ header::before{
     <div class="sidebar-fleet" id="fleet-view">
       <div>
         <div class="sec-label">Metrics</div>
+        <div class="alert-strip" id="alert-strip">
+          <div class="alert-strip-hdr">⚠ Agents need attention <span id="alert-count">0</span></div>
+          <div id="alert-items"></div>
+        </div>
         <div class="metrics">
-          <div class="metric"><div class="metric-val" id="m-tasks">0</div><div class="metric-lbl">Tasks Run</div></div>
-          <div class="metric"><div class="metric-val" id="m-ok">0</div><div class="metric-lbl">Succeeded</div></div>
-          <div class="metric"><div class="metric-val" id="m-issues">0</div><div class="metric-lbl">PC Issues</div></div>
-          <div class="metric"><div class="metric-val" id="m-reports">0</div><div class="metric-lbl">Reports</div></div>
+          <div class="metric"><div class="metric-val" id="m-pipelines">0</div><div class="metric-lbl">Pipelines Run</div><div class="metric-trend" id="trend-pipelines"></div></div>
+          <div class="metric metric-live" id="m-active-card"><div class="metric-val" id="m-active">0</div><div class="metric-lbl">Active Now</div><div class="metric-trend" id="trend-active"></div></div>
+          <div class="metric"><div class="metric-val" id="m-agent-runs">0</div><div class="metric-lbl">Agent Runs</div><div class="metric-trend" id="trend-runs"></div></div>
+          <div class="metric"><div class="metric-val" id="m-reports">0</div><div class="metric-lbl">Reports</div><div class="metric-trend" id="trend-reports"></div></div>
+          <div class="metric metric-cost">
+            <div class="metric-cost-left">
+              <div class="burn-val" id="m-cost-total">—</div>
+              <div class="burn-lbl">Fleet Spend · Month</div>
+            </div>
+            <div class="metric-cost-right">
+              <div class="burn-val" id="m-cost-daily">—</div>
+              <div class="burn-lbl">Est. Daily Burn</div>
+            </div>
+          </div>
         </div>
       </div>
       <div style="flex:1">
@@ -686,6 +782,7 @@ function init() {
   refresh();
   loadMeeting();
   loadAgentHealth();                       // initial dot track load
+  updateClock(); setInterval(updateClock, 1000);  // P1: live clock
   setInterval(refresh, 30000);
   setInterval(loadAgentHealth, 60000);     // refresh dots every 60s
   if ('speechSynthesis' in window) {
@@ -935,6 +1032,7 @@ async function syncAgents() {
     const data=await fetch('/api/paperclip/agents').then(r=>r.json());
     if(Array.isArray(data)){
       allAgents=data;renderAgentList(data);
+      updateCostBurn();   // P3: update cost burn card
       addLog(`🔄 Synced ${data.length} agents from Paperclip`);
     } else throw new Error(data.error||'bad response');
   } catch(e){
@@ -1058,6 +1156,7 @@ async function loadAgentHealth() {
     updateSysHealthBadge(d.system_health);
     // Re-render the agent list to show updated dots
     if(allAgents.length) renderAgentList(allAgents);
+    updateAlertStrip();   // P2: health alert strip
   } catch(_) {}
 }
 
@@ -1254,33 +1353,91 @@ async function openProfile(id) {
   ]);
 }
 function renderProfileContent(a,issues) {
-  const spent=(a.spentCents??a.spent_cents??0)/100, budget=(a.budgetCents??a.budget_cents??0)/100;
+  // Budget
+  const spent=(a.spentCents??a.spent_cents??a.spentMonthlyCents??0)/100;
+  const budget=(a.budgetCents??a.budget_cents??a.budgetMonthlyCents??0)/100;
   const pct=budget>0?Math.round(spent/budget*100):0;
-  const hb=a.lastHeartbeat?timeAgo(a.lastHeartbeat):'—';
+
+  // 1. Last heartbeat — field is lastHeartbeatAt in Paperclip API
+  const hbRaw=a.lastHeartbeatAt||a.lastHeartbeat||null;
+  const hb=hbRaw?timeAgo(hbRaw):'—';
+  const hbTitle=hbRaw?new Date(hbRaw).toLocaleString():'No heartbeat recorded';
+
   const color=statusColor(a.status||'idle'), emoji=AVATAR[a.name]||'🤖';
-  const desc=DESC[a.name]||`${a.adapter||'agent'} on ${a.machine||'unknown'}.`;
+
+  // 2. Telegram — lives in a.metadata.telegram
+  const telegram=(a.metadata&&a.metadata.telegram)||a.telegram||null;
+  const tgHandle=telegram?telegram.replace(/^@/,''):'';
+  const tgHtml=tgHandle
+    ?`<a href="https://t.me/${tgHandle}" target="_blank"
+        style="color:var(--green);text-decoration:none;font-size:10px;font-family:var(--mono);font-weight:700">@${tgHandle}</a>`
+    :'—';
+
+  // 3. Description — dynamic: capabilities first, then DESC dict, then role+machine fallback
+  const meta=a.metadata||{};
+  const cap=a.capabilities||'';
+  const rawDesc=cap
+    ?cap.slice(0,500)+(cap.length>500?'…':'')
+    :DESC[a.name]||`${(a.title||a.role||a.adapterType||'agent')} on ${(meta.machine||a.machine||'unknown')}.`;
+
+  // 4. Health percentage from agentHealth cache
+  const health=agentHealth[a.name]||null;
+  const healthPct=health?parseFloat(health.health_pct||0):null;
+  const totalRuns=health?health.total_runs||0:0;
+  const hColor=healthPct===null?'var(--text-3)':healthPct>=80?'var(--green)':healthPct>=50?'var(--amber)':'var(--red)';
+  const healthBarW=healthPct===null?0:Math.min(healthPct,100);
+  const healthStatHtml=`
+    <div style="margin-top:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:8px;font-family:var(--mono);color:var(--text-3);letter-spacing:.8px;text-transform:uppercase">Health · ${totalRuns} runs</span>
+        <span style="font-size:13px;font-weight:800;font-family:var(--mono);color:${hColor}">${healthPct!==null?healthPct+'%':'—'}</span>
+      </div>
+      <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${healthBarW}%;background:${hColor};border-radius:2px;transition:width .6s"></div>
+      </div>
+    </div>`;
+
+  // Machine / ssh / ip line
+  const machine=meta.machine||a.machine||'';
+  const ip=meta.ip||a.ip||'';
+  const ssh=meta.ssh||a.ssh||'';
+  const machineLine=[machine,ip?'· '+ip:'',ssh?'· ssh '+ssh:''].filter(Boolean).join(' ');
+
+  // Title line (rich title from Paperclip, else adapter type)
+  const titleLine=a.title||(a.adapterType||a.adapter||'agent').toUpperCase();
+
   const others=allAgents.filter(x=>x.id!==a.id).slice(0,15);
   const issHtml=issues===null?'<div class="profile-issue">Loading…</div>':
     issues.length?issues.map(i=>`<div class="profile-issue"><span class="profile-issue-id">${i.identifier||i.id||'?'}</span>${i.title||'?'}</div>`).join(''):
     '<div class="profile-issue" style="color:var(--text-3)">No open issues ✓</div>';
   const chips=others.map(o=>`<div class="agent-chip" onclick='openProfile(${JSON.stringify(o.id)})'>${AVATAR[o.name]||'🤖'} ${o.name}</div>`).join('');
+
   document.getElementById('profile-content').innerHTML=`
     <div class="profile-hero">
       <div class="profile-av" style="background:${color}18;color:${color}">${emoji}</div>
-      <div>
+      <div style="min-width:0;flex:1;overflow:hidden">
         <div class="profile-name">${a.name}</div>
-        <div class="profile-adapter">${(a.adapter||'agent').toUpperCase()}</div>
-        <div class="profile-machine">${a.machine||''}${a.ip?' · '+a.ip:''}${a.ssh?' · ssh '+a.ssh:''}</div>
+        <div class="profile-adapter" style="white-space:normal;line-height:1.3">${titleLine}</div>
+        <div class="profile-machine">${machineLine}</div>
       </div>
-      <span class="badge badge-${a.status||'idle'}" style="align-self:flex-start">${a.status||'idle'}</span>
+      <span class="badge badge-${a.status||'idle'}" style="align-self:flex-start;flex-shrink:0">${a.status||'idle'}</span>
     </div>
     <div class="profile-stat-row">
-      <div class="profile-stat"><div class="profile-stat-val">$${spent.toFixed(2)}</div><div class="profile-stat-lbl">Spent</div></div>
-      <div class="profile-stat"><div class="profile-stat-val">${pct}%</div><div class="profile-stat-lbl">Budget used</div></div>
-      <div class="profile-stat"><div class="profile-stat-val" style="font-size:11px">${hb}</div><div class="profile-stat-lbl">Last heartbeat</div></div>
-      <div class="profile-stat"><div class="profile-stat-val" style="font-size:10px">${a.telegram?a.telegram.replace('@',''):'—'}</div><div class="profile-stat-lbl">Telegram</div></div>
+      <div class="profile-stat" title="${hbTitle}">
+        <div class="profile-stat-val" style="font-size:11px">${hb}</div>
+        <div class="profile-stat-lbl">Last Heartbeat</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-val" style="font-size:10px">${tgHtml}</div>
+        <div class="profile-stat-lbl">Telegram Bot</div>
+      </div>
+      <div class="profile-stat" style="grid-column:1/-1">
+        <div class="profile-stat-val">$${spent.toFixed(2)} <span style="font-size:9px;font-weight:400;color:var(--text-3)">/ $${budget.toFixed(0)} · ${pct}% used</span></div>
+        <div class="profile-stat-lbl">Monthly Budget</div>
+        ${healthStatHtml}
+      </div>
     </div>
-    <div class="profile-desc">${desc}</div>
+    <div class="profile-desc" style="white-space:pre-line">${rawDesc}</div>
     <div class="profile-issues-title" style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Open Issues${issues?` (${issues.length})`:''}</div>
     ${issHtml}
     <div class="profile-agents-label" style="margin-top:14px">Run History (last 100)</div>
@@ -1311,7 +1468,7 @@ function connectWS() {
   ws.onmessage=({data})=>{
     const m=JSON.parse(data);
     if(m.type==='initial_state'||m.type==='state_update'){
-      updateMetrics(m.state,[]);
+      updateStats();
     } else if(m.type==='agent_run_start'){
       // Live orange dot: agent just got assigned
       const name=m.agent_name;
@@ -1336,11 +1493,17 @@ function connectWS() {
       addLog(`🚀 "${(m.task||'').substring(0,55)}"`);
       animatePipe(m.agents||[]);toast('🚀 '+(m.task||'').substring(0,60));
       (m.agents||[]).forEach(a=>setAgent(a,'running'));
+      // Immediately show active indicator without waiting for fetch
+      const ac=document.getElementById('m-active-card');
+      const av=document.getElementById('m-active');
+      if(av) counter(av,(parseInt(av.textContent)||0)+1);
+      if(ac) ac.classList.add('has-active');
     } else if(m.type==='task_completed'){
       addLog('✅ Task completed');donePipe();
-      allAgents.forEach(a=>setAgent(a.id,'idle'));refresh();
+      allAgents.forEach(a=>setAgent(a.id,'idle'));
+      updateStats();refresh();
     } else if(m.type==='new_report'){
-      addLog('📄 New report saved');refresh();
+      addLog('📄 New report saved');updateStats();refresh();
     } else if(m.type==='meeting_message'){
       meetingLog.push(m);if(meetingLog.length>300)meetingLog.shift();
       renderMeeting(m);
@@ -1385,11 +1548,11 @@ async function refresh() {
       fetch('/api/logs').then(r=>r.json()),
       fetch('/api/reports').then(r=>r.json()),
     ]);
-    updateMetrics(state,reports);renderRuns(logs);renderReports(reports);
+    renderRuns(logs);renderReports(reports);
     const lu=state.last_updated;
     if(lu)document.getElementById('last-updated').textContent=new Date(lu).toLocaleTimeString('en-US',{hour12:false});
   } catch(e){addLog('⚠️ '+e.message);}
-  // Always refresh agent health dots (non-blocking)
+  updateStats();
   loadAgentHealth();
 }
 function counter(el,target) {
@@ -1402,13 +1565,118 @@ function counter(el,target) {
     else{el.textContent=target;el.classList.add('pop');setTimeout(()=>el.classList.remove('pop'),400);}
   })(t0);
 }
-function updateMetrics(state,reports) {
-  const m=state.metrics||{};
-  counter(document.getElementById('m-tasks'),m.tasks_run||0);
-  counter(document.getElementById('m-ok'),m.tasks_succeeded||0);
-  counter(document.getElementById('m-issues'),m.paperclip_issues_created||0);
-  counter(document.getElementById('m-reports'),reports.length||0);
+async function updateStats() {
+  try {
+    const stats=await fetch('/api/stats').then(r=>r.json());
+    const pip=stats.pipelines_total||0, rpts=stats.reports||0;
+    counter(document.getElementById('m-pipelines'), pip);
+    counter(document.getElementById('m-reports'),   rpts);
+    _setTrend('trend-pipelines', pip);   // P4
+    _setTrend('trend-reports',   rpts);  // P4
+    // Active Now — show how many pipelines are running right now
+    const activeVal=stats.active_now||0;
+    counter(document.getElementById('m-active'), activeVal);
+    _setTrend('trend-active', activeVal);  // P4
+    const ac=document.getElementById('m-active-card');
+    if(ac) ac.classList.toggle('has-active', activeVal>0);
+    // Agent Runs — computed from the already-loaded agentHealth cache; fallback to sum from health API
+    const totalFromCache=Object.values(agentHealth).reduce((s,a)=>s+(a.total_runs||0),0);
+    if(totalFromCache>0){
+      counter(document.getElementById('m-agent-runs'), totalFromCache);
+      _setTrend('trend-runs', totalFromCache);  // P4
+    } else {
+      // agentHealth not loaded yet — fetch health endpoint for the total
+      try {
+        const h=await fetch('/api/agent/health').then(r=>r.json());
+        const total=(h.agents||[]).reduce((s,a)=>s+(a.total_runs||0),0);
+        counter(document.getElementById('m-agent-runs'), total);
+        _setTrend('trend-runs', total);  // P4
+      } catch(_){}
+    }
+  } catch(e){ /* silent fail — stale display is fine */ }
 }
+/* ══════ P1: LIVE CLOCK ══════ */
+function updateClock() {
+  const el=document.getElementById('hdr-clock');
+  if(!el)return;
+  const n=new Date(), p=v=>String(v).padStart(2,'0');
+  el.textContent=`${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+}
+
+/* ══════ P2: FLEET HEALTH ALERT STRIP ══════ */
+function updateAlertStrip() {
+  const strip=document.getElementById('alert-strip');
+  const itemsEl=document.getElementById('alert-items');
+  const countEl=document.getElementById('alert-count');
+  if(!strip||!itemsEl)return;
+  const bad=Object.entries(agentHealth)
+    .filter(([,h])=>h.total_runs>0&&parseFloat(h.health_pct??100)<70)
+    .sort((a,b)=>parseFloat(a[1].health_pct??100)-parseFloat(b[1].health_pct??100))
+    .slice(0,5);
+  if(!bad.length){strip.classList.remove('show');return;}
+  countEl.textContent=bad.length;
+  itemsEl.innerHTML=bad.map(([name,h])=>{
+    const pct=parseFloat(h.health_pct||0);
+    const c=pct<40?'var(--red)':'var(--amber)';
+    return `<div class="alert-item" onclick="openProfile('${name}')">
+      <div class="alert-dot" style="background:${c}"></div>
+      <span>${name}</span>
+      <span style="margin-left:auto;color:${c};font-weight:700">${pct.toFixed(0)}%</span></div>`;
+  }).join('');
+  strip.classList.add('show');
+}
+
+/* ══════ P3: COST BURN ══════ */
+function updateCostBurn() {
+  const totalEl=document.getElementById('m-cost-total');
+  const dailyEl=document.getElementById('m-cost-daily');
+  if(!totalEl||!dailyEl||!allAgents.length)return;
+  let cents=0;
+  allAgents.forEach(a=>{ cents+=(a.spentMonthlyCents||a.spent_monthly_cents||0); });
+  if(!cents){totalEl.textContent='—';dailyEl.textContent='—';return;}
+  const total=cents/100, day=new Date().getDate()||1;
+  totalEl.textContent='$'+total.toFixed(2);
+  dailyEl.textContent='$'+(total/day).toFixed(2)+'/d';
+}
+
+/* ══════ P4: TREND ARROWS ══════ */
+const _prevStats={};
+function _setTrend(elId,cur){
+  const el=document.getElementById(elId);if(!el)return;
+  const p=_prevStats[elId];
+  if(p==null){_prevStats[elId]=cur;el.textContent='';return;}
+  if(cur>p)el.innerHTML=`<span class="trend-up">▲${cur-p}</span>`;
+  else if(cur<p)el.innerHTML=`<span class="trend-dn">▼${p-cur}</span>`;
+  else el.innerHTML=`<span class="trend-fl">—</span>`;
+  _prevStats[elId]=cur;
+}
+
+/* ══════ P5: QUICK ACTIONS ══════ */
+function _toast(msg,ok=true){
+  const t=document.createElement('div');
+  t.style.cssText=`position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid ${ok?'var(--border-2)':'rgba(239,68,68,.4)'};color:${ok?'var(--text)':'var(--red)'};padding:10px 16px;border-radius:10px;font-size:12px;font-family:var(--mono);box-shadow:0 8px 28px rgba(0,0,0,.5);animation:pop-in .18s var(--ease-out)`;
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
+}
+async function runMorningBrief(){
+  _toast('⚡ Generating brief…');
+  try{
+    const r=await fetch('/api/morning-brief',{method:'POST'});
+    r.ok?_toast('✅ Brief sent to Dan!'):_toast('⚠ Brief endpoint not ready yet',false);
+  }catch(_){_toast('⚡ Brief — coming soon');}
+}
+async function alertDan(){
+  const msg=prompt('Alert message for Dan (sent via Telegram):');
+  if(!msg||!msg.trim())return;
+  try{
+    const r=await fetch('/api/alert-dan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg.trim()})});
+    if(r.ok){
+      const t=document.createElement('div');
+      t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid rgba(16,185,129,.4);color:var(--green);padding:10px 16px;border-radius:10px;font-size:12px;font-family:var(--mono);box-shadow:0 8px 28px rgba(0,0,0,.5)';
+      t.textContent='✅ Alert sent to Dan!';document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
+    }else _toast('Failed to send alert',false);
+  }catch(_){_toast('Alert feature coming soon');}
+}
+
 function renderRuns(logs) {
   document.getElementById('runs-count').textContent=logs.length;
   document.getElementById('runs-list').innerHTML=logs.length

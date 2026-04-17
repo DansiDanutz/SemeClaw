@@ -16,9 +16,16 @@ env/
 .vscode/
 .idea/
 
-# Config with secrets
+# Secrets — never commit these
+.env
+.env.*
+*.env
+!*.env.example
 default_workspace/config.user.yaml
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+war_room/logs/*.log

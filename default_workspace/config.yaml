@@ -11,5 +11,5 @@ default_agent: seme
 model: dashscope/qwen3.6-plus
 
 telegram:
-  bot_token: "8647310267:AAEdVZ9fAwtjujbBPzH7A2SMxJTdSU2d2EM"
-  chat_id: "424184493"
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  chat_id: "${DLS_DAN_CHAT_ID}"
