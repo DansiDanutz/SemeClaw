@@ -3,6 +3,9 @@ War Room — Paperclip Bridge
 Connects War Room to the Paperclip Kanban/agent system.
 
 Real Paperclip API: http://127.0.0.1:3100
+  - All routes are company-scoped: /api/companies/{companyId}/...
+  - Company ID is discovered on connect via /api/companies
+
 Mock mode: used when Paperclip is not reachable (dev / offline).
 
 Paperclip board agents:
@@ -17,7 +20,7 @@ Paperclip board agents:
 import json
 import logging
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -61,27 +64,51 @@ class PaperclipBridge:
     """
     Reads from and writes to the Paperclip board.
     Falls back to mock mode if the API is unreachable.
+
+    All real API calls are company-scoped:
+      /api/companies/{companyId}/issues
+      /api/companies/{companyId}/projects
+    The companyId is discovered automatically on connect.
     """
 
     def __init__(self, base_url: str = PAPERCLIP_BASE, mock: bool = False):
         self.base_url = base_url
         self.mock = mock
         self._client: Optional[httpx.AsyncClient] = None
+        self._company_id: Optional[str] = None
         self._mock_issues: list[dict] = []
         self._issue_counter = 1000
+
+    # ------------------------------------------------------------------ #
+    #  Context manager                                                      #
+    # ------------------------------------------------------------------ #
 
     async def __aenter__(self):
         if self.mock:
             logger.info("🎭 Paperclip running in MOCK mode")
             return self
-        # Try to connect; if it fails, go mock
         try:
-            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=5.0)
-            r = await self._client.get("/health")
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=8.0)
+            # Discover company ID (required for all scoped API calls)
+            r = await self._client.get("/api/companies")
             r.raise_for_status()
-            logger.info("✅ Paperclip API connected at %s", self.base_url)
-        except Exception:
-            logger.warning("⚠️  Paperclip API not reachable — running in MOCK mode")
+            companies = r.json()
+            if isinstance(companies, list) and companies:
+                # Prefer "DansLab" company; fall back to highest issueCounter
+                chosen = next(
+                    (c for c in companies if "dans" in c.get("name", "").lower()),
+                    None,
+                )
+                if not chosen:
+                    chosen = max(companies, key=lambda c: c.get("issueCounter", 0))
+                self._company_id = chosen["id"]
+            elif isinstance(companies, dict) and companies.get("id"):
+                self._company_id = companies["id"]
+            else:
+                raise ValueError(f"Unexpected /api/companies response: {str(companies)[:100]}")
+            logger.info("✅ Paperclip API connected at %s | company=%s", self.base_url, self._company_id[:8])
+        except Exception as e:
+            logger.warning("⚠️  Paperclip API not reachable (%s) — running in MOCK mode", e)
             if self._client:
                 await self._client.aclose()
                 self._client = None
@@ -93,6 +120,14 @@ class PaperclipBridge:
             await self._client.aclose()
 
     # ------------------------------------------------------------------ #
+    #  Convenience path builder                                             #
+    # ------------------------------------------------------------------ #
+
+    def _company_path(self, suffix: str) -> str:
+        """Build /api/companies/{companyId}/{suffix}"""
+        return f"/api/companies/{self._company_id}/{suffix}"
+
+    # ------------------------------------------------------------------ #
     #  Board state                                                          #
     # ------------------------------------------------------------------ #
 
@@ -101,21 +136,54 @@ class PaperclipBridge:
         if self.mock:
             return self._mock_board_state()
         try:
-            r = await self._client.get("/board")
-            r.raise_for_status()
-            return r.json()
+            projects_r = await self._client.get(self._company_path("projects"))
+            projects_r.raise_for_status()
+            projects = projects_r.json()
+
+            issues_r = await self._client.get(
+                self._company_path("issues"),
+                params={"status": "todo", "limit": 50},
+            )
+            issues_r.raise_for_status()
+            issues = issues_r.json()
+
+            return {
+                "mode":     "live",
+                "company":  self._company_id,
+                "projects": [p["name"] for p in (projects if isinstance(projects, list) else [])],
+                "issues":   issues if isinstance(issues, list) else [],
+            }
         except Exception as e:
             logger.error("Paperclip get_board_state failed: %s — falling back to mock", e)
             return self._mock_board_state()
 
     async def get_project_issues(self, project: str) -> list[dict]:
-        """Return all issues for a project."""
+        """Return open issues for a project (matched by name)."""
         if self.mock:
             return [i for i in self._mock_issues if i.get("project") == project]
         try:
-            r = await self._client.get(f"/projects/{project}/issues")
+            # Get the project ID first
+            projects_r = await self._client.get(self._company_path("projects"))
+            projects_r.raise_for_status()
+            projects = projects_r.json()
+            project_id = None
+            for p in (projects if isinstance(projects, list) else []):
+                if p.get("name", "").upper() == project.upper():
+                    project_id = p["id"]
+                    break
+
+            if not project_id:
+                logger.warning("Project '%s' not found in Paperclip", project)
+                return []
+
+            # Fetch open issues for that project
+            r = await self._client.get(
+                self._company_path("issues"),
+                params={"projectId": project_id, "status": "todo"},
+            )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            return data if isinstance(data, list) else []
         except Exception as e:
             logger.error("get_project_issues failed: %s", e)
             return []
@@ -123,11 +191,16 @@ class PaperclipBridge:
     async def get_agent_workload(self, agent_name: str) -> list[dict]:
         """Return open issues assigned to a Paperclip agent."""
         if self.mock:
-            return [i for i in self._mock_issues if i.get("assignee") == agent_name and i.get("status") != "done"]
+            return [i for i in self._mock_issues
+                    if i.get("assignee") == agent_name and i.get("status") != "done"]
         try:
-            r = await self._client.get(f"/agents/{agent_name}/issues")
+            r = await self._client.get(
+                self._company_path("issues"),
+                params={"assignee": agent_name, "status": "todo"},
+            )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            return data if isinstance(data, list) else []
         except Exception as e:
             logger.error("get_agent_workload failed: %s", e)
             return []
@@ -150,6 +223,7 @@ class PaperclipBridge:
         Create a new issue on the Paperclip board.
         Returns the created issue dict (with id).
         """
+        now = datetime.now(timezone.utc).isoformat()
         issue = {
             "id":          f"PC-{self._issue_counter}",
             "title":       title,
@@ -158,9 +232,9 @@ class PaperclipBridge:
             "assignee":    assignee,
             "labels":      labels or [],
             "priority":    priority,
-            "status":      "backlog",
+            "status":      "todo",
             "acceptance_criteria": acceptance_criteria or [],
-            "created_at":  datetime.utcnow().isoformat(),
+            "created_at":  now,
             "created_by":  "war_room",
         }
 
@@ -171,13 +245,19 @@ class PaperclipBridge:
             return issue
 
         try:
-            r = await self._client.post("/issues", json=issue)
+            payload = {
+                "title":       title,
+                "description": description,
+                "priority":    priority,
+                "status":      "todo",
+                "labels":      labels or [],
+            }
+            r = await self._client.post(self._company_path("issues"), json=payload)
             r.raise_for_status()
             created = r.json()
             logger.info("✅ Created Paperclip issue %s: %s", created.get("id"), title)
             return created
         except Exception as e:
-            # Fall through to mock on failure
             logger.warning("create_issue API failed (%s) — saving mock issue", e)
             self._issue_counter += 1
             self._mock_issues.append(issue)
@@ -197,7 +277,10 @@ class PaperclipBridge:
                     return True
             return False
         try:
-            r = await self._client.patch(f"/issues/{issue_id}", json={"status": status})
+            r = await self._client.patch(
+                self._company_path(f"issues/{issue_id}"),
+                json={"status": status},
+            )
             r.raise_for_status()
             return True
         except Exception as e:
@@ -206,12 +289,19 @@ class PaperclipBridge:
 
     async def add_comment(self, issue_id: str, comment: str, author: str = "war_room") -> bool:
         """Add a comment to an existing issue."""
-        payload = {"comment": comment, "author": author, "created_at": datetime.utcnow().isoformat()}
+        payload = {
+            "comment":    comment,
+            "author":     author,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
         if self.mock:
             logger.info("🎭 [MOCK] Comment on %s: %s", issue_id, comment[:60])
             return True
         try:
-            r = await self._client.post(f"/issues/{issue_id}/comments", json=payload)
+            r = await self._client.post(
+                self._company_path(f"issues/{issue_id}/comments"),
+                json=payload,
+            )
             r.raise_for_status()
             return True
         except Exception as e:
@@ -283,7 +373,7 @@ def load_bridge(workspace_path: Path | None = None) -> "PaperclipBridge":
     """
     config_path = (workspace_path or Path(".")) / "war_room" / "config.json"
     url = PAPERCLIP_BASE
-    mock = False  # Default to live mode on Mac Studio
+    mock = False
 
     if config_path.exists():
         try:

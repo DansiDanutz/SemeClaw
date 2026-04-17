@@ -19,7 +19,7 @@ import asyncio
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -123,7 +123,7 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
 
     if not task_issue:
         logger.info("✋ Nothing to run — no eligible tasks")
-        _log_run({"date": datetime.utcnow().isoformat(), "project": project, "result": "no_tasks"})
+        _log_run({"date": datetime.now(timezone.utc).isoformat(), "project": project, "result": "no_tasks"})
         return
 
     task_title = task_issue.get("title", "")
@@ -139,7 +139,7 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
     if _already_processed(task_title, memory):
         logger.info("⏭  Task already in memory — skipping: %s", task_title[:60])
         _log_run({
-            "date": datetime.utcnow().isoformat(),
+            "date": datetime.now(timezone.utc).isoformat(),
             "project": project,
             "issue_id": issue_id,
             "result": "already_processed",
@@ -174,7 +174,7 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
         logger.info("✅ Pipeline complete | run_id=%s | report=%s",
                     result["run_id"], Path(result["output_file"]).name)
         _log_run({
-            "date":       datetime.utcnow().isoformat(),
+            "date":       datetime.now(timezone.utc).isoformat(),
             "project":    project,
             "issue_id":   issue_id,
             "run_id":     result["run_id"],
@@ -186,7 +186,7 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
     except Exception as e:
         logger.error("❌ Pipeline failed: %s", e)
         _log_run({
-            "date":     datetime.utcnow().isoformat(),
+            "date":     datetime.now(timezone.utc).isoformat(),
             "project":  project,
             "issue_id": issue_id,
             "result":   "failed",
