@@ -27,9 +27,11 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Set
+from typing import Set, Optional
+
+import httpx
 
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
@@ -85,6 +87,35 @@ class ConnectionManager:
             self.disconnect(ws)
 
 manager = ConnectionManager()
+
+# ---------------------------------------------------------------------------
+# Paperclip — company ID cache
+# ---------------------------------------------------------------------------
+_paperclip_company_id: Optional[str] = None
+PAPERCLIP_BASE = "http://127.0.0.1:3100"
+
+async def _get_company_id() -> Optional[str]:
+    global _paperclip_company_id
+    if _paperclip_company_id:
+        return _paperclip_company_id
+    try:
+        async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=5.0) as c:
+            r = await c.get("/api/companies")
+            r.raise_for_status()
+            companies = r.json()
+            if isinstance(companies, list) and companies:
+                chosen = next((x for x in companies if "dans" in x.get("name", "").lower()), None)
+                if not chosen:
+                    chosen = max(companies, key=lambda x: x.get("issueCounter", 0))
+                _paperclip_company_id = chosen["id"]
+    except Exception as e:
+        logger.warning("Paperclip company lookup failed: %s", e)
+    return _paperclip_company_id
+
+# ---------------------------------------------------------------------------
+# Meeting context (shared cross-client, in-memory)
+# ---------------------------------------------------------------------------
+_meeting: list[dict] = []
 
 # ---------------------------------------------------------------------------
 # File watcher: polls for changes and broadcasts updates
@@ -248,6 +279,85 @@ async def _monitor_subprocess(proc: subprocess.Popen, task: str):
         })
 
 
+@app.get("/api/paperclip/agents")
+async def api_paperclip_agents():
+    """Live agent list from Paperclip, sorted by priority."""
+    company_id = await _get_company_id()
+    if not company_id:
+        return JSONResponse({"error": "Paperclip unreachable"}, status_code=503)
+    try:
+        async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=8.0) as c:
+            r = await c.get(f"/api/companies/{company_id}/agents")
+            r.raise_for_status()
+            agents = r.json() if isinstance(r.json(), list) else []
+        # Tier: droplet fleet first, then core Mac Studio AI, then services
+        TIER = {"openclaw_gateway": 0, "claude_local": 1, "pi_local": 2,
+                "process": 3, "codex_local": 4, "opencode_local": 5, "http": 6}
+        STATUS_PRI = {"running": 0, "error": 1, "paused": 2, "idle": 3}
+        agents.sort(key=lambda a: (
+            TIER.get(a.get("adapter", ""), 9),
+            STATUS_PRI.get(a.get("status", "idle"), 9),
+            -(a.get("spentCents", 0)),
+        ))
+        return JSONResponse(agents)
+    except Exception as e:
+        logger.error("api_paperclip_agents: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/paperclip/agent/{agent_id}")
+async def api_paperclip_agent(agent_id: str):
+    """Single agent profile + open issues."""
+    company_id = await _get_company_id()
+    if not company_id:
+        return JSONResponse({"error": "Paperclip unreachable"}, status_code=503)
+    try:
+        async with httpx.AsyncClient(base_url=PAPERCLIP_BASE, timeout=8.0) as c:
+            r = await c.get(f"/api/companies/{company_id}/agents/{agent_id}")
+            r.raise_for_status()
+            agent = r.json()
+            # Fetch open issues for this agent by name
+            try:
+                ir = await c.get(f"/api/companies/{company_id}/issues",
+                                 params={"assignee": agent.get("name", ""), "status": "todo", "limit": 15})
+                ir.raise_for_status()
+                data = ir.json()
+                agent["open_issues"] = data if isinstance(data, list) else []
+            except Exception:
+                agent["open_issues"] = []
+        return JSONResponse(agent)
+    except Exception as e:
+        logger.error("api_paperclip_agent: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/meeting")
+async def api_meeting():
+    """Return shared meeting context history."""
+    return JSONResponse(_meeting)
+
+
+@app.post("/api/meeting/say")
+async def api_meeting_say(request: Request):
+    """Broadcast a message to all meeting participants."""
+    data = await request.json()
+    speaker = data.get("speaker", "David").strip() or "David"
+    message = data.get("message", "").strip()
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+    entry = {
+        "id": len(_meeting),
+        "speaker": speaker,
+        "message": message,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    _meeting.append(entry)
+    if len(_meeting) > 300:
+        _meeting.pop(0)
+    await manager.broadcast({"type": "meeting_message", **entry})
+    return JSONResponse(entry)
+
+
 @app.get("/api/board")
 async def api_board():
     """Return Paperclip board state via the bridge."""
@@ -264,7 +374,6 @@ async def api_board():
 
     # Try live API
     if not use_mock:
-        import httpx
         try:
             async with httpx.AsyncClient(base_url=paperclip_url, timeout=5.0) as client:
                 r = await client.get("/health")

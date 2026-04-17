@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "war-room-dashboard",
+      "runtimeExecutable": "/opt/homebrew/bin/uv",
+      "runtimeArgs": ["run", "python", "war_room/dashboard/server.py"],
+      "port": 8765
+    }
+  ]
+}
