@@ -57,7 +57,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 # ---------------------------------------------------------------------------
 # LLM config (reads from SemeClaw workspace config if available)
 # ---------------------------------------------------------------------------
-DEFAULT_MODEL = "alibaba/qwen3.6-plus"
+DEFAULT_MODEL = "dashscope/qwen3.6-plus"
 
 def _load_model() -> str:
     cfg_path = ROOT / "default_workspace" / "config.yaml"
@@ -121,12 +121,15 @@ async def call_agent(
 
     messages = [{"role": "user", "content": user_msg}]
 
+    DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+
     response = await litellm.acompletion(
         model=model,
         messages=messages,
         system=system,
         max_tokens=4096,
         temperature=0.3,
+        api_base=DASHSCOPE_INTL_BASE,
     )
     result = response.choices[0].message.content or ""
 
@@ -177,6 +180,7 @@ async def call_agent(
                 system=system,
                 max_tokens=4096,
                 temperature=0.3,
+                api_base=DASHSCOPE_INTL_BASE,
             )
             result = response.choices[0].message.content or ""
             tool_iterations += 1

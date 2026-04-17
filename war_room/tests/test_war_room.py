@@ -383,3 +383,4 @@ class TestDefaultModel:
         from war_room.war_room import DEFAULT_MODEL
         assert "qwen3.6-plus" in DEFAULT_MODEL
         assert "claude" not in DEFAULT_MODEL.lower()
+        assert "dashscope" in DEFAULT_MODEL.lower()
