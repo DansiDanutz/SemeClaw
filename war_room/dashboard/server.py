@@ -351,11 +351,143 @@ async def api_meeting_say(request: Request):
         "message": message,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
+    # Optional AI tagging fields
+    if data.get("ai"):
+        entry["ai"] = True
+        entry["model"] = data.get("model", "")
     _meeting.append(entry)
     if len(_meeting) > 300:
         _meeting.pop(0)
     await manager.broadcast({"type": "meeting_message", **entry})
     return JSONResponse(entry)
+
+
+# ---------------------------------------------------------------------------
+# AI Meeting Respond — free model waterfall
+# ---------------------------------------------------------------------------
+
+# Free model waterfall: OpenRouter free → local Ollama
+_AI_MODELS = [
+    ("openrouter", "qwen/qwen3.6-plus:free"),
+    ("openrouter", "google/gemma-3-27b-it:free"),
+    ("openrouter", "qwen/qwen3.5-72b:free"),
+    ("ollama",     "qwen3:8b"),
+]
+
+_OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+_OLLAMA_BASE     = "http://127.0.0.1:11434"
+
+# Load OpenRouter key from environment / fleet env file
+def _openrouter_key() -> str:
+    import os
+    key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not key:
+        # Try fleet env
+        try:
+            for line in Path("/etc/openclaw-env").read_text().splitlines():
+                if line.startswith("OPENROUTER_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+        except Exception:
+            pass
+    return key
+
+
+async def _call_openrouter(model: str, system: str, user: str) -> str | None:
+    key = _openrouter_key()
+    if not key:
+        return None
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "HTTP-Referer": "https://nervix.ai",
+        "X-Title": "NERVIX War Room",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "max_tokens": 200,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OPENROUTER_BASE, timeout=30.0) as c:
+            r = await c.post("/chat/completions", headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("OpenRouter %s failed: %s", model, e)
+        return None
+
+
+async def _call_ollama(model: str, system: str, user: str) -> str | None:
+    payload = {
+        "model": model,
+        "stream": False,
+        "options": {"num_predict": 200},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OLLAMA_BASE, timeout=60.0) as c:
+            r = await c.post("/api/chat", json=payload)
+            r.raise_for_status()
+            return r.json()["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("Ollama %s failed: %s", model, e)
+        return None
+
+
+_MEETING_SYSTEM_TEMPLATE = """\
+You are {speaker}, participating in a live War Room meeting at Dan's Lab — an AI agent startup.
+
+Your persona:
+{persona}
+
+Meeting style:
+- Professional, concise, company-meeting language
+- Warm but focused — like a senior colleague in a Zoom stand-up
+- One clear thought per response (2-4 sentences max)
+- No bullet points unless the meeting context naturally calls for a list
+- No greetings/sign-offs (this is mid-meeting)
+- Address other speakers by name when replying to them
+- Stay in character — you are NOT an AI assistant, you are {speaker} attending a real meeting
+"""
+
+@app.post("/api/meeting/ai-respond")
+async def api_meeting_ai_respond(request: Request):
+    """Generate an AI response for a meeting participant using free models."""
+    data = await request.json()
+    speaker = data.get("speaker", "David").strip() or "David"
+    persona  = data.get("persona", f"{speaker}, an AI agent at Dan's Lab.").strip()
+    context  = data.get("context", "").strip()
+
+    if not context:
+        return JSONResponse({"error": "context required"}, status_code=400)
+
+    system = _MEETING_SYSTEM_TEMPLATE.format(speaker=speaker, persona=persona)
+    user   = f"Recent meeting transcript:\n{context}\n\nRespond naturally as {speaker}."
+
+    # Try each model in waterfall order
+    used_model = None
+    response   = None
+    for provider, model in _AI_MODELS:
+        if provider == "openrouter":
+            response = await _call_openrouter(model, system, user)
+        else:
+            response = await _call_ollama(model, system, user)
+        if response:
+            used_model = f"{provider}/{model}"
+            break
+
+    if not response:
+        return JSONResponse({"error": "All AI models unavailable"}, status_code=503)
+
+    return JSONResponse({"response": response, "model": used_model, "speaker": speaker})
 
 
 @app.get("/api/board")
