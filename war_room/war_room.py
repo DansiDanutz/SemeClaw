@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +63,82 @@ LOGS_DIR.mkdir(exist_ok=True)
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "dashscope/qwen3.6-plus"
 DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+
+_OPENCLAW_JSON = Path.home() / ".openclaw" / "openclaw.json"
+_OPENCLAW_RUNTIME_GLOB = str(Path.home() / ".openclaw" / "openclaw.runtime.json.*")
+
+
+def _bootstrap_api_keys() -> None:
+    """
+    Ensure DASHSCOPE_API_KEY (and other keys) are set in os.environ
+    before any litellm call.
+
+    Resolution order:
+    1. Already in os.environ → nothing to do
+    2. ~/.openclaw/openclaw.json  → primary fleet config
+    3. ~/.openclaw/fleet.env      → secondary fleet env
+    4. Latest openclaw.runtime.json.* temp file → fallback
+    """
+    KEY = "DASHSCOPE_API_KEY"
+    if os.environ.get(KEY):
+        return  # already set
+
+    # 1. Main openclaw config (JSON)
+    if _OPENCLAW_JSON.exists():
+        try:
+            import json as _json
+            cfg = _json.loads(_OPENCLAW_JSON.read_text())
+            val = cfg.get(KEY) or cfg.get("env", {}).get(KEY)
+            if val and not val.startswith("${"):
+                os.environ[KEY] = val
+                logger.debug("DASHSCOPE_API_KEY loaded from openclaw.json")
+                return
+        except Exception:
+            pass
+
+    # 2. fleet.env
+    fleet_env = Path.home() / ".openclaw" / "fleet.env"
+    if fleet_env.exists():
+        try:
+            for line in fleet_env.read_text().splitlines():
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[7:]
+                if "=" not in line or line.startswith("#"):
+                    continue
+                k, v = line.split("=", 1)
+                v = v.strip().strip('"').strip("'")
+                if k == KEY and v and not v.startswith("${"):
+                    os.environ[KEY] = v
+                    logger.debug("DASHSCOPE_API_KEY loaded from fleet.env")
+                    return
+        except Exception:
+            pass
+
+    # 3. Latest runtime JSON temp file (openclaw writes these during startup)
+    import glob as _glob
+    runtime_files = sorted(_glob.glob(_OPENCLAW_RUNTIME_GLOB))
+    if runtime_files:
+        try:
+            import json as _json
+            cfg = _json.loads(Path(runtime_files[-1]).read_text())
+            val = cfg.get(KEY) or cfg.get("env", {}).get(KEY)
+            if val and not val.startswith("${"):
+                os.environ[KEY] = val
+                logger.debug("DASHSCOPE_API_KEY loaded from runtime config")
+                return
+        except Exception:
+            pass
+
+    logger.warning(
+        "DASHSCOPE_API_KEY not found in any source. "
+        "Set it via: export DASHSCOPE_API_KEY=sk-..."
+    )
+
+
+# Bootstrap keys immediately at import time
+_bootstrap_api_keys()
+
 
 def _load_model() -> str:
     cfg_path = ROOT / "default_workspace" / "config.yaml"
@@ -312,7 +388,7 @@ class WarRoomPipeline:
         """
         agents = agents or ["research", "strategist", "writer"]
         run_id = str(uuid.uuid4())[:8]
-        started = datetime.utcnow().isoformat()
+        started = datetime.now(timezone.utc).isoformat()
 
         logger.info("🚀 War Room pipeline | run_id=%s | agents=%s", run_id, " → ".join(agents))
         logger.info("   Task: %s", task[:80])
@@ -348,7 +424,7 @@ class WarRoomPipeline:
             context += f"\n\n## Output from {agent_id.capitalize()} Agent\n\n{output}"
 
         # Save report
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         slug = task[:40].lower().replace(" ", "-").replace("/", "-")
         out_file = RESEARCH_DIR / f"{slug}-{date_str}.md"
         out_file.write_text(self._build_report(task, agents, started), encoding="utf-8")
@@ -488,25 +564,25 @@ class WarRoomPipeline:
                 "task":         task,
                 "agents":       agents,
                 "issue_id":     issue.get("id") if issue else None,
-                "completed_at": datetime.utcnow().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
             })
             state["metrics"]["tasks_run"] += 1
             state["metrics"]["tasks_succeeded"] += 1
             if issue:
                 state["metrics"]["paperclip_issues_created"] += 1
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = datetime.now(timezone.utc).isoformat()
             STATE_FILE.write_text(json.dumps(state, indent=2))
         except Exception as e:
             logger.warning("State update failed: %s", e)
 
     def _log_run(self, run_id: str, task: str, agents: list[str], started: str, issue: dict | None):
-        log_file = LOGS_DIR / f"run-{datetime.utcnow().strftime('%Y-%m-%d')}.jsonl"
+        log_file = LOGS_DIR / f"run-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
         record = {
             "run_id":    run_id,
             "task":      task,
             "agents":    agents,
             "started":   started,
-            "completed": datetime.utcnow().isoformat(),
+            "completed": datetime.now(timezone.utc).isoformat(),
             "issue_id":  issue.get("id") if issue else None,
         }
         with log_file.open("a", encoding="utf-8") as f:
