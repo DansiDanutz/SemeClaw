@@ -3234,17 +3234,30 @@ function showRun(r){
     const reports = window._lastReports || [];
     const taskLower = (r.task||'').toLowerCase();
     const datePart = started ? started.toISOString().substring(0,10) : '';
-    const taskSlug = taskLower.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').substring(0,60);
+    // normalize: strip all non-alphanumeric to hyphens for fuzzy matching
+    const norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    const taskSlug = norm(r.task||'').substring(0,60);
     let reportName = null;
-    // Strategy 1: match by task text in preview
-    const byPreview = reports.find(rep => (rep.preview||'').toLowerCase().includes(taskLower));
+    // Strategy 1: match by task text prefix in preview (first 80 chars of task)
+    const taskPrefix = taskLower.substring(0, 80);
+    const byPreview = reports.find(rep => (rep.preview||'').toLowerCase().includes(taskPrefix));
     if (byPreview) reportName = byPreview.name;
-    // Strategy 2: match by filename slug
+    // Strategy 2: normalize BOTH filename and slug before comparing (handles [brackets] and colons)
     if (!reportName) {
-      const byFilename = reports.find(rep => rep.name.toLowerCase().includes(taskSlug.substring(0,30)));
+      const needle = taskSlug.substring(0, 35);
+      const byFilename = reports.find(rep => norm(rep.name).includes(needle));
       if (byFilename) reportName = byFilename.name;
     }
-    // Strategy 3: fallback to slug reconstruction
+    // Strategy 3: match by date + any overlapping words
+    if (!reportName && datePart) {
+      const words = taskSlug.split('-').filter(w => w.length > 4);
+      const byDate = reports.find(rep => {
+        const rn = norm(rep.name);
+        return rn.includes(datePart.replace(/-/g,'')) || rn.includes(datePart);
+      });
+      if (byDate) reportName = byDate.name;
+    }
+    // Strategy 4: fallback to slug reconstruction (may 404 for reports with special chars)
     if (!reportName) reportName = `${taskSlug}-${datePart}.md`;
     const short = (r.run_id||'').substring(0,8) || 'run';
     const statusBadge = completed
