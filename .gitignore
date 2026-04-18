@@ -44,3 +44,5 @@ war_room/shared_state.json
 # Rolling reports — examples only in repo
 war_room/research/test-ingest*.md
 war_room/research/tenant-test*.md
+war_room/voice_overrides.json
+war_room/research/bug-triage-*.md
