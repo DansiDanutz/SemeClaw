@@ -59,10 +59,124 @@ RESEARCH_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# LLM config (reads from SemeClaw workspace config if available)
+# LLM config — per-agent model routing
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "dashscope/qwen3.6-plus"
 DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+
+# ── Per-agent model assignments ───────────────────────────────────────────────
+# Each agent gets the model best suited to its role.
+# Credentials are read from ~/.openclaw/openclaw.json providers section.
+AGENT_MODELS: dict[str, dict] = {
+    # Research: Qwen 3.6 Plus FREE — 1M context, multimodal, best for synthesis
+    "research": {
+        "model":    "openrouter/qwen/qwen3.6-plus:free",
+        "api_base": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",  # from openclaw.json
+        "max_tokens": 8192,
+        "temperature": 0.2,
+    },
+    # Strategist / GSD: Kimi K2.5 — strongest structured reasoning + planning
+    "strategist": {
+        "model":    "kimi-k2.5",
+        "api_base": "https://api.moonshot.ai/v1",
+        "api_key_env": "MOONSHOT_API_KEY",
+        "api_key_fallback": "sk-kimi-TWpgpQOsPq1Qfbhre1wblye1FoRnhhGLfdSgVJaHdPDq0b6T6j4qDYnzfNOflmnx",
+        "max_tokens": 8192,
+        "temperature": 0.3,
+    },
+    # Architect: Z.ai GLM-5 — code-aware architect, 200K context, 1yr subscription
+    "architect": {
+        "model":    "glm-5",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_env": "ZHIPU_API_KEY",
+        "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",  # from openclaw.json
+        "max_tokens": 8192,
+        "temperature": 0.25,
+    },
+    # Coder: Z.ai GLM-5 — same subscription, strong at implementation
+    "coder": {
+        "model":    "glm-5",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_env": "ZHIPU_API_KEY",
+        "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",
+        "max_tokens": 8192,
+        "temperature": 0.2,
+    },
+    # Writer / Hermes: GPT-5.4 via ChatGPT Pro subscription (local proxy :8995)
+    "writer": {
+        "model":    "gpt-5.4",
+        "api_base": "http://127.0.0.1:8995/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "api_key_fallback": "sk-local",
+        "max_tokens": 4096,
+        "temperature": 0.4,
+    },
+    # Narrator / Host: Gemma 4 local via Ollama — zero-cost, instant narration
+    "narrator": {
+        "model":    "ollama/gemma4",
+        "api_base": "http://127.0.0.1:11434",
+        "api_key_env": None,
+        "api_key_fallback": "ollama",
+        "max_tokens": 2048,
+        "temperature": 0.5,
+    },
+    # David (chairman): Gemma 4 local — hosts meetings, fast
+    "david": {
+        "model":    "ollama/gemma4",
+        "api_base": "http://127.0.0.1:11434",
+        "api_key_env": None,
+        "api_key_fallback": "ollama",
+        "max_tokens": 2048,
+        "temperature": 0.4,
+    },
+}
+
+# Fallback if an agent_id isn't in AGENT_MODELS
+_FALLBACK_MODEL_CFG = {
+    "model":    "openrouter/qwen/qwen3.6-plus:free",
+    "api_base": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",
+    "max_tokens": 4096,
+    "temperature": 0.3,
+}
+
+
+def _get_model_cfg(agent_id: str) -> dict:
+    """Return the model config for an agent, resolving API keys from env."""
+    cfg = dict(AGENT_MODELS.get(agent_id, _FALLBACK_MODEL_CFG))
+    # Resolve API key: env var first, then fallback
+    key_env = cfg.get("api_key_env")
+    if key_env:
+        cfg["api_key"] = os.environ.get(key_env) or cfg.get("api_key_fallback", "")
+    else:
+        cfg["api_key"] = cfg.get("api_key_fallback", "ollama")
+    return cfg
+
+
+def _load_api_keys_from_openclaw():
+    """Load provider API keys from openclaw.json into os.environ."""
+    try:
+        import json as _json
+        cfg = _json.loads(_OPENCLAW_JSON.read_text())
+        providers = cfg.get("models", {}).get("providers", {})
+        key_map = {
+            "openrouter":  "OPENROUTER_API_KEY",
+            "moonshot":    "MOONSHOT_API_KEY",
+            "zai":         "ZHIPU_API_KEY",
+            "openai":      "OPENAI_API_KEY",
+            "google":      "GOOGLE_API_KEY",
+        }
+        for pname, env_name in key_map.items():
+            if not os.environ.get(env_name):
+                key = providers.get(pname, {}).get("apiKey", "")
+                if key and not key.startswith("${"):
+                    os.environ[env_name] = key
+                    logger.debug("Loaded %s from openclaw.json[%s]", env_name, pname)
+    except Exception as e:
+        logger.debug("openclaw key load: %s", e)
 
 _OPENCLAW_JSON = Path.home() / ".openclaw" / "openclaw.json"
 _OPENCLAW_RUNTIME_GLOB = str(Path.home() / ".openclaw" / "openclaw.runtime.json.*")
@@ -138,6 +252,7 @@ def _bootstrap_api_keys() -> None:
 
 # Bootstrap keys immediately at import time
 _bootstrap_api_keys()
+_load_api_keys_from_openclaw()  # loads Moonshot, ZhiPu, OpenRouter, OpenAI, Google keys
 
 
 def _load_model() -> str:
@@ -250,32 +365,64 @@ async def call_agent(
 ) -> str:
     """
     Call a War Room agent with a task.
+    Uses per-agent model routing (AGENT_MODELS). Falls back to global model.
     Returns the agent's response as a string.
     """
-    model = model or _load_model()
-    agent = load_agent_def(agent_id)
+    # Load per-agent model config (ignores the old single-model parameter)
+    mcfg     = _get_model_cfg(agent_id)
+    use_model = model or mcfg["model"]
+    api_base  = mcfg.get("api_base")
+    api_key   = mcfg.get("api_key") or "sk-placeholder"
+    max_tok   = mcfg.get("max_tokens", 4096)
+    temp      = mcfg.get("temperature", 0.3)
 
+    agent = load_agent_def(agent_id)
     system = agent["system_prompt"]
     user_msg = task
     if context:
         user_msg = f"## Context from previous agents\n\n{context}\n\n---\n\n## Your Task\n\n{task}"
 
-    logger.info("🤖 Calling agent [%s] with model %s", agent_id, model)
+    logger.info("🤖 [%s] → %s (base: %s)", agent_id, use_model, (api_base or "")[:40])
 
-    # Inject tool descriptions for tool-enabled agents
     if agent_id in TOOL_ENABLED_AGENTS and tools:
         system += tools.get_available_tools_description()
 
     messages = [{"role": "user", "content": user_msg}]
 
-    response = await litellm.acompletion(
-        model=model,
-        messages=messages,
-        system=system,
-        max_tokens=4096,
-        temperature=0.3,
-        api_base=DASHSCOPE_INTL_BASE,
-    )
+    async def _llm_call(msgs):
+        kwargs = dict(
+            model=use_model,
+            messages=msgs,
+            max_tokens=max_tok,
+            temperature=temp,
+        )
+        if api_base:
+            kwargs["api_base"] = api_base
+        # litellm uses OPENAI_API_KEY / api_key param
+        if api_key and api_key not in ("ollama", "sk-placeholder"):
+            kwargs["api_key"] = api_key
+        # system prompt support varies by provider
+        try:
+            return await litellm.acompletion(system=system, **kwargs)
+        except TypeError:
+            # Some providers don't take system= as kwarg
+            msgs_with_sys = [{"role": "system", "content": system}] + msgs
+            return await litellm.acompletion(**{**kwargs, "messages": msgs_with_sys})
+
+    try:
+        response = await _llm_call(messages)
+    except Exception as e:
+        logger.warning("⚠️  [%s] %s failed (%s) — falling back to Qwen 3.6 FREE", agent_id, use_model, e)
+        # Fallback: Qwen 3.6 Plus FREE via OpenRouter
+        use_model = "openrouter/qwen/qwen3.6-plus:free"
+        api_base  = "https://openrouter.ai/api/v1"
+        api_key   = os.environ.get("OPENROUTER_API_KEY", "sk-or-v1-fa790746dcf6b850af34c")
+        response  = await litellm.acompletion(
+            model=use_model, messages=messages, system=system,
+            max_tokens=4096, temperature=0.3,
+            api_base=api_base, api_key=api_key,
+        )
+
     result = response.choices[0].message.content or ""
 
     # Tool-use loop for tool-enabled agents
@@ -288,14 +435,14 @@ async def call_agent(
                 break
 
             tool_name, tool_args = tool_call
-            logger.info("🔧 [%s] using tool: %s(%s)", agent_id, tool_name, tool_args[:80])
+            logger.info("🔧 [%s] tool: %s(%s)", agent_id, tool_name, tool_args[:80])
 
             if tool_name == "search":
                 tool_result = await tools.search(tool_args.strip('"').strip("'"))
             elif tool_name == "extract":
                 import re
                 urls = re.findall(r'https?://[^\s"\']+', tool_args)
-                tool_result = await tools.extract(urls) if urls else "[No URLs found in extract request]"
+                tool_result = await tools.extract(urls) if urls else "[No URLs found]"
             elif tool_name == "browser_navigate":
                 tool_result = await tools.browser_navigate(tool_args.strip('"').strip("'").strip())
             elif tool_name == "run_code":
@@ -308,22 +455,13 @@ async def call_agent(
             messages.append({"role": "assistant", "content": result})
             messages.append({
                 "role": "user",
-                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue your work with this information.",
+                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue.",
             })
-
-            response = await litellm.acompletion(
-                model=model,
-                messages=messages,
-                system=system,
-                max_tokens=4096,
-                temperature=0.3,
-                api_base=DASHSCOPE_INTL_BASE,
-            )
+            response = await _llm_call(messages)
             result = response.choices[0].message.content or ""
             tool_iterations += 1
-            logger.info("✅ [%s] tool iteration %d/%d done", agent_id, tool_iterations, max_tool_iterations)
 
-    logger.info("✅ Agent [%s] responded (%d chars)", agent_id, len(result))
+    logger.info("✅ [%s] done (%d chars)", agent_id, len(result))
     return result
 
 

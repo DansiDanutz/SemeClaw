@@ -1,6 +1,6 @@
 # SemeClaw Agent — Integration Guide
 
-**Version:** 0.2.0
+**Version:** 0.7.0
 **Target audience:** Paperclip companies, AI platforms (NERVIX), developers embedding SemeClaw in their product.
 
 ---

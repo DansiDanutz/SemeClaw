@@ -41,8 +41,38 @@ war_room/audio/segments/
 war_room/tenants/
 war_room/shared_state.json
 
-# Rolling reports — examples only in repo
+# Rolling reports — examples only in repo; never commit live research content
 war_room/research/test-ingest*.md
 war_room/research/tenant-test*.md
-war_room/voice_overrides.json
 war_room/research/bug-triage-*.md
+war_room/voice_overrides.json
+
+# Runtime KPI / state / task artifacts
+war_room/task_meetings.json
+war_room/task_queue.json
+war_room/memory/memory.json
+
+# Logs (all services)
+logs/*.log
+logs/*.jsonl
+war_room/logs/*.jsonl
+
+# Runtime research reports (real content — not for public repo)
+# Keep demo/ reports (those are fixtures)
+war_room/research/*.md
+!war_room/research/saved/
+war_room/builds/
+
+# Pytest / ruff caches
+.pytest_cache/
+.ruff_cache/
+
+# Launch config (local paths baked in)
+.claude/launch.json
+
+# Sentinel / coordinator runtime
+sentinel/tripwire/
+coordinator/*.log
+
+# UPGRADE notes (internal)
+UPGRADE_PLAN.md

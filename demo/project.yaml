@@ -1,0 +1,18 @@
+name: demo-project
+display_name: "SemeClaw Demo Project"
+description: "A fully working demo project with 4 agents and sample tasks."
+version: "1.0.0"
+
+agents:
+  - aria
+  - bolt
+  - luna
+  - echo
+
+llm:
+  default: "ollama/qwen3:8b"
+  fallback: "openrouter/qwen/qwen3.6-plus:free"
+  ollama_base: "http://127.0.0.1:11434"
+
+demo_mode: true
+auto_load: true

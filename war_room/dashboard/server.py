@@ -60,6 +60,24 @@ ROOT = WAR_ROOM_DIR.parent
 logger = logging.getLogger("war_room.dashboard")
 
 # ---------------------------------------------------------------------------
+# Demo mode: inject demo agents when DEMO_MODE env var is set
+# ---------------------------------------------------------------------------
+import os as _os
+if _os.environ.get("DEMO_MODE"):
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from demo.loader import DEMO_AGENTS, load_demo_into_war_room
+        _DEMO_AGENTS = DEMO_AGENTS
+        load_demo_into_war_room(WAR_ROOM_DIR)
+        logger.info("Demo mode active — %d demo agents loaded", len(_DEMO_AGENTS))
+    except Exception as _e:
+        logger.warning("Demo loader failed: %s", _e)
+        _DEMO_AGENTS = []
+else:
+    _DEMO_AGENTS = []
+
+# ---------------------------------------------------------------------------
 # Supabase — Moltbot project (okgwzwdtuhhpoyxyprzg)
 # Credentials loaded from environment / ~/.openclaw/fleet.env — NEVER hardcoded.
 # ---------------------------------------------------------------------------
@@ -171,6 +189,8 @@ _PROTECTED_WRITE_PATHS = (
     "/api/meeting/finalize", "/api/meeting/replan",
     "/api/meeting/redirect",
     "/api/reports/delete",
+    "/api/webhooks",
+    "/api/reports",
 )
 
 
@@ -230,6 +250,10 @@ async def _rate_limiter(request: Request, call_next):
         now = _time.monotonic()
 
         window = _RATE_WINDOWS.setdefault(key, _collections.deque())
+        if len(_RATE_WINDOWS) > 5000:
+            empty_keys = [k for k, v in _RATE_WINDOWS.items() if not v]
+            for k in empty_keys:
+                del _RATE_WINDOWS[k]
         cutoff = now - _RATE_LIMIT_WINDOW
         while window and window[0] < cutoff:
             window.popleft()
@@ -331,9 +355,9 @@ async def file_watcher():
                         "state": json.loads(content),
                     })
 
-            # Check for new log entries
+            # Check for new log entries (use file size as proxy — avoids reading content every 3s)
             log_files = sorted(LOGS_DIR.glob("run-*.jsonl"), reverse=True)
-            total_entries = sum(len(f.read_text().splitlines()) for f in log_files if f.exists())
+            total_entries = sum(f.stat().st_size for f in log_files if f.exists())
             if total_entries != _last_log_count:
                 _last_log_count = total_entries
                 await manager.broadcast({"type": "new_log"})
@@ -1395,6 +1419,46 @@ def _lookup_run_id_for_task(task: str) -> str:
 SCRIPTS_CACHE_DIR = WAR_ROOM_DIR / "audio" / "scripts"
 SCRIPTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# Task-meeting index — persists pre-generated meeting scripts per task
+# ---------------------------------------------------------------------------
+
+TASK_MEETINGS_FILE = WAR_ROOM_DIR / "task_meetings.json"
+
+
+def _store_task_meeting(task: str, run_id: str, report_name: str, script: dict):
+    """Store meeting script indexed by task slug. Cap at 100 entries (newest first)."""
+    try:
+        data = json.loads(TASK_MEETINGS_FILE.read_text(encoding="utf-8")) if TASK_MEETINGS_FILE.exists() else {}
+        key = re.sub(r"[^a-z0-9]+", "-", task.lower())[:60]
+        data[key] = {
+            "task": task,
+            "run_id": run_id,
+            "report_name": report_name,
+            "segments": script.get("segments", []),
+            "title": script.get("title", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Keep latest 100
+        if len(data) > 100:
+            sorted_keys = sorted(data, key=lambda k: data[k].get("created_at", ""), reverse=True)
+            data = {k: data[k] for k in sorted_keys[:100]}
+        TASK_MEETINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.error("_store_task_meeting error: %s", e)
+
+
+def _get_task_meeting(task: str) -> dict | None:
+    """Retrieve cached meeting script for a task slug."""
+    if not TASK_MEETINGS_FILE.exists():
+        return None
+    try:
+        key = re.sub(r"[^a-z0-9]+", "-", task.lower())[:60]
+        data = json.loads(TASK_MEETINGS_FILE.read_text(encoding="utf-8"))
+        return data.get(key)
+    except Exception:
+        return None
+
 _LANG_FULL_NAMES = {
     "en": "English", "ro": "Romanian", "de": "German", "fr": "French",
     "es": "Spanish", "pt": "Portuguese", "it": "Italian", "zh": "Simplified Chinese",
@@ -1726,6 +1790,36 @@ def _prune_old() -> dict[str, int]:
                 out["reports"] += 1
         except Exception:
             pass
+
+    # 100-task cap on completed_tasks in shared_state.json
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            tasks = state.get("completed_tasks", [])
+            if len(tasks) > 100:
+                tasks_sorted = sorted(
+                    tasks,
+                    key=lambda t: t.get("completed_at", ""),
+                    reverse=True,
+                )
+                kept = tasks_sorted[:100]
+                removed = tasks_sorted[100:]
+                # Delete report files for evicted tasks
+                for evicted in removed:
+                    rname = evicted.get("report_name") or evicted.get("report")
+                    if rname:
+                        rpath = RESEARCH_DIR / rname
+                        try:
+                            if rpath.exists() and rpath.parent != RESEARCH_SAVED:
+                                rpath.unlink()
+                                out["reports"] += 1
+                        except Exception:
+                            pass
+                state["completed_tasks"] = kept
+                STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning("_prune_old 100-task cap error: %s", e)
+
     return out
 
 
@@ -2617,6 +2711,42 @@ async def api_meeting_inject(request: Request):
             "interacts_with": responder_skill["interacts_with"],
         }
 
+    # ---------------------------------------------------------------
+    # Step 4: Push to Redis dls.interrupts.{agent} for live agent pickup
+    # ---------------------------------------------------------------
+    if responder and responder.lower() not in ("narrator", "dan"):
+        try:
+            import redis as _redis_lib
+            _r = _redis_lib.Redis(host="localhost", port=6379, decode_responses=True)
+            import uuid as _uuid2, json as _json2
+            interrupt_record = {
+                "id":       f"inj_{inject_id}",
+                "agent":    responder.lower(),
+                "message":  message,
+                "from":     "dan",
+                "ts":       __import__("time").time(),
+                "task_ref": meeting.get("name"),
+                "action":   None,
+                "ack":      False,
+            }
+            _r.xadd(
+                f"dls.interrupts.{responder.lower()}",
+                {"data": _json2.dumps(interrupt_record)},
+                maxlen=100,
+            )
+            # Also push to generic war room stream
+            _r.xadd(
+                "dls.warroom",
+                {"type": "inject", "data": _json2.dumps({
+                    "inject_id": inject_id,
+                    "responder": responder,
+                    "message":   message[:200],
+                })},
+                maxlen=500,
+            )
+        except Exception as _e:
+            pass  # Redis unavailable — inject still works, just no Redis push
+
     return JSONResponse({
         "inject_id":             inject_id,
         "responder":             responder,
@@ -2725,7 +2855,19 @@ async def api_agents():
                 name = line.split(":", 1)[1].strip()
                 break
         agents[agent_id] = {"id": agent_id, "name": name}
+    # Demo mode: append demo agents so they appear in the dashboard immediately
+    for demo_agent in _DEMO_AGENTS:
+        agents[demo_agent["id"]] = demo_agent
     return JSONResponse(agents)
+
+
+@app.get("/api/demo/tasks")
+async def api_demo_tasks():
+    """Return the pre-built demo tasks (only populated in DEMO_MODE)."""
+    if not _DEMO_AGENTS:
+        return JSONResponse({"tasks": [], "demo": False})
+    from demo.loader import DEMO_TASKS
+    return JSONResponse({"tasks": DEMO_TASKS, "demo": True})
 
 
 @app.post("/api/run")
@@ -2735,14 +2877,17 @@ async def api_run(request: Request):
     if not task:
         return JSONResponse({"error": "task required"}, status_code=400)
 
-    agents = data.get("agents", "research,strategist,writer")
-    project = data.get("project", "NERVIX")
+    VALID_AGENTS = {"research", "strategist", "architect", "coder", "writer", "narrator", "david"}
+    agents = [a for a in (data.get("agents") or []) if a in VALID_AGENTS]
+    if not agents:
+        agents = list(VALID_AGENTS - {"narrator", "david"})  # sensible default
+    project = re.sub(r"[^\w\-]", "", (data.get("project") or "default"))[:80]
 
     # Broadcast that a task is starting
     await manager.broadcast({
         "type": "task_started",
         "task": task,
-        "agents": agents.split(","),
+        "agents": agents,
         "project": project,
     })
 
@@ -2753,7 +2898,7 @@ async def api_run(request: Request):
         str(war_room_script),
         "run",
         task,
-        f"--agents={agents}",
+        f"--agents={','.join(agents)}",
         f"--project={project}",
     ]
     try:
@@ -2786,6 +2931,45 @@ async def _monitor_subprocess(proc: subprocess.Popen, task: str):
             "type": "state_update",
             "state": json.loads(STATE_FILE.read_text()),
         })
+    # Auto-generate meeting script in the background so it is ready immediately
+    asyncio.create_task(_auto_generate_meeting_for_task(task))
+
+
+async def _auto_generate_meeting_for_task(task: str):
+    """Auto-generate meeting script after pipeline completes. Stored in task_meetings index."""
+    await asyncio.sleep(2)  # let report file settle
+    try:
+        from meeting_skill import build_script
+
+        # Find the newest report matching this task
+        reports = sorted(RESEARCH_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+        report = next(
+            (r for r in reports if task[:30].lower().replace(" ", "-") in r.name.lower()),
+            reports[0] if reports else None,
+        )
+        if not report:
+            return
+
+        content = report.read_text(encoding="utf-8")
+        run_id = _lookup_run_id_for_task(task) or report.stem[:8]
+
+        # Build meeting script
+        script_obj = build_script(report_content=content, task=task, meeting_id=run_id)
+        script = script_obj.to_dict()
+
+        # Store in task_meetings index
+        _store_task_meeting(task, run_id, report.name, script)
+
+        # Broadcast that meeting is ready for this task
+        await manager.broadcast({
+            "type": "meeting_ready",
+            "task": task,
+            "run_id": run_id,
+            "report_name": report.name,
+            "segment_count": len(script.get("segments", [])),
+        })
+    except Exception as e:
+        logger.error("_auto_generate_meeting_for_task error: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -3320,37 +3504,42 @@ async def api_meeting_ai_respond(request: Request):
 # ---------------------------------------------------------------------------
 
 _TASK_MEETING_SYSTEM = """\
-You are the War Room Orchestrator AI. Generate a meeting script where AI agents collaboratively plan a task.
+You are the War Room Orchestrator AI. Generate a NATURAL, HUMAN-SOUNDING meeting script where AI agents debate, agree, push back, and collaborate on a task. This must sound like a real team conversation — not a formal corporate briefing.
 
-AGENTS:
-- Orchestrator: Strategic coordination, task decomposition, final assignments
-- Dexter: Senior developer, architecture, backend systems, DevOps, NERVIX platform
-- Memo: Project manager, planning, workflows, n8n automations, MyWork framework
-- Sienna: Crypto/finance specialist, TON/Solana blockchain, smarty.me payments
-- Nano: Agent creator, NERVIX agents, frontend builds, CLI tooling
-- GSD: Execution planner, phase breakdown, sprint planning, deliverables
-- Hermes: Telegram bots, communications routing, messaging infrastructure
-- Pi: AI researcher, model selection, pipelines, LLM integrations
+AGENTS (each has a distinct personality):
+- Orchestrator (David): Calm, strategic. Sees the big picture. Opens and closes meetings. Occasional dry humor.
+- Dexter: Blunt, technical, confident. Gets straight to the point. Sometimes challenges others. "That's gonna need a proper backend — here's why..."
+- Memo: Organized, practical, friendly. Asks follow-up questions. Catches things others miss. "Wait, have we thought about..."
+- Sienna: Sharp, direct. Focused on money/crypto side. Skeptical of over-engineering. "Let's not overcomplicate this."
+- Nano: Enthusiastic, builder mindset. Loves shipping fast. Sometimes overcommits. "I can knock that out tonight."
+- GSD: Structured planner. Breaks everything into phases. Keeps people honest about timelines.
+- Hermes: Communicator. Thinks about how info flows, what Dan needs to know, documentation.
+- Pi: Research-focused. Brings data and alternatives. "I actually benchmarked three approaches and..."
 
-RULES:
-1. Orchestrator opens with a 2-3 sentence analysis of the task
-2. Invite 2-4 agents most relevant to this specific task (not all of them)
-3. Each invited agent speaks 1-2 sentences about their concrete piece of the work
-4. Include ONE clarifying question from an agent ONLY if genuinely needed — skip if the task is clear
-5. Orchestrator closes with concrete, specific assignments per agent
+CONVERSATION RULES — THIS IS CRITICAL:
+1. Write like real speech — contractions, short sentences, natural rhythm. NOT formal bullet-point corporate speak.
+2. Agents REACT to what others say: "Yeah, that tracks." / "Hmm, not sure about that." / "Dexter's right, but..."
+3. Include natural pacing: brief agreements, light pushback, one moment of genuine debate resolved by consensus
+4. 2-4 agents only (the most relevant). 8-12 turns total. No speeches — keep each turn to 1-3 sentences MAX.
+5. ONE optional clarifying question if genuinely ambiguous — skip if clear.
+6. Close with specific, named assignments — Orchestrator wraps it up, agents confirm their piece.
+7. The narrator_intro is spoken BY A NARRATOR (not an agent) — warm, story-like, sets the scene.
 
 OUTPUT FORMAT: strict JSON only, no markdown fences, no extra text:
 {
-  "title": "short meeting title (5-8 words)",
-  "narrator_intro": "2-3 sentences. State the task briefly, then explain WHY each selected agent is ideal for this task — one specific reason per agent.",
-  "agents": ["Orchestrator", "Dexter"],
+  "title": "Short punchy title (4-7 words)",
+  "narrator_intro": "One or two sentences. Set the scene warmly — what's the challenge and who's in the room.",
+  "agents": ["Orchestrator", "Dexter", "Memo"],
   "turns": [
-    {"speaker": "Orchestrator", "text": "...", "type": "intro"},
-    {"speaker": "Dexter", "text": "...", "type": "expertise"},
-    {"speaker": "Memo", "text": "...", "type": "question", "to_user": true, "question": "One specific question?"},
-    {"speaker": "Dexter", "text": "...", "type": "assignment", "tasks": ["Build X", "Deploy Y"]},
-    {"speaker": "Memo", "text": "...", "type": "assignment", "tasks": ["Track Z"]},
-    {"speaker": "Orchestrator", "text": "...", "type": "close"}
+    {"speaker": "Orchestrator", "text": "Alright, here's what we're looking at...", "type": "intro"},
+    {"speaker": "Dexter", "text": "Yeah, I was thinking the same. The tricky part is...", "type": "discuss"},
+    {"speaker": "Memo", "text": "Hold on — have we accounted for...?", "type": "discuss"},
+    {"speaker": "Dexter", "text": "Fair point. We'd need to handle that in the migration.", "type": "discuss"},
+    {"speaker": "Orchestrator", "text": "Good catch. Let's lock it down then.", "type": "discuss"},
+    {"speaker": "Memo", "text": "One question before we move on — ...", "type": "question", "to_user": true, "question": "Specific question?"},
+    {"speaker": "Dexter", "text": "On it. I'll handle X and Y.", "type": "assignment", "tasks": ["Task X", "Task Y"]},
+    {"speaker": "Memo", "text": "I'll own Z.", "type": "assignment", "tasks": ["Task Z"]},
+    {"speaker": "Orchestrator", "text": "Perfect. We're aligned. Let's move.", "type": "close"}
   ]
 }
 """
@@ -3460,14 +3649,15 @@ async def _call_openrouter_meeting(model: str, system: str, user: str) -> str | 
     }
     payload = {
         "model": model,
-        "max_tokens": 1200,
+        "max_tokens": 2000,
+        "temperature": 0.85,   # slightly creative for natural-sounding dialogue
         "messages": [
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ],
     }
     try:
-        async with httpx.AsyncClient(base_url=_OPENROUTER_BASE, timeout=45.0) as c:
+        async with httpx.AsyncClient(base_url=_OPENROUTER_BASE, timeout=60.0) as c:
             r = await c.post("/chat/completions", headers=headers, json=payload)
             r.raise_for_status()
             return r.json()["choices"][0]["message"]["content"].strip()
@@ -3481,14 +3671,14 @@ async def _call_ollama_meeting(model: str, system: str, user: str) -> str | None
     payload = {
         "model": model,
         "stream": False,
-        "options": {"num_predict": 1200},
+        "options": {"num_predict": 2000, "temperature": 0.85},
         "messages": [
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ],
     }
     try:
-        async with httpx.AsyncClient(base_url=_OLLAMA_BASE, timeout=90.0) as c:
+        async with httpx.AsyncClient(base_url=_OLLAMA_BASE, timeout=120.0) as c:
             r = await c.post("/api/chat", json=payload)
             r.raise_for_status()
             return r.json()["message"]["content"].strip()
@@ -3793,6 +3983,108 @@ async def api_meeting_task_comment(meeting_id: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Task-meeting endpoints — pre-generated meetings attached to completed tasks
+# ---------------------------------------------------------------------------
+
+@app.get("/api/task-meeting")
+async def api_task_meeting(task: str = "", run_id: str = ""):
+    """Return the pre-generated meeting for a completed task.
+
+    Called when the user clicks any completed task card in the dashboard.
+    Priority: task slug cache → run_id scan → on-the-fly generation.
+    Always returns: {task, run_id, report_name, segments, title, cached}
+    """
+    from meeting_skill import build_script
+
+    # 1. Look up by task slug
+    if task:
+        cached = _get_task_meeting(task)
+        if cached:
+            return JSONResponse({**cached, "cached": True})
+
+    # 2. Look up by run_id scan
+    if run_id and TASK_MEETINGS_FILE.exists():
+        try:
+            data = json.loads(TASK_MEETINGS_FILE.read_text(encoding="utf-8"))
+            for entry in data.values():
+                if entry.get("run_id") == run_id:
+                    return JSONResponse({**entry, "cached": True})
+        except Exception:
+            pass
+
+    # 3. On-the-fly generation — find the most relevant report
+    reports = sorted(RESEARCH_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if not reports:
+        return JSONResponse({"error": "no reports found"}, status_code=404)
+
+    lookup_task = task or ""
+    report = next(
+        (r for r in reports if lookup_task[:30].lower().replace(" ", "-") in r.name.lower()),
+        reports[0],
+    ) if lookup_task else reports[0]
+
+    content = report.read_text(encoding="utf-8")
+    effective_task = task or _extract_task_from_report(content)
+    effective_run_id = run_id or _lookup_run_id_for_task(effective_task) or report.stem[:8]
+
+    script_obj = build_script(report_content=content, task=effective_task, meeting_id=effective_run_id)
+    script = script_obj.to_dict()
+
+    return JSONResponse({
+        "task": effective_task,
+        "run_id": effective_run_id,
+        "report_name": report.name,
+        "segments": script.get("segments", []),
+        "title": script.get("title", ""),
+        "cached": False,
+    })
+
+
+@app.post("/api/task-meeting/replan")
+async def api_task_meeting_replan(request: Request):
+    """Human-in-the-loop replan during a meeting. Max 2 replans enforced server-side.
+
+    Body: {task, human_message, history, remaining, replan_count}
+    Returns updated script segments, or {finalized: true} after 2 replans.
+    """
+    data = await request.json()
+    replan_count = int(data.get("replan_count", 0))
+
+    if replan_count >= 2:
+        return JSONResponse({
+            "finalized": True,
+            "message": "Meeting finalized after 2 interactions",
+        })
+
+    task = (data.get("task") or "").strip()
+    human_message = (data.get("human_message") or "").strip()
+    remaining = data.get("remaining", [])
+
+    if not task:
+        return JSONResponse({"error": "task required"}, status_code=400)
+
+    # Generate updated script incorporating the human message
+    updated_script = await _generate_meeting_script(task, user_context=human_message)
+
+    # Inject human_message as first turn so the flow acknowledges it
+    ack_turn = {
+        "speaker": "Orchestrator",
+        "text": f"Noted — adjusting our plan: {human_message}",
+        "type": "replan_ack",
+    }
+    new_segments = [ack_turn] + updated_script.get("turns", updated_script.get("segments", remaining))
+
+    return JSONResponse({
+        "finalized": False,
+        "task": task,
+        "human_message": human_message,
+        "replan_count": replan_count + 1,
+        "segments": new_segments,
+        "title": updated_script.get("title", ""),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Neural TTS via edge-tts (Microsoft Edge neural voices — free, no API key)
 # ---------------------------------------------------------------------------
 
@@ -3981,6 +4273,45 @@ _LANG_NAMES: dict[str, str] = {
 }
 
 
+def _naturalize_tts_text(text: str) -> str:
+    """Add punctuation-based breathing cues so ElevenLabs sounds more human.
+
+    ElevenLabs Flash v2.5 respects punctuation rhythm:
+    - Comma  → short breath (~150ms)
+    - Period → medium pause (~350ms)
+    - Ellipsis → longer thoughtful pause (~600ms)
+    We inject these before common interjections and after sentence fragments
+    so agents sound like they're actually thinking, not just reciting.
+    """
+    import re
+    t = text.strip()
+
+    # Expand common interjections to get a natural breath before the next clause
+    interjections = {
+        r'\bYeah\b':     'Yeah,',
+        r'\bYeah\.':     'Yeah...',
+        r'\bHmm\b':      'Hmm...',
+        r'\bOkay\b':     'Okay,',
+        r'\bAlright\b':  'Alright,',
+        r'\bSo\b,':      'So,',
+        r'\bLook\b,':    'Look,',
+        r'\bRight\b,':   'Right,',
+        r'\bWell\b,':    'Well,',
+        r'\bActually\b,':'Actually,',
+        r'\bFair point\.': 'Fair point...',
+        r'\bGood point\.': 'Good point...',
+    }
+    for pattern, replacement in interjections.items():
+        t = re.sub(pattern, replacement, t, count=1)
+
+    # If the turn is short (≤60 chars) and ends without punctuation, add a period
+    # so ElevenLabs knows to drop pitch naturally at the end
+    if len(t) <= 60 and t and t[-1] not in '.!?,…':
+        t += '.'
+
+    return t
+
+
 @app.get("/api/tts")
 async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "en"):
     """Stream MP3 audio for a given text + speaker using ElevenLabs or edge-tts neural voices.
@@ -3999,6 +4330,11 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
 
     _bump("tts_requests")
     tenant = _tenant_id(request)
+
+    # Naturalize text for more human-sounding delivery (English only)
+    if not lang or lang == "en":
+        text = _naturalize_tts_text(text or "")
+
     _cost_bump(tenant, "tts_chars", len(text or ""))
 
     # Resolve effective voice (tenant override wins)
@@ -4021,7 +4357,9 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
                         json={
                             "text": text,
                             "model_id": _ELEVEN_MODEL,
-                            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True},
+                            # Lower stability = more expressive, emotional, human-sounding.
+                            # Style > 0 adds emphasis and variation. Boost keeps voice identity.
+                            "voice_settings": {"stability": 0.38, "similarity_boost": 0.82, "style": 0.35, "use_speaker_boost": True},
                         },
                     )
                     if resp.status_code == 200 and resp.content:
@@ -4224,6 +4562,96 @@ async def _get_agent_health_single(agent_name: str) -> dict:
         return {}
 
 
+# ── Droplet connectivity probe ────────────────────────────────────────────────
+# Uses Tailscale IPs (from ~/.ssh/config) — reliable mesh, not public IPs.
+# Dexter uses port 2222 (as per SSH config); others use 22.
+# Also probes OpenClaw gateway :18789 as the primary health signal.
+_DROPLET_PROBES: list[dict] = [
+    {"agent": "Dexter", "host": "100.94.135.19",  "port": 2222, "gateway": "http://100.94.135.19:18789/health"},
+    {"agent": "Memo",   "host": "100.88.192.48",  "port": 22,   "gateway": "http://100.88.192.48:18789/health"},
+    {"agent": "Sienna", "host": "100.124.88.93",  "port": 22,   "gateway": "http://100.124.88.93:18789/health"},
+    {"agent": "Nano",   "host": "100.105.148.29", "port": 22,   "gateway": "http://100.105.148.29:18789/health"},
+]
+_PROBE_INTERVAL = 300   # 5 minutes
+_PROBE_TIMEOUT  = 8.0   # seconds per probe
+
+async def _probe_one(agent: str, host: str, port: int, gateway: str | None = None) -> tuple[str, str | None]:
+    """Probe a droplet. Primary: HTTP GET gateway /health. Fallback: TCP connect SSH port."""
+    # 1. Gateway HTTP probe (preferred — confirms OpenClaw is alive, not just SSH)
+    if gateway:
+        try:
+            async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT) as c:
+                r = await c.get(gateway)
+                if r.status_code == 200:
+                    data = r.json() if r.headers.get("content-type","").startswith("application/json") else {}
+                    if data.get("status") in ("live", "ok") or r.status_code == 200:
+                        return "success", None
+                return "failed", f"gateway HTTP {r.status_code}"
+        except Exception as e:
+            pass   # fall through to TCP probe
+
+    # 2. TCP SSH port fallback
+    try:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=_PROBE_TIMEOUT
+        )
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        return "success", "ssh-only (gateway unreachable)"
+    except asyncio.TimeoutError:
+        return "failed", f"TCP timeout {host}:{port} after {_PROBE_TIMEOUT}s"
+    except OSError as e:
+        return "failed", f"TCP {host}:{port}: {e}"
+    except Exception as e:
+        return "failed", str(e)
+
+async def _record_probe(agent: str, status: str, reason: str | None) -> None:
+    """Write probe result to agent_run_history in Supabase."""
+    try:
+        await _supa("post", "agent_run_history", json={
+            "agent_name": agent,
+            "status":     status,
+            "reason":     reason,
+            "task_ref":   "connectivity-probe",
+        })
+    except Exception as e:
+        logger.warning(f"probe record failed for {agent}: {e}")
+
+async def _run_all_probes() -> list[dict]:
+    """Probe all droplets concurrently and record results."""
+    tasks = [_probe_one(p["agent"], p["host"], p["port"], p.get("gateway")) for p in _DROPLET_PROBES]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    out = []
+    for probe, result in zip(_DROPLET_PROBES, results):
+        if isinstance(result, Exception):
+            status, reason = "failed", str(result)
+        else:
+            status, reason = result
+        await _record_probe(probe["agent"], status, reason)
+        out.append({"agent": probe["agent"], "status": status, "reason": reason})
+        logger.info(f"probe {probe['agent']} ({probe['host']}:{probe['port']}) → {status}")
+    return out
+
+async def _droplet_probe_loop() -> None:
+    """Background loop: probe every _PROBE_INTERVAL seconds."""
+    await asyncio.sleep(10)   # brief startup delay
+    while True:
+        try:
+            await _run_all_probes()
+        except Exception as e:
+            logger.warning(f"probe loop error: {e}")
+        await asyncio.sleep(_PROBE_INTERVAL)
+
+@app.post("/api/agent/health/probe")
+async def api_probe_now(request: Request):
+    """Manually trigger an immediate connectivity probe of all droplets."""
+    results = await _run_all_probes()
+    return JSONResponse({"ok": True, "results": results})
+
+
 @app.get("/api/agent/health")
 async def api_agent_health():
     """Return health summary for ALL agents — merges Supabase tracked agents with
@@ -4310,8 +4738,35 @@ async def api_agent_health():
     except Exception as e:
         logger.warning("api_agent_health Paperclip: %s", e)
 
-    # ── 3. Merge and compute system health ────────────────────────────────────
-    result = supa_result + pc_result
+    # ── 3. Deduplicate: merge multiple Supabase rows for the same agent ──────
+    # agent_health_summary may return one row per task_ref group; combine them.
+    merged_supa: dict[str, dict] = {}
+    for row in supa_result:
+        name = row["agent_name"]
+        if name not in merged_supa:
+            merged_supa[name] = dict(row)
+            merged_supa[name].setdefault("dots", [])
+        else:
+            # Accumulate totals and merge dot lists
+            merged_supa[name]["total_runs"] = (merged_supa[name].get("total_runs") or 0) + (row.get("total_runs") or 0)
+            merged_supa[name]["successes"]  = (merged_supa[name].get("successes")  or 0) + (row.get("successes")  or 0)
+            merged_supa[name]["failures"]   = (merged_supa[name].get("failures")   or 0) + (row.get("failures")   or 0)
+            merged_supa[name]["dots"] = sorted(
+                merged_supa[name]["dots"] + row.get("dots", []),
+                key=lambda d: d.get("created_at") or ""
+            )
+
+    # Recompute health_pct after merge
+    for name, row in merged_supa.items():
+        t = row.get("total_runs") or 0
+        s = row.get("successes") or 0
+        row["health_pct"] = round(s / t * 100, 1) if t else None
+
+    supa_deduped = list(merged_supa.values())
+    supa_names   = {r["agent_name"] for r in supa_deduped}
+
+    # ── 4. Merge and compute system health ────────────────────────────────────
+    result = supa_deduped + [r for r in pc_result if r["agent_name"] not in supa_names]
     valid = [r for r in result if r.get("health_pct") is not None]
     system_health = (
         round(sum(float(r["health_pct"]) for r in valid) / len(valid), 1)
@@ -4418,5 +4873,6 @@ if __name__ == "__main__":
     @app.on_event("startup")
     async def startup():
         asyncio.create_task(file_watcher())
+        asyncio.create_task(_droplet_probe_loop())
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

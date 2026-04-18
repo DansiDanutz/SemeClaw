@@ -5,7 +5,7 @@
 **Turn any markdown report into a cinematic multi-agent meeting with voice.**
 **Embed in any app. Own your AI operations.**
 
-[![Version](https://img.shields.io/badge/version-0.2.0-10b981.svg)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.7.0-10b981.svg)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-Proprietary-8b5cf6.svg)](#license)
@@ -51,6 +51,12 @@ Every meeting includes a **host announcer**, a **conversational orchestrator**, 
 | 🌐 **CORS + CSP configurable** | Allow-list origins + iframe parents via env |
 | 🐳 **Docker-ready** | Python 3.13 + uvicorn + ffmpeg + healthcheck |
 | 📎 **Paperclip bridge** | Hook into Paperclip fleet ops today · first-class agent adapter coming in Phase 4 |
+| 🛡 **Sentinel** | Fleet health monitor — probes all droplets every 60s, fires Telegram alerts on CPU/RAM/disk thresholds. Runs on :18790 |
+| ⚡ **Coordinator** | 8-backend circuit-breaker LLM proxy on :8996. Auto-fails over across Claude / OpenRouter / Ollama / local models |
+| 📊 **KPI Tracking** | Daily counters in Supabase (tasks_done, tokens_spent, cost_usd, commits). 18:00 EET digest to Telegram |
+| 🎯 **Natural Meetings** | Agents have distinct personalities, debate, react, agree. Variable pacing. ElevenLabs style=0.35 for expression |
+| 🔴 **Health Strip** | Live agent health panel with green/orange/red border + 60s polling |
+| 💬 **Human-in-loop** | Text + voice interjection during meetings (max 2 replans), Web Speech API |
 
 ---
 
@@ -75,15 +81,34 @@ uv run python war_room/dashboard/server.py
 Verify it's alive:
 ```bash
 curl http://127.0.0.1:8765/api/agent/manifest | jq .version
-# "0.2.0"
+# "0.7.0"
+```
+
+### One-command install
+```bash
+git clone https://github.com/Dansidanutz/SemeClaw.git
+cd SemeClaw
+chmod +x setup.sh && ./setup.sh
 ```
 
 ### Docker
 
 ```bash
-docker build -t semeclaw:0.2.0 .
-docker run -p 8765:8765 --env-file .env semeclaw:0.2.0
+docker build -t semeclaw:0.7.0 .
+docker run -p 8765:8765 --env-file .env semeclaw:0.7.0
 ```
+
+---
+
+## 🏗 Services
+
+| Service | Port | Purpose | Start |
+|---------|------|---------|-------|
+| War Room Dashboard | 8765 | Main UI + API + WebSocket | `uv run python war_room/dashboard/server.py` |
+| Sentinel | 18790 | Fleet health monitor | `uv run python -m sentinel.sentinel` |
+| Coordinator | 8996 | LLM circuit-breaker proxy | `uv run python -m coordinator.coordinator` |
+| KPI Collector | — | Redis stream → Supabase | `uv run python -m kpis.collector` |
+| KPI Digest | — | Daily 18:00 EET Telegram | cron: `uv run python -m kpis.digest` |
 
 ---
 
