@@ -2051,7 +2051,7 @@ async def api_agent_manifest():
     return JSONResponse({
         "id":          "semeclaw-war-room",
         "name":        "SemeClaw War Room",
-        "version":     "0.6.0",
+        "version":     "0.7.0",
         "tenant":      SEMECLAW_TENANT_ID,
         "public_url":  SEMECLAW_PUBLIC_URL,
         "description": ("Cinematic AI agent meeting room. Converts any task report "
@@ -2982,7 +2982,7 @@ async def paperclip_agent_card():
     to register SemeClaw War Room as a native agent type on its marketplace."""
     return JSONResponse({
         "agent_type":   "semeclaw.war-room",
-        "version":      "0.6.0",
+        "version":      "0.7.0",
         "name":         "War Room by SemeClaw",
         "icon":         "🎭",
         "description":  "Convene a cinematic multi-agent meeting on any task. "
