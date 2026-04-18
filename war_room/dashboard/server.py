@@ -38,7 +38,7 @@ import httpx
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     import uvicorn
 except ImportError:
@@ -2065,6 +2065,168 @@ async def api_agent_manifest():
 
 
 # ---------------------------------------------------------------------------
+# Meeting Execute — synthesize War Room output into production code + assets
+# ---------------------------------------------------------------------------
+
+# Builds are stored here: war_room/builds/{meeting_name}/
+_BUILDS_DIR = WAR_ROOM_DIR / "builds"
+_BUILDS_DIR.mkdir(exist_ok=True)
+
+
+@app.post("/api/meeting/execute")
+async def api_meeting_execute(request: Request):
+    """Synthesize a finalized War Room meeting into production code.
+
+    Reads all agent contributions from the meeting report, then calls an LLM
+    to generate a complete, deployable single-file HTML+CSS+JS artifact.
+    Stores the result in war_room/builds/{meeting_name}/ and returns a
+    preview URL.
+
+    Request body:
+    {
+      "name":    "report filename",
+      "type":    "webpage" | "dashboard" | "landing" | "doc" (default: "webpage"),
+      "deploy":  false  // set true to also push to Vercel
+    }
+    """
+    data = await request.json()
+    name   = Path(data.get("name", "")).name
+    kind   = (data.get("type") or "webpage").strip().lower()
+
+    if not name:
+        return JSONResponse({"error": "name required"}, status_code=400)
+
+    report_path = _find_report(name)
+    if report_path is None:
+        return JSONResponse({"error": "report not found"}, status_code=404)
+
+    content = report_path.read_text(encoding="utf-8")
+
+    # ── Build the synthesis prompt ────────────────────────────────────────
+    system = """You are a senior full-stack engineer and UI designer.
+You have just attended a War Room meeting where multiple specialist agents
+produced research, strategy, copy, and architecture guidance.
+
+Your job: synthesize ALL of their output into a single, production-ready
+HTML file (inline CSS + inline JS, no external dependencies except Google Fonts).
+
+Design system — "DansLab Claude Edition":
+- Palette: background #080808, surface #111111, border #1e1e1e
+  accent-gold #D4A853, accent-glow rgba(212,168,83,0.15)
+  text-primary #F0EDE8, text-muted #888880
+- Typography: 'Inter' (Google Fonts) — hero 72-96px, section 48px, body 16-18px
+- Motion: subtle fade-in on scroll (IntersectionObserver), hover lifts
+- Style: dark luxury — think Anthropic.com meets a Y Combinator portfolio site.
+  Strong hierarchy, generous whitespace, no gradients, precise grid.
+  Cards have 1px #1e1e1e border + soft box-shadow: 0 0 40px rgba(0,0,0,0.8)
+- Must be self-contained: single HTML file, no external JS, minimal CDN (fonts only)
+- Must be mobile-responsive with a hamburger nav
+- No placeholder text — use ONLY real content from the meeting
+
+Extract from each agent section and use verbatim where appropriate:
+- Research Agent → facts, competitive context, market position
+- Strategist/GSD → structure, priorities, messaging hierarchy
+- Writer/Hermes → all copy (headlines, body, CTAs) — use their exact words
+- Architect/David → any technical decisions to feature
+- Coder/Dexter → any implementation notes to honour
+
+Return ONLY the complete HTML document, starting with <!DOCTYPE html>.
+No markdown, no explanation, no code fences. Just raw HTML."""
+
+    user = f"""Meeting report content:
+
+{content}
+
+Generate the complete production HTML file for a {kind}.
+Start immediately with <!DOCTYPE html>."""
+
+    raw = await _call_openrouter_large("google/gemini-2.5-pro", system, user)
+
+    if not raw:
+        # Fallback 2: Claude Sonnet via OpenRouter
+        raw = await _call_openrouter_large("anthropic/claude-sonnet-4-6", system, user)
+
+    if not raw:
+        # Fallback 3: local Gemma 4 (9.6GB, free, no rate limits)
+        logger.info("OpenRouter unavailable — falling back to local Gemma 4")
+        raw = await _call_ollama_large("gemma4:latest", system, user)
+
+    if not raw:
+        # Fallback 4: local Qwen3 8B (lightweight but can generate HTML)
+        raw = await _call_ollama_large("qwen3:8b", system, user)
+
+    if not raw:
+        return JSONResponse({"error": "LLM synthesis failed — all models unavailable"}, status_code=502)
+
+    # Strip any accidental markdown fences
+    html = raw.strip()
+    if html.startswith("```"):
+        html = html.split("\n", 1)[-1]
+        if html.endswith("```"):
+            html = html.rsplit("```", 1)[0]
+    html = html.strip()
+
+    # Ensure it starts with a valid doctype
+    if not html.lower().startswith("<!doctype"):
+        idx = html.lower().find("<!doctype")
+        if idx >= 0:
+            html = html[idx:]
+
+    # ── Persist ───────────────────────────────────────────────────────────
+    build_slug = name.replace(".md", "").rstrip(".")
+    build_dir  = _BUILDS_DIR / build_slug
+    build_dir.mkdir(parents=True, exist_ok=True)
+    index_path = build_dir / "index.html"
+    index_path.write_text(html, encoding="utf-8")
+
+    preview_url = f"/build/{build_slug}/index.html"
+    return JSONResponse({
+        "ok":           True,
+        "build_slug":   build_slug,
+        "preview_url":  preview_url,
+        "public_url":   f"{SEMECLAW_PUBLIC_URL}{preview_url}",
+        "file_size_kb": round(len(html.encode()) / 1024, 1),
+        "kind":         kind,
+        "message":      "War Room synthesis complete. Open preview_url to view the result.",
+    })
+
+
+@app.get("/build/{build_slug}/{filename}")
+async def api_build_file(build_slug: str, filename: str):
+    """Serve files from a completed War Room build."""
+    safe_slug = Path(build_slug).name
+    safe_file = Path(filename).name
+    file_path  = _BUILDS_DIR / safe_slug / safe_file
+    if not file_path.exists():
+        return JSONResponse({"error": "build file not found"}, status_code=404)
+    media = "text/html" if safe_file.endswith(".html") else "text/plain"
+    return Response(
+        content=file_path.read_bytes(),
+        media_type=media,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/api/meeting/builds")
+async def api_meeting_builds():
+    """List all completed War Room builds."""
+    builds = []
+    if _BUILDS_DIR.exists():
+        for d in sorted(_BUILDS_DIR.iterdir()):
+            if d.is_dir():
+                index = d / "index.html"
+                builds.append({
+                    "slug":        d.name,
+                    "preview_url": f"/build/{d.name}/index.html",
+                    "size_kb":     round(index.stat().st_size / 1024, 1) if index.exists() else 0,
+                    "modified":    datetime.fromtimestamp(
+                        index.stat().st_mtime, tz=timezone.utc
+                    ).isoformat() if index.exists() else None,
+                })
+    return JSONResponse({"count": len(builds), "builds": builds})
+
+
+# ---------------------------------------------------------------------------
 # Skill Registry — agent skill discovery and human interaction protocol
 # ---------------------------------------------------------------------------
 
@@ -2973,12 +3135,13 @@ async def api_meeting_say(request: Request):
 # AI Meeting Respond — free model waterfall
 # ---------------------------------------------------------------------------
 
-# Free model waterfall: OpenRouter free → local Ollama
+# Free model waterfall: OpenRouter free → local Ollama (Gemma 4 preferred local)
 _AI_MODELS = [
     ("openrouter", "qwen/qwen3.6-plus:free"),
     ("openrouter", "google/gemma-3-27b-it:free"),
     ("openrouter", "qwen/qwen3.5-72b:free"),
-    ("ollama",     "qwen3:8b"),
+    ("ollama",     "gemma4:latest"),   # local 9.6GB Gemma 4 — best local model
+    ("ollama",     "qwen3:8b"),        # lightweight fallback
 ]
 
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -3030,6 +3193,57 @@ async def _call_openrouter(model: str, system: str, user: str) -> str | None:
             return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.warning("OpenRouter %s failed: %s", model, e)
+        return None
+
+
+async def _call_openrouter_large(model: str, system: str, user: str) -> str | None:
+    """Like _call_openrouter but with a large token budget for code/HTML generation."""
+    key = _openrouter_key()
+    if not key:
+        return None
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "HTTP-Referer": "https://nervix.ai",
+        "X-Title": "NERVIX War Room Execute",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "max_tokens": 32000,  # full budget for HTML generation
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OPENROUTER_BASE, timeout=120.0) as c:
+            r = await c.post("/chat/completions", headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("OpenRouter large %s failed: %s", model, e)
+        return None
+
+
+async def _call_ollama_large(model: str, system: str, user: str) -> str | None:
+    """Ollama call with large token budget for HTML/code synthesis (Gemma 4, etc.)."""
+    payload = {
+        "model": model,
+        "stream": False,
+        "options": {"num_predict": 16384, "num_ctx": 32768},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OLLAMA_BASE, timeout=300.0) as c:
+            r = await c.post("/api/chat", json=payload)
+            r.raise_for_status()
+            return r.json()["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("Ollama large %s failed: %s", model, e)
         return None
 
 
