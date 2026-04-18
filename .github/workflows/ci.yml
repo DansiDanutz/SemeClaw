@@ -52,7 +52,7 @@ jobs:
           SERVER_PID=$!
           sleep 6
           curl -sf http://127.0.0.1:8765/api/agent/manifest > /tmp/manifest.json
-          cat /tmp/manifest.json | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.2.0'; print('OK:', d['id'])"
+          cat /tmp/manifest.json | python -c "import sys,json,re; d=json.load(sys.stdin); assert d['id']=='semeclaw-war-room'; assert re.match(r'^\d+\.\d+\.\d+$', d['version']); assert len(d['capabilities'])>=10; print('OK:', d['id'], 'v'+d['version'], 'caps='+str(len(d['capabilities'])))"
           curl -sf http://127.0.0.1:8765/api/agent/health > /tmp/health.json
           curl -sf http://127.0.0.1:8765/metrics | head -5
           kill $SERVER_PID || true
