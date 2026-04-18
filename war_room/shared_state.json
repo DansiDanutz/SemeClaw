@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-04-17T10:14:35.134573",
+  "last_updated": "2026-04-18T06:03:13.550536+00:00",
   "active_tasks": [],
   "completed_tasks": [
     {
@@ -35,6 +35,18 @@
       ],
       "issue_id": "PC-1000",
       "completed_at": "2026-04-17T10:14:35.134551"
+    },
+    {
+      "run_id": "4412e714",
+      "task": "[Moltbot] NERVIX: npm publish nervix-cli to npmjs.com (Dan: create npm account/token)\n\nContext from Paperclip issue 7036076b-2022-4032-a875-4f8857886fc5:\nDAN-ACTION: Dan must (1) create npm account at npmjs.com (if not already), (2) generate publish token (granular or classic), (3) store token in agent secrets (likely Moltbot / fc4eb924). Required to unblock DAN-416 (nervix agents CLI command) and the full nervix-cli publication story. Estimated Dan time: 10 min.",
+      "agents": [
+        "research",
+        "architect",
+        "coder",
+        "writer"
+      ],
+      "issue_id": "79c670db-ed18-4084-bf61-5a9671e4adef",
+      "completed_at": "2026-04-18T06:03:13.550523+00:00"
     }
   ],
   "paperclip": {
@@ -44,9 +56,9 @@
     "agents": {}
   },
   "metrics": {
-    "tasks_run": 3,
-    "tasks_succeeded": 3,
+    "tasks_run": 4,
+    "tasks_succeeded": 4,
     "tasks_failed": 0,
-    "paperclip_issues_created": 3
+    "paperclip_issues_created": 4
   }
 }

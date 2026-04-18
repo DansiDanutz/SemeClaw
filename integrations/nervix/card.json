@@ -1,0 +1,122 @@
+{
+  "$schema": "https://nervix.ai/schemas/agent-card-v1.json",
+  "id": "semeclaw-war-room",
+  "slug": "war-room",
+  "display_name": "War Room by SemeClaw",
+  "tagline": "Convene a cinematic AI meeting on any task. Get a recalibrated plan with a verdict line.",
+  "icon": "🎭",
+  "hero_image_url": "https://raw.githubusercontent.com/DansiDanutz/SemeClaw/main/docs/screenshots/dashboard.png",
+  "category": "productivity.meetings",
+  "version": "0.4.0",
+  "vendor": {
+    "name": "SemeClaw (Dan's Lab)",
+    "url": "https://github.com/DansiDanutz/SemeClaw",
+    "support_email": "dan@nervix.ai"
+  },
+  "description": {
+    "short": "A full multi-agent war-room meeting — voice, transcript, recalibration, and task re-analysis — in a draggable modal.",
+    "markdown": "## What it does\n\nSemeClaw War Room turns **any task markdown** (Notion doc, GitHub issue, NERVIX task) into a cinematic agent meeting:\n\n- 🎙 **Narrator** opens with meeting ID + subject + attendees\n- 🏛 **Orchestrator (David)** runs the conversation, passes between specialists\n- 🔬 📐 ✍️ **Research / Strategist / Writer** each deliver their take (voiced)\n- 💬 **You** can ask up to 2 questions — the meeting recalibrates in real time\n- 🏁 **On close**, the task `.md` is re-analyzed, gets a `VERDICT: CORRECT — proceed` line, and the updated analysis is appended\n\n## Why NERVIX users love it\n\n- **Unstuck any task in 2 minutes** — no more 'let me think about this'\n- **Auditable decisions** — every meeting generates a transcript + verdict line appended to the task\n- **Voiced** — walk around listening while your team deliberates\n- **Self-hosted option** — zero vendor lock-in, you can run your own SemeClaw"
+  },
+  "endpoint": "https://semeclaw.your-deployment.com",
+  "docs_url": "https://github.com/DansiDanutz/SemeClaw/blob/main/docs/INTEGRATION.md",
+  "manifest_url": "https://semeclaw.your-deployment.com/api/agent/manifest",
+  "provision": {
+    "flow": "oauth_or_api_key",
+    "tenant_header": "X-Tenant-Id",
+    "per_user_token": true,
+    "tenant_id_template": "nervix-user-{user_id}"
+  },
+  "triggers": [
+    {
+      "id": "convene_war_room",
+      "label": "Convene War Room",
+      "context": "task_card",
+      "icon": "🎭",
+      "description": "Opens a SemeClaw meeting in a modal, populated with this task's markdown",
+      "http": {
+        "method": "POST",
+        "path": "/api/paperclip/trigger",
+        "body_template": {
+          "task_id":       "{{task.id}}",
+          "task_title":    "{{task.title}}",
+          "task_markdown": "{{task.markdown}}",
+          "tenant_id":     "{{user.tenant_id}}",
+          "auto_audio":    true,
+          "webhook_url":   "{{nervix.webhook_callback_url}}"
+        }
+      },
+      "response_actions": [
+        { "action": "open_modal_iframe", "url_field": "embed_url" }
+      ]
+    },
+    {
+      "id": "share_war_room",
+      "label": "Share meeting",
+      "context": "meeting_done",
+      "http": {
+        "method": "POST",
+        "path": "/api/meetings/{{report_name}}/share"
+      },
+      "response_actions": [
+        { "action": "copy_to_clipboard", "field": "url" }
+      ]
+    }
+  ],
+  "webhooks": {
+    "events": [
+      "report.created",
+      "meeting.finalized",
+      "paperclip.triggered"
+    ],
+    "signature_header": "X-SemeClaw-Signature",
+    "signature_algo": "hmac-sha256",
+    "example_payload": {
+      "event": "meeting.finalized",
+      "ts": "2026-04-18T08:15:00Z",
+      "agent_version": "0.4.0",
+      "tenant_id": "nervix-user-12345",
+      "data": {
+        "name": "pc-task-abc.md",
+        "verdict_line": "VERDICT: CORRECT — proceed",
+        "qa_count": 2
+      }
+    }
+  },
+  "embed": {
+    "widget_js": "/embed.js",
+    "iframe_url": "/embed?meeting={report_name}&v=2&theme=dark",
+    "min_width": 320,
+    "min_height": 420,
+    "modal_recommended_size": { "w": 1100, "h": 720 }
+  },
+  "pricing": {
+    "model": "per_meeting",
+    "tiers": [
+      { "name": "Trial",     "meetings_per_month": 10, "price_cents": 0 },
+      { "name": "Pro",       "meetings_per_month": 100, "price_cents": 1900 },
+      { "name": "Team",      "meetings_per_month": 500, "price_cents": 4900 },
+      { "name": "Enterprise","meetings_per_month": "unlimited", "contact_sales": true }
+    ],
+    "overage_cents_per_meeting": 25
+  },
+  "permissions_requested": [
+    "task.read",
+    "task.comment.write",
+    "user.identity.read"
+  ],
+  "health_check": {
+    "method": "GET",
+    "path": "/api/agent/health",
+    "expected_status": 200,
+    "interval_seconds": 60
+  },
+  "screenshots": [
+    {
+      "url": "https://raw.githubusercontent.com/DansiDanutz/SemeClaw/main/docs/screenshots/dashboard.png",
+      "caption": "Live fleet dashboard"
+    }
+  ],
+  "tags": ["meeting", "voice", "agent", "recalibration", "war-room", "nervix"],
+  "created_at": "2026-04-18",
+  "minimum_nervix_version": "1.0"
+}

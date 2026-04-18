@@ -1,7 +1,7 @@
 [project]
 name = "semeclaw"
-version = "0.1.0"
-description = "SemeClaw - The AI Brain of DansLab Company"
+version = "0.4.0"
+description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
 dependencies = [

@@ -452,6 +452,63 @@ header::before{
 .tm-rag.speaking .tm-rname{color:var(--amber);font-weight:700}
 
 /* ══════════════════════════════════════════════
+   V3 — THEATER mode (fullscreen current speaker)
+   Toggled by adding .theater-layout on .tm-stage
+   ══════════════════════════════════════════════ */
+.tm-stage.theater-layout{position:relative}
+.tm-stage.theater-layout .tm-roster{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:260px;
+  border-bottom:1px solid var(--border);
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 50%, rgba(245,158,11,.15) 0%, transparent 65%),
+    linear-gradient(180deg,#050914 0%,#0a1326 50%,#050914 100%);
+  box-shadow:inset 0 0 140px rgba(0,0,0,.75);
+}
+.tm-stage.theater-layout .tm-rag{
+  opacity:.25;
+  transform:scale(.7);
+  transition:all .55s var(--ease-out);
+}
+.tm-stage.theater-layout .tm-rag.speaking{
+  opacity:1;
+  transform:scale(1.85) translateY(-6px);
+  z-index:10;
+}
+.tm-stage.theater-layout .tm-rag.has-spoken{opacity:.42}
+.tm-stage.theater-layout .tm-rav{
+  width:74px;height:74px;font-size:34px;
+}
+.tm-stage.theater-layout .tm-rag.speaking .tm-rav{
+  box-shadow:0 0 0 4px var(--amber),0 0 80px rgba(245,158,11,.65),0 0 180px rgba(245,158,11,.25);
+}
+.tm-stage.theater-layout .tm-rname{
+  font-size:9px;letter-spacing:1.4px;margin-top:8px;
+}
+.tm-stage.theater-layout .tm-rag.speaking .tm-rname{
+  font-size:10px;font-weight:800;color:var(--amber);text-shadow:0 0 16px rgba(245,158,11,.5);
+}
+/* Big subtitle strip directly under the avatar */
+.tm-stage.theater-layout .tm-dialogue{
+  padding:28px 42px 18px;
+  max-height:none;
+  text-align:center;
+  background:linear-gradient(180deg,rgba(3,6,15,.45),rgba(3,6,15,.85));
+}
+.tm-stage.theater-layout .tm-msg{
+  border-bottom:none;padding:10px 0;
+}
+.tm-stage.theater-layout .tm-msg .tm-msg-av{display:none}
+.tm-stage.theater-layout .tm-msg .tm-msg-body{
+  background:transparent;border:none;padding:0;max-width:none;
+}
+.tm-stage.theater-layout .tm-msg-head{justify-content:center;font-size:11px;letter-spacing:1px;margin-bottom:8px}
+.tm-stage.theater-layout .tm-msg-text{font-size:16px;line-height:1.6;max-width:780px;margin:0 auto;color:var(--text)}
+.tm-stage.theater-layout .tm-msg.user-msg .tm-msg-text{color:var(--cyan);font-style:italic}
+
+/* ══════════════════════════════════════════════
    V2 LAYOUT — "The Room" (split: table left, chat right)
    Toggled by adding .v2-layout on .tm-stage
    ══════════════════════════════════════════════ */
@@ -1323,7 +1380,8 @@ header::before{
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <div class="tm-lang-bar" id="tm-lang-bar"></div>
       <button class="mtb-btn" id="tm-voice-toggle" onclick="toggleTMVoice()">🔊 Voice</button>
-      <button class="mtb-btn" id="tm-layout-toggle" onclick="toggleTMLayout()" title="Switch layout">🎭 Room</button>
+      <button class="mtb-btn" id="tm-layout-toggle" onclick="toggleTMLayout()" title="Switch to cinematic V2 orbital room">🎭 Room</button>
+      <button class="mtb-btn" id="tm-theater-toggle" onclick="toggleTMTheater()" title="Fullscreen current speaker">🎬 Theater</button>
       <button class="mtb-btn" onclick="openTM();showTMHistory()">📋 History</button>
       <button class="mtb-btn" onclick="closeTM()">✕ Close</button>
     </div>
@@ -2852,16 +2910,31 @@ function _cancelScriptedMeeting() {
 
 /* ══════ V2 LAYOUT TOGGLE ══════ */
 let _tmV2Enabled = false;
+let _tmTheaterEnabled = false;   // V3 — fullscreen current speaker
 
 function toggleTMLayout() {
   _tmV2Enabled = !_tmV2Enabled;
+  if (_tmV2Enabled) _tmTheaterEnabled = false;
   const stage = document.getElementById('tm-stage');
   const btn = document.getElementById('tm-layout-toggle');
   if (!stage) return;
   stage.classList.toggle('v2-layout', _tmV2Enabled);
+  stage.classList.toggle('theater-layout', _tmTheaterEnabled);
   if (btn) btn.textContent = _tmV2Enabled ? '🎭 v2 Room' : '🎭 Room';
   toast(_tmV2Enabled ? '🎭 v2 Layout — cinematic room' : 'Flat layout');
   if (_tmV2Enabled) _positionAgentsOnTable();
+}
+
+function toggleTMTheater() {
+  _tmTheaterEnabled = !_tmTheaterEnabled;
+  if (_tmTheaterEnabled) _tmV2Enabled = false;
+  const stage = document.getElementById('tm-stage');
+  const btn = document.getElementById('tm-theater-toggle');
+  if (!stage) return;
+  stage.classList.toggle('v2-layout', _tmV2Enabled);
+  stage.classList.toggle('theater-layout', _tmTheaterEnabled);
+  if (btn) btn.textContent = _tmTheaterEnabled ? '🎬 v1' : '🎬 Theater';
+  toast(_tmTheaterEnabled ? '🎬 Theater mode — fullscreen speaker' : 'Flat layout');
 }
 
 /* Inject the orbital room decor (center feature card + title + v1 button) once */

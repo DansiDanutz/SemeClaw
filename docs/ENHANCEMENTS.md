@@ -2,9 +2,17 @@
 
 This is the wish-list for turning SemeClaw from "v0.2.0 embeddable agent" into a full-blown SaaS product. Items are grouped by category and priority.
 
-Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experimental · ✅ Shipped in v0.3.0
+Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experimental · ✅ Shipped
 
 ---
+
+## ✅ Delivered in v0.4.0 (2026-04-18 evening)
+
+- ✅ **SSE events** — `GET /api/events?tenant=&events=` streams every lifecycle event live. NERVIX + Paperclip UIs can subscribe via `EventSource`. 20s keepalive, tenant + event-name filtering.
+- ✅ **NERVIX marketplace card** — `integrations/nervix/card.json` (full manifest), `README.md` (install flow), `webhook_handler.example.ts` (TypeScript handler with signature verification).
+- ✅ **Paperclip first-class agent** — `GET /api/paperclip/agent-card` returns native manifest; `POST /api/paperclip/trigger` one-shot creates report + audio + share link + registers one-off webhook for the finalize callback.
+- ✅ **Theater mode (V3)** — `🎬 Theater` button in header adds `.theater-layout`; current speaker scales 1.85×, others dim, subtitle strip below. Perfect for demos/webinars.
+- ✅ Bumped manifest + headers + Dockerfile + pyproject.toml to `0.4.0`
 
 ## ✅ Delivered in v0.3.0 (2026-04-18)
 

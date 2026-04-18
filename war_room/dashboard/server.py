@@ -140,7 +140,7 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="SemeClaw War Room Agent", version="0.2.0")
+app = FastAPI(title="SemeClaw War Room Agent", version="0.4.0")
 
 # ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
@@ -188,7 +188,7 @@ async def _semeclaw_auth_and_csp(request, call_next):
     # Iframe-embed-friendly CSP
     if SEMECLAW_FRAME_ANCESTORS:
         response.headers["Content-Security-Policy"] = f"frame-ancestors {SEMECLAW_FRAME_ANCESTORS}"
-    response.headers["X-SemeClaw-Version"] = "0.2.0"
+    response.headers["X-SemeClaw-Version"] = "0.4.0"
     return response
 
 # WebSocket connection manager
@@ -560,19 +560,36 @@ def _save_webhooks(hooks: list[dict]) -> None:
     WEBHOOKS_FILE.write_text(json.dumps(hooks, indent=2))
 
 
+# In-process event bus — SSE subscribers receive every lifecycle event
+_SSE_SUBSCRIBERS: set[asyncio.Queue] = set()
+
+
 async def _dispatch_webhook(event: str, payload: dict) -> None:
-    """Fire-and-forget POST to every registered webhook subscribed to `event`."""
+    """Fire-and-forget broadcast to SSE subscribers AND registered webhooks."""
+    body = {
+        "event": event,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "agent_version": "0.4.0",
+        "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
+        "data": payload,
+    }
+    _bump("webhooks_fired")
+
+    # 1. Fan out to live SSE subscribers (local dashboards, NERVIX UI, Paperclip)
+    dead: list[asyncio.Queue] = []
+    for q in _SSE_SUBSCRIBERS:
+        try:
+            q.put_nowait(body)
+        except asyncio.QueueFull:
+            dead.append(q)
+    for q in dead:
+        _SSE_SUBSCRIBERS.discard(q)
+
+    # 2. Fan out to HTTP webhooks (async, signed)
     hooks = _load_webhooks()
     matches = [h for h in hooks if event in (h.get("events") or []) or "*" in (h.get("events") or [])]
     if not matches:
         return
-    body = {
-        "event": event,
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "agent_version": "0.2.0",
-        "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
-        "data": payload,
-    }
     raw = json.dumps(body).encode("utf-8")
     for h in matches:
         try:
@@ -586,11 +603,67 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
                         "content-type": "application/json",
                         "x-semeclaw-event": event,
                         "x-semeclaw-signature": f"sha256={sig}" if sig else "",
-                        "user-agent": "SemeClaw/0.2.0",
+                        "user-agent": "SemeClaw/0.4.0",
                     },
                 )
         except Exception as e:
             logger.warning("webhook %s → %s failed: %s", event, h.get("url"), e)
+
+
+@app.get("/api/events")
+async def api_events(tenant: str | None = None, events: str | None = None):
+    """Server-Sent Events stream of lifecycle events.
+
+    Query params:
+        tenant=<id>      only forward events for this tenant
+        events=a,b,c     filter to these event names (comma-sep)
+
+    Usage (browser):
+        const es = new EventSource('/api/events');
+        es.addEventListener('meeting.finalized', e => console.log(JSON.parse(e.data)));
+
+    Usage (server/Python):
+        httpx.stream('GET', url) then iter_lines() — parse SSE frames manually.
+    """
+    from fastapi.responses import StreamingResponse
+    wanted_events = set()
+    if events:
+        wanted_events = {e.strip() for e in events.split(",") if e.strip()}
+
+    q: asyncio.Queue = asyncio.Queue(maxsize=64)
+    _SSE_SUBSCRIBERS.add(q)
+
+    async def _stream():
+        # Initial hello
+        hello = {"event": "connected", "ts": datetime.now(timezone.utc).isoformat(),
+                 "agent_version": "0.4.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
+        yield f"event: connected\ndata: {json.dumps(hello)}\n\n"
+        try:
+            while True:
+                try:
+                    body = await asyncio.wait_for(q.get(), timeout=20.0)
+                except asyncio.TimeoutError:
+                    # Keepalive comment — stops intermediaries from closing the stream
+                    yield ": keepalive\n\n"
+                    continue
+                ev = body.get("event", "message")
+                if wanted_events and ev not in wanted_events:
+                    continue
+                if tenant and body.get("tenant_id") != tenant:
+                    continue
+                yield f"event: {ev}\ndata: {json.dumps(body)}\n\n"
+        finally:
+            _SSE_SUBSCRIBERS.discard(q)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/api/webhooks")
@@ -709,7 +782,7 @@ async def metrics():
     lines = [
         "# HELP semeclaw_info SemeClaw agent info",
         "# TYPE semeclaw_info gauge",
-        f'semeclaw_info{{version="0.2.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
+        f'semeclaw_info{{version="0.4.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
     ]
     for k, v in _METRICS.items():
         lines.append(f"# HELP semeclaw_{k} Count of {k}")
@@ -1311,7 +1384,7 @@ async def api_agent_manifest():
     return JSONResponse({
         "id":          "semeclaw-war-room",
         "name":        "SemeClaw War Room",
-        "version":     "0.2.0",
+        "version":     "0.4.0",
         "tenant":      SEMECLAW_TENANT_ID,
         "public_url":  SEMECLAW_PUBLIC_URL,
         "description": ("Cinematic AI agent meeting room. Converts any task report "
@@ -1325,17 +1398,30 @@ async def api_agent_manifest():
             "meeting.replan",      # rewrite remaining segments given Q&A
             "meeting.finalize",    # append Q&A + re-analyze source task
             "meeting.pin",         # save meeting+report beyond 48h
+            "meeting.share",       # public share links (30d TTL)
+            "meeting.events.sse",  # live SSE stream of lifecycle events
             "reports.list",
             "reports.content",
+            "reports.create",      # external systems ingest reports
+            "reports.upload",      # multipart .md upload
+            "reports.delete",
             "tts.synthesize",      # ElevenLabs Flash v2.5 → edge-tts fallback
             "embed.iframe",        # renders inside an iframe
             "embed.widget",        # script-tag SDK
+            "webhooks.register",   # HMAC-signed lifecycle webhooks
+            "metrics.prometheus",  # /metrics scrape target
+            "tenants.isolation",   # X-Tenant-Id header
+            "paperclip.trigger",   # one-shot meeting from a Paperclip task
+            "paperclip.card",      # first-class agent-card manifest
         ],
         "endpoints": {
             "health":      "/api/agent/health",
             "manifest":    "/api/agent/manifest",
             "reports":     "/api/reports",
             "report":      "/api/reports/content?name={name}",
+            "report_create": "POST /api/reports",
+            "report_upload": "POST /api/reports/upload",
+            "report_delete": "DELETE /api/reports?name={name}",
             "script":      "/api/meeting/script?name={name}&lang=en",
             "audio":       "/api/meeting/audio?name={name}",
             "redirect":    "/api/meeting/redirect",
@@ -1344,9 +1430,15 @@ async def api_agent_manifest():
             "pin":         "/api/meeting/pin?name={name}",
             "unpin":       "/api/meeting/unpin?file={file}&name={name}",
             "list":        "/api/meeting/list",
+            "share":       "POST /api/meetings/{name}/share",
+            "events_sse":  "/api/events?tenant={id}&events={csv}",
             "tts":         "/api/tts?text={text}&speaker={speaker}&lang=en",
             "embed_html":  "/embed?meeting={name}&v=2",
             "embed_js":    "/embed.js",
+            "metrics":     "/metrics",
+            "webhooks":    "/api/webhooks",
+            "paperclip_card":    "/api/paperclip/agent-card",
+            "paperclip_trigger": "POST /api/paperclip/trigger",
         },
         "auth": {
             "required_for_writes": auth_required,
@@ -1537,6 +1629,144 @@ async def _monitor_subprocess(proc: subprocess.Popen, task: str):
             "type": "state_update",
             "state": json.loads(STATE_FILE.read_text()),
         })
+
+
+# ---------------------------------------------------------------------------
+# Paperclip first-class agent adapter — Phase 4 endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/paperclip/agent-card")
+async def paperclip_agent_card():
+    """Paperclip agent-card manifest. A Paperclip control plane can fetch this
+    to register SemeClaw War Room as a native agent type on its marketplace."""
+    return JSONResponse({
+        "agent_type":   "semeclaw.war-room",
+        "version":      "0.4.0",
+        "name":         "War Room by SemeClaw",
+        "icon":         "🎭",
+        "description":  "Convene a cinematic multi-agent meeting on any task. "
+                        "Host announcer → orchestrator → 5 specialist agents → Dan closes. "
+                        "User can interject up to 2 questions; meeting recalibrates live. "
+                        "On close, task is re-analyzed with a VERDICT line.",
+        "endpoint":     SEMECLAW_PUBLIC_URL,
+        "triggers":     ["on_task_comment", "on_task_status_change:review",
+                         "manual_convene_meeting"],
+        "input_schema": {
+            "task_id":        {"type": "string", "required": True},
+            "task_markdown":  {"type": "string", "required": True,
+                               "desc": "The task content, ideally with ## Agent sections"},
+            "task_title":     {"type": "string", "required": False},
+            "tenant_id":      {"type": "string", "required": False},
+            "auto_audio":     {"type": "boolean", "required": False, "default": True},
+            "webhook_url":    {"type": "string", "required": False,
+                               "desc": "Posts back meeting.finalized payload"},
+        },
+        "output_schema": {
+            "meeting_id":           "string",
+            "report_name":          "string",
+            "audio_url":            "string",
+            "embed_url":            "string",
+            "share_url":            "string (30d TTL)",
+            "verdict_line":         "string (populated after finalize)",
+            "updated_markdown_url": "string (populated after finalize)",
+        },
+        "pricing_hint": {"model": "per_meeting", "est_cents": 25},
+        "docs_url":     f"{SEMECLAW_PUBLIC_URL}/docs/INTEGRATION.md",
+    })
+
+
+@app.post("/api/paperclip/trigger")
+async def paperclip_trigger(request: Request):
+    """Convenience endpoint for Paperclip: submit a task, get everything in one shot.
+
+    Body:
+        {task_id, task_title, task_markdown, tenant_id?, auto_audio?, webhook_url?}
+
+    Creates the report, optionally builds audio, optionally registers a one-off
+    webhook for this specific meeting's finalize event, and returns URLs.
+    """
+    data = await request.json()
+    task_id   = (data.get("task_id") or "").strip() or _uuid_ing.uuid4().hex[:8]
+    title     = (data.get("task_title") or task_id).strip()
+    markdown  = (data.get("task_markdown") or "").strip()
+    tenant    = (data.get("tenant_id") or _tenant_id(request) or "default").strip()
+    auto_audio = bool(data.get("auto_audio", True))
+    webhook_url = (data.get("webhook_url") or "").strip()
+
+    if not markdown:
+        return JSONResponse({"error": "task_markdown required"}, status_code=400)
+
+    # Build a stable report filename from task_id
+    stem = _re_ing.sub(r"[^a-zA-Z0-9_-]+", "-", task_id).strip("-").lower()[:60] or "task"
+    name = f"pc-{stem}.md"
+
+    # Ensure well-formed header
+    if not markdown.lstrip().startswith("#"):
+        header = (f"# Paperclip Task · {title}\n\n"
+                  f"**Task:** {title}\n"
+                  f"**Paperclip ID:** {task_id}\n"
+                  f"**Date:** {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
+                  f"**Via:** Paperclip adapter\n\n---\n\n")
+        markdown = header + markdown
+
+    # Pick storage dir based on tenant
+    if tenant and tenant != "default":
+        base = WAR_ROOM_DIR / "tenants" / _re_ing.sub(r"[^a-zA-Z0-9_-]", "-", tenant) / "research"
+    else:
+        base = RESEARCH_DIR
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / name
+    path.write_text(markdown, encoding="utf-8")
+
+    # Optional: build audio now
+    audio_url = None
+    if auto_audio:
+        mp3 = await _build_meeting_mp3(name)
+        if mp3:
+            audio_url = f"{SEMECLAW_PUBLIC_URL}/api/meeting/audio?name={name}"
+
+    # Optional: register one-off webhook for this finalize event
+    hook_id = None
+    if webhook_url and webhook_url.startswith("http"):
+        hooks = _load_webhooks()
+        hook_id = _uuid_ing.uuid4().hex[:8]
+        hooks.append({
+            "id": hook_id, "url": webhook_url,
+            "events": ["meeting.finalized"],
+            "secret": "", "one_off_meeting": name,
+            "source": "paperclip", "paperclip_task_id": task_id,
+            "created": datetime.now(timezone.utc).isoformat(),
+        })
+        _save_webhooks(hooks)
+
+    # Create a share token
+    token = _uuid_ing.uuid4().hex[:16]
+    expires = int(_time_ing.time()) + SHARE_TTL_DAYS * 86400
+    shares = _load_shares()
+    shares[token] = {"name": name, "expires": expires,
+                     "created": datetime.now(timezone.utc).isoformat(),
+                     "source": "paperclip", "paperclip_task_id": task_id}
+    _save_shares(shares)
+
+    # Emit a lifecycle event so SSE subscribers get notified immediately
+    await _dispatch_webhook("paperclip.triggered", {
+        "paperclip_task_id": task_id,
+        "report_name": name,
+        "tenant_id": tenant,
+    })
+
+    return JSONResponse({
+        "ok":            True,
+        "paperclip_task_id": task_id,
+        "report_name":   name,
+        "meeting_id":    path.stem,
+        "audio_url":     audio_url,
+        "embed_url":     f"{SEMECLAW_PUBLIC_URL}/embed?meeting={name}&v=2",
+        "share_url":     f"{SEMECLAW_PUBLIC_URL}/share/{token}",
+        "script_url":    f"{SEMECLAW_PUBLIC_URL}/api/meeting/script?name={name}",
+        "manifest_url":  f"{SEMECLAW_PUBLIC_URL}/api/paperclip/agent-card",
+        "webhook_registered": bool(hook_id),
+    })
 
 
 @app.get("/api/paperclip/agents")
