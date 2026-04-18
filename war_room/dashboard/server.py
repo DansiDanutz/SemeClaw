@@ -140,7 +140,7 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="SemeClaw War Room Agent", version="0.4.0")
+app = FastAPI(title="SemeClaw War Room Agent", version="0.5.0")
 
 # ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
@@ -188,7 +188,7 @@ async def _semeclaw_auth_and_csp(request, call_next):
     # Iframe-embed-friendly CSP
     if SEMECLAW_FRAME_ANCESTORS:
         response.headers["Content-Security-Policy"] = f"frame-ancestors {SEMECLAW_FRAME_ANCESTORS}"
-    response.headers["X-SemeClaw-Version"] = "0.4.0"
+    response.headers["X-SemeClaw-Version"] = "0.5.0"
     return response
 
 # WebSocket connection manager
@@ -569,7 +569,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     body = {
         "event": event,
         "ts": datetime.now(timezone.utc).isoformat(),
-        "agent_version": "0.4.0",
+        "agent_version": "0.5.0",
         "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
         "data": payload,
     }
@@ -603,7 +603,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
                         "content-type": "application/json",
                         "x-semeclaw-event": event,
                         "x-semeclaw-signature": f"sha256={sig}" if sig else "",
-                        "user-agent": "SemeClaw/0.4.0",
+                        "user-agent": "SemeClaw/0.5.0",
                     },
                 )
         except Exception as e:
@@ -636,7 +636,7 @@ async def api_events(tenant: str | None = None, events: str | None = None):
     async def _stream():
         # Initial hello
         hello = {"event": "connected", "ts": datetime.now(timezone.utc).isoformat(),
-                 "agent_version": "0.4.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
+                 "agent_version": "0.5.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
         yield f"event: connected\ndata: {json.dumps(hello)}\n\n"
         try:
             while True:
@@ -775,6 +775,268 @@ def _bump(key: str, n: int = 1) -> None:
     _METRICS[key] = _METRICS.get(key, 0) + n
 
 
+# ---------------------------------------------------------------------------
+# v0.5.0 — Voice overrides, Meeting templates, Cost ledger, Audit
+# ---------------------------------------------------------------------------
+
+VOICE_MAP_FILE = WAR_ROOM_DIR / "voice_overrides.json"
+
+
+def _load_voice_overrides() -> dict:
+    if not VOICE_MAP_FILE.exists():
+        return {}
+    try:
+        return json.loads(VOICE_MAP_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_voice_overrides(d: dict) -> None:
+    VOICE_MAP_FILE.write_text(json.dumps(d, indent=2))
+
+
+def _resolve_voice_for_tenant(speaker: str, tenant_id: str) -> str:
+    """Return the overridden voice for (tenant, speaker) if set, else the default."""
+    overrides = _load_voice_overrides()
+    tenant_map = overrides.get(tenant_id, {})
+    if speaker in tenant_map:
+        return tenant_map[speaker]
+    # Fallback to global overrides ("default" tenant) then to _ELEVEN_VOICES
+    global_map = overrides.get("default", {})
+    return global_map.get(speaker, _ELEVEN_VOICES.get(speaker, ""))
+
+
+@app.get("/api/voices/map")
+async def api_voices_map(request: Request):
+    """Current {speaker → voice} mapping for this tenant. Shows defaults
+    overlaid with any custom overrides."""
+    tenant = _tenant_id(request)
+    overrides = _load_voice_overrides().get(tenant, {})
+    merged = {**_ELEVEN_VOICES, **overrides}
+    return JSONResponse({
+        "tenant_id": tenant,
+        "defaults": _ELEVEN_VOICES,
+        "overrides": overrides,
+        "effective": merged,
+    })
+
+
+@app.put("/api/voices/map")
+async def api_voices_map_set(request: Request):
+    """Update the voice map for this tenant.
+    Body: {"speaker_name": "voice_name", ...}
+    Unknown speakers are accepted. To clear a mapping, set value to null."""
+    data = await request.json()
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+    tenant = _tenant_id(request)
+    overrides = _load_voice_overrides()
+    current = overrides.get(tenant, {})
+    for speaker, voice in data.items():
+        if voice in (None, ""):
+            current.pop(speaker, None)
+        else:
+            current[speaker] = str(voice)
+    overrides[tenant] = current
+    _save_voice_overrides(overrides)
+    return JSONResponse({
+        "ok": True, "tenant_id": tenant,
+        "overrides": current,
+    })
+
+
+# --- Meeting templates ---------------------------------------------------
+MEETING_TEMPLATES = {
+    "bug-triage": {
+        "id": "bug-triage",
+        "name": "Bug Triage",
+        "description": "Team reviews a bug report, assigns severity, owner, and next step.",
+        "icon": "🐛",
+        "markdown_template": (
+            "# Bug Triage — {title}\n\n"
+            "**Task:** {title}\n\n"
+            "## Research Agent\n\n"
+            "Repro steps: {repro}\nImpact: {impact}\nFirst seen: {first_seen}.\n\n"
+            "## Strategist Agent\n\n"
+            "Severity recommendation + priority tier. Cross-reference known similar incidents.\n\n"
+            "## Writer Agent\n\n"
+            "Write the fix plan: 1-2 sentence approach, assign owner, estimate LOE.\n"
+        ),
+        "required_fields": ["title", "repro", "impact", "first_seen"],
+    },
+    "sprint-planning": {
+        "id": "sprint-planning",
+        "name": "Sprint Planning",
+        "description": "Team scopes upcoming sprint by balancing priorities against capacity.",
+        "icon": "🏃",
+        "markdown_template": (
+            "# Sprint Planning — {sprint_name}\n\n"
+            "**Task:** Plan sprint {sprint_name}\n"
+            "**Capacity:** {capacity} story points\n\n"
+            "## Research Agent\n\n"
+            "Pull backlog stats: open items, recent velocity, carry-over.\n\n"
+            "## Strategist Agent\n\n"
+            "Top priorities: {priorities}. Trade-off matrix vs available capacity.\n\n"
+            "## Writer Agent\n\n"
+            "Commit list: ordered stories with point estimates summing to ≤ capacity.\n"
+        ),
+        "required_fields": ["sprint_name", "capacity", "priorities"],
+    },
+    "post-mortem": {
+        "id": "post-mortem",
+        "name": "Post-Mortem",
+        "description": "Blameless incident review with clear corrective actions.",
+        "icon": "🔥",
+        "markdown_template": (
+            "# Post-Mortem — {incident}\n\n"
+            "**Task:** Post-mortem for {incident}\n"
+            "**Duration:** {duration}\n"
+            "**Impact:** {impact}\n\n"
+            "## Research Agent\n\n"
+            "Timeline of events leading up to and during the incident.\n\n"
+            "## Strategist Agent\n\n"
+            "Root cause analysis (5 whys). Was this a known risk?\n\n"
+            "## Writer Agent\n\n"
+            "3 concrete action items with owners + due dates. Preventive + detective.\n"
+        ),
+        "required_fields": ["incident", "duration", "impact"],
+    },
+    "customer-interview": {
+        "id": "customer-interview",
+        "name": "Customer Interview Debrief",
+        "description": "Synthesize a customer call into insights + next steps.",
+        "icon": "💬",
+        "markdown_template": (
+            "# Customer Interview — {customer}\n\n"
+            "**Task:** Debrief {customer} interview\n"
+            "**Persona:** {persona}\n\n"
+            "## Research Agent\n\n"
+            "Key quotes + raw observations from the call.\n\n"
+            "## Strategist Agent\n\n"
+            "Pattern match against existing customer data. What's a signal vs noise?\n\n"
+            "## Writer Agent\n\n"
+            "Top 3 product implications + recommended follow-up.\n"
+        ),
+        "required_fields": ["customer", "persona"],
+    },
+}
+
+
+@app.get("/api/meeting/templates")
+async def api_meeting_templates():
+    """List available meeting templates."""
+    return JSONResponse({
+        "templates": list(MEETING_TEMPLATES.values()),
+        "count": len(MEETING_TEMPLATES),
+    })
+
+
+@app.get("/api/meeting/templates/{template_id}")
+async def api_meeting_template_get(template_id: str):
+    tpl = MEETING_TEMPLATES.get(template_id)
+    if not tpl:
+        return JSONResponse({"error": "template not found"}, status_code=404)
+    return JSONResponse(tpl)
+
+
+@app.post("/api/meeting/templates/{template_id}/use")
+async def api_meeting_template_use(template_id: str, request: Request):
+    """Convene a meeting from a template.
+    Body: {fields: {...}, auto_audio?: bool, tenant_id?}
+    Returns the same shape as /api/paperclip/trigger."""
+    tpl = MEETING_TEMPLATES.get(template_id)
+    if not tpl:
+        return JSONResponse({"error": "template not found"}, status_code=404)
+
+    body = await request.json()
+    fields = body.get("fields") or {}
+    required = tpl.get("required_fields") or []
+    missing = [f for f in required if not fields.get(f)]
+    if missing:
+        return JSONResponse({
+            "error": f"missing required fields: {', '.join(missing)}",
+            "required": required,
+        }, status_code=400)
+
+    try:
+        markdown = tpl["markdown_template"].format(**fields)
+    except KeyError as e:
+        return JSONResponse({"error": f"missing template field: {e}"}, status_code=400)
+
+    task = fields.get("title") or fields.get("incident") or fields.get("customer") or fields.get("sprint_name") or tpl["name"]
+    name = f"{template_id}-{_re_ing.sub(r'[^a-z0-9]+', '-', task.lower()).strip('-')[:50]}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.md"
+
+    base = _report_dir_for_tenant(request)
+    path = base / name
+    path.write_text(markdown, encoding="utf-8")
+
+    audio_url = None
+    if body.get("auto_audio"):
+        mp3 = await _build_meeting_mp3(name)
+        if mp3:
+            audio_url = f"{SEMECLAW_PUBLIC_URL}/api/meeting/audio?name={name}"
+
+    await _dispatch_webhook("template.used", {
+        "template_id": template_id, "report_name": name,
+        "tenant_id": _tenant_id(request),
+    })
+
+    return JSONResponse({
+        "ok": True,
+        "template_id": template_id,
+        "report_name": name,
+        "audio_url": audio_url,
+        "embed_url": f"{SEMECLAW_PUBLIC_URL}/embed?meeting={name}&v=2",
+        "script_url": f"{SEMECLAW_PUBLIC_URL}/api/meeting/script?name={name}",
+        "tenant_id": _tenant_id(request),
+    })
+
+
+# --- Cost ledger ---------------------------------------------------------
+_COST_LEDGER: dict[str, dict[str, int]] = {}  # tenant_id → {metric: count}
+
+
+def _cost_bump(tenant: str, metric: str, n: int = 1) -> None:
+    bucket = _COST_LEDGER.setdefault(tenant, {})
+    bucket[metric] = bucket.get(metric, 0) + n
+
+
+@app.get("/api/tenants/{tenant_id}/costs")
+async def api_tenant_costs(tenant_id: str):
+    """Per-tenant usage counters. Useful for metered billing upstream."""
+    usage = _COST_LEDGER.get(tenant_id, {})
+    # Approximate USD cost hints (adjust to your pricing):
+    #   ElevenLabs Flash v2.5  ≈ $5 per 1M chars
+    #   Gemini 2.5 Flash       ≈ $0.30 per 1M input tokens
+    tts_chars = usage.get("tts_chars", 0)
+    llm_tokens = usage.get("llm_tokens", 0)
+    approx_cents = int((tts_chars / 1_000_000 * 500) + (llm_tokens / 1_000_000 * 30))
+    return JSONResponse({
+        "tenant_id": tenant_id,
+        "usage": usage,
+        "approx_cost_cents": approx_cents,
+        "pricing_notes": {
+            "tts_chars_per_dollar":   200_000,
+            "llm_tokens_per_dollar":  3_333_333,
+        },
+    })
+
+
+@app.get("/api/tenants/costs")
+async def api_tenants_costs_all():
+    """List cost snapshots for every known tenant."""
+    out = []
+    for t, usage in _COST_LEDGER.items():
+        tts_chars = usage.get("tts_chars", 0)
+        llm_tokens = usage.get("llm_tokens", 0)
+        out.append({
+            "tenant_id": t,
+            "usage": usage,
+            "approx_cost_cents": int((tts_chars / 1_000_000 * 500) + (llm_tokens / 1_000_000 * 30)),
+        })
+    return JSONResponse(sorted(out, key=lambda x: x["approx_cost_cents"], reverse=True))
+
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus exposition format. Scrape with Prometheus, Grafana Agent, etc."""
@@ -782,7 +1044,7 @@ async def metrics():
     lines = [
         "# HELP semeclaw_info SemeClaw agent info",
         "# TYPE semeclaw_info gauge",
-        f'semeclaw_info{{version="0.4.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
+        f'semeclaw_info{{version="0.5.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
     ]
     for k, v in _METRICS.items():
         lines.append(f"# HELP semeclaw_{k} Count of {k}")
@@ -1384,7 +1646,7 @@ async def api_agent_manifest():
     return JSONResponse({
         "id":          "semeclaw-war-room",
         "name":        "SemeClaw War Room",
-        "version":     "0.4.0",
+        "version":     "0.5.0",
         "tenant":      SEMECLAW_TENANT_ID,
         "public_url":  SEMECLAW_PUBLIC_URL,
         "description": ("Cinematic AI agent meeting room. Converts any task report "
@@ -1413,6 +1675,11 @@ async def api_agent_manifest():
             "tenants.isolation",   # X-Tenant-Id header
             "paperclip.trigger",   # one-shot meeting from a Paperclip task
             "paperclip.card",      # first-class agent-card manifest
+            "templates.list",      # meeting templates (bug-triage, sprint-planning, etc.)
+            "templates.use",       # convene meeting from a template
+            "voices.override",     # per-tenant speaker→voice override
+            "costs.ledger",        # per-tenant usage + cost snapshot
+            "layout.theater",      # V3 fullscreen-speaker UI
         ],
         "endpoints": {
             "health":      "/api/agent/health",
@@ -1641,7 +1908,7 @@ async def paperclip_agent_card():
     to register SemeClaw War Room as a native agent type on its marketplace."""
     return JSONResponse({
         "agent_type":   "semeclaw.war-room",
-        "version":      "0.4.0",
+        "version":      "0.5.0",
         "name":         "War Room by SemeClaw",
         "icon":         "🎭",
         "description":  "Convene a cinematic multi-agent meeting on any task. "
@@ -2773,11 +3040,12 @@ _LANG_NAMES: dict[str, str] = {
 
 
 @app.get("/api/tts")
-async def api_tts(text: str, speaker: str = "", lang: str = "en"):
-    """Stream MP3 audio for a given text + speaker using edge-tts neural voices.
+async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "en"):
+    """Stream MP3 audio for a given text + speaker using ElevenLabs or edge-tts neural voices.
 
     Returns: audio/mpeg binary — play directly with <audio> or AudioContext.
-    Cached in memory (LRU-style) to avoid repeated network calls for the same phrase.
+    Honours per-tenant voice overrides from /api/voices/map.
+    Counts tts_chars against the tenant's cost ledger.
     """
     import io
     try:
@@ -2787,11 +3055,18 @@ async def api_tts(text: str, speaker: str = "", lang: str = "en"):
 
     from fastapi.responses import Response as FResponse
 
+    _bump("tts_requests")
+    tenant = _tenant_id(request)
+    _cost_bump(tenant, "tts_chars", len(text or ""))
+
+    # Resolve effective voice (tenant override wins)
+    effective_voice_name = _resolve_voice_for_tenant(speaker, tenant)
+
     # ── ElevenLabs Flash v2.5 path (English only, key required) ────────────
-    if _ELEVEN_KEY and (not lang or lang == "en") and speaker in _ELEVEN_VOICES:
+    if _ELEVEN_KEY and (not lang or lang == "en") and effective_voice_name:
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
-                voice_id = await _resolve_eleven_voice_id(client, _ELEVEN_VOICES[speaker])
+                voice_id = await _resolve_eleven_voice_id(client, effective_voice_name)
                 if voice_id:
                     resp = await client.post(
                         f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
@@ -2814,7 +3089,8 @@ async def api_tts(text: str, speaker: str = "", lang: str = "en"):
                             headers={
                                 "Cache-Control": "public, max-age=3600",
                                 "X-Speaker": speaker,
-                                "X-Voice": _ELEVEN_VOICES[speaker],
+                                "X-Voice": effective_voice_name,
+                                "X-Tenant": tenant,
                                 "X-TTS-Engine": "elevenlabs-flash-v2.5",
                             },
                         )

@@ -1,6 +1,6 @@
 # SemeClaw War Room Agent — production image (Phase 2)
-# Build:  docker build -t ghcr.io/dansidanutz/semeclaw:0.4.0 .
-# Run:    docker run -p 8765:8765 --env-file .env ghcr.io/dansidanutz/semeclaw:0.4.0
+# Build:  docker build -t ghcr.io/dansidanutz/semeclaw:0.5.0 .
+# Run:    docker run -p 8765:8765 --env-file .env ghcr.io/dansidanutz/semeclaw:0.5.0
 
 FROM python:3.13-slim AS base
 

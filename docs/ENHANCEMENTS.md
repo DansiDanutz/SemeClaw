@@ -6,6 +6,15 @@ Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experiment
 
 ---
 
+## ✅ Delivered in v0.5.0 (2026-04-18 night)
+
+- ✅ **pytest suite** — 23 tests covering `meeting_skill` parser + builder (sections, attendees, handoffs, segment counts, determinism, edge cases). Run with `uv run pytest tests/`.
+- ✅ **Per-tenant voice overrides** — `GET/PUT /api/voices/map` — override the `{speaker → voice}` table per `X-Tenant-Id`. `/api/tts` honours the override transparently.
+- ✅ **Meeting templates** — `GET /api/meeting/templates`, `GET /api/meeting/templates/{id}`, `POST /api/meeting/templates/{id}/use`. Ships with **bug-triage**, **sprint-planning**, **post-mortem**, **customer-interview** pre-built scripts.
+- ✅ **Cost ledger** — `GET /api/tenants/{id}/costs` (per-tenant) + `GET /api/tenants/costs` (all). Tracks `tts_chars` + `llm_tokens` and returns approximate USD-cents using documented provider rates.
+- ✅ **Fly.io deploy config** — `fly.toml` — one-command `fly deploy` using the `ghcr.io/dansidanutz/semeclaw:latest` image, with persistent volume for meetings + reports.
+- ✅ **Audit counters** in `/metrics` — every TTS request counted per tenant.
+
 ## ✅ Delivered in v0.4.0 (2026-04-18 evening)
 
 - ✅ **SSE events** — `GET /api/events?tenant=&events=` streams every lifecycle event live. NERVIX + Paperclip UIs can subscribe via `EventSource`. 20s keepalive, tenant + event-name filtering.

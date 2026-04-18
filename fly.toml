@@ -1,0 +1,71 @@
+# SemeClaw War Room Agent — Fly.io deploy config
+#
+# Quickstart:
+#   brew install flyctl
+#   fly launch --copy-config --no-deploy
+#   fly secrets set ELEVENLABS_API_KEY=... OPENROUTER_API_KEY=... SEMECLAW_API_KEY=...
+#   fly deploy
+#
+# The container pulls ghcr.io/dansidanutz/semeclaw:latest automatically.
+# For pinned releases change the image tag.
+
+app = "semeclaw"
+primary_region = "iad"            # change to your nearest region
+
+[build]
+  image = "ghcr.io/dansidanutz/semeclaw:latest"
+
+[env]
+  SEMECLAW_PUBLIC_URL     = "https://semeclaw.fly.dev"
+  SEMECLAW_CORS_ORIGINS   = "*"
+  SEMECLAW_FRAME_ANCESTORS = "*"
+  SEMECLAW_TENANT_ID      = "default"
+
+# Secrets (set via `fly secrets set ...`):
+#   ELEVENLABS_API_KEY
+#   OPENROUTER_API_KEY
+#   SEMECLAW_API_KEY
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8765
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout  = "3s"
+    grace_period = "10s"
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout  = "5s"
+    method   = "get"
+    path     = "/api/agent/health"
+    protocol = "http"
+    grace_period = "15s"
+
+[[mounts]]
+  source      = "semeclaw_data"
+  destination = "/app/war_room"
+  # Persists meeting audio, reports, webhooks.json, shares.json, tenant data
+
+[deploy]
+  strategy = "rolling"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "512mb"
