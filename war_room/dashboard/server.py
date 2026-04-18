@@ -191,6 +191,61 @@ async def _semeclaw_auth_and_csp(request, call_next):
     response.headers["X-SemeClaw-Version"] = "0.6.0"
     return response
 
+
+# ---------------------------------------------------------------------------
+# In-memory sliding-window rate limiter (no external deps)
+# Protects expensive public endpoints (TTS, audio) from abuse.
+# Per-IP, per-path prefix. Limits reset after _RATE_LIMIT_WINDOW seconds.
+# ---------------------------------------------------------------------------
+import collections as _collections
+import time as _time
+
+_RATE_LIMIT_WINDOW = 60  # seconds
+
+# Max requests per IP per window for each path prefix
+_RATE_LIMIT_BY_PREFIX: dict[str, int] = {
+    "/api/tts":             20,   # ElevenLabs costs money
+    "/api/meeting/audio":  10,   # ffmpeg + TTS — heavy
+    "/api/meeting/script":  30,   # pure compute, still throttled
+}
+
+# key: f"{ip}|{path_prefix}" → deque of monotonic timestamps
+_RATE_WINDOWS: dict[str, _collections.deque] = {}
+
+
+@app.middleware("http")
+async def _rate_limiter(request: Request, call_next):
+    path = request.url.path
+    limit: int | None = None
+    matched_prefix: str = ""
+    for prefix, lim in _RATE_LIMIT_BY_PREFIX.items():
+        if path.startswith(prefix):
+            limit = lim
+            matched_prefix = prefix
+            break
+
+    if limit is not None:
+        ip = (request.client.host if request.client else "unknown")
+        key = f"{ip}|{matched_prefix}"
+        now = _time.monotonic()
+
+        window = _RATE_WINDOWS.setdefault(key, _collections.deque())
+        cutoff = now - _RATE_LIMIT_WINDOW
+        while window and window[0] < cutoff:
+            window.popleft()
+
+        if len(window) >= limit:
+            from fastapi.responses import JSONResponse as _J
+            return _J(
+                {"error": "rate_limit_exceeded", "retry_after": _RATE_LIMIT_WINDOW},
+                status_code=429,
+                headers={"Retry-After": str(_RATE_LIMIT_WINDOW)},
+            )
+
+        window.append(now)
+
+    return await call_next(request)
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):
@@ -1942,6 +1997,10 @@ async def api_agent_manifest():
             "billing.stripe",      # Stripe scaffold (opt-in via env)
             "integrations.slack",  # /semeclaw slash command bot
             "integrations.github", # GitHub Action for PR meetings
+            "skills.registry",     # agent skill cards — who knows what
+            "meeting.agents",      # discover agents in a specific meeting
+            "meeting.inject",      # human injects requirement/question mid-meeting
+            "compound.engineering",# compound-engineering-plugin integration
         ],
         "endpoints": {
             "health":      "/api/agent/health",
@@ -1959,7 +2018,7 @@ async def api_agent_manifest():
             "pin":         "/api/meeting/pin?name={name}",
             "unpin":       "/api/meeting/unpin?file={file}&name={name}",
             "list":        "/api/meeting/list",
-            "share":       "POST /api/meetings/{name}/share",
+            "share":       "GET /api/meeting/share?name={name}",
             "events_sse":  "/api/events?tenant={id}&events={csv}",
             "tts":         "/api/tts?text={text}&speaker={speaker}&lang=en",
             "embed_html":  "/embed?meeting={name}&v=2",
@@ -1968,6 +2027,11 @@ async def api_agent_manifest():
             "webhooks":    "/api/webhooks",
             "paperclip_card":    "/api/paperclip/agent-card",
             "paperclip_trigger": "POST /api/paperclip/trigger",
+            # Skill registry — human interaction protocol
+            "skills_list":   "/api/agents/skills",
+            "skill_detail":  "/api/agents/skills/{skill_id}",
+            "meeting_agents":"/api/meeting/agents?name={name}",
+            "inject":        "POST /api/meeting/inject",
         },
         "auth": {
             "required_for_writes": auth_required,
@@ -1997,6 +2061,408 @@ async def api_agent_manifest():
             "supabase":  True,
             "telegram":  False,
         },
+    })
+
+
+# ---------------------------------------------------------------------------
+# Skill Registry — agent skill discovery and human interaction protocol
+# ---------------------------------------------------------------------------
+
+# Skills directory lives at SemeClaw/skills/ (project root)
+_SKILLS_DIR = Path(__file__).parent.parent.parent / "skills"
+
+# Speaker-to-skill-id mapping (mirrors _SECTION_ROUTES in meeting_skill.py)
+_SPEAKER_TO_SKILL: dict[str, str] = {
+    "Autoresearch": "autoresearch",
+    "Discovery":    "autoresearch",  # alias
+    "GSD":          "gsd",
+    "Hermes":       "hermes",
+    "David":        "david",
+    "Dexter":       "dexter",
+    "Narrator":     "narrator",
+    # Additional speakers that may appear in meetings but have no skill file
+    "Dan":          "",
+    "Doctor":       "",
+    "Monitor":      "",
+    "Finance":      "",
+    "Growth":       "",
+    "Learning":     "",
+    "N8N":          "",
+    "Obsidian":     "",
+    "Codex":        "",
+    "Claude Code":  "",
+}
+
+
+def _load_skill(skill_id: str) -> dict | None:
+    """Load and parse a SKILL.md file from the skills directory."""
+    path = _SKILLS_DIR / f"{skill_id}.md"
+    if not path.exists():
+        return None
+    raw = path.read_text(encoding="utf-8")
+
+    # Split YAML frontmatter from body
+    parts = raw.split("---", 2)
+    meta: dict = {}
+    body = raw
+    if len(parts) >= 3:
+        import yaml as _yaml  # optional — fall back to manual parse
+        try:
+            meta = _yaml.safe_load(parts[1]) or {}
+        except Exception:
+            # Manual parse for key: value lines
+            for line in parts[1].strip().splitlines():
+                if ":" in line:
+                    k, _, v = line.partition(":")
+                    meta[k.strip()] = v.strip().strip('"')
+        body = parts[2].strip()
+
+    return {
+        "id":           meta.get("id", skill_id),
+        "name":         meta.get("name", skill_id),
+        "speaker":      meta.get("speaker", ""),
+        "paperclip_agent": meta.get("paperclip_agent"),
+        "role":         meta.get("role", ""),
+        "version":      meta.get("version", "1.0.0"),
+        "triggers":     meta.get("triggers") or [],
+        "interacts_with": meta.get("interacts_with") or [],
+        "shared_files": meta.get("shared_files") or [],
+        "how_to_invoke": meta.get("how_to_invoke", ""),
+        "human_interaction": (meta.get("human_interaction") or "").strip(),
+        "body":         body,
+        "source":       f"skills/{skill_id}.md",
+    }
+
+
+def _all_skills() -> list[dict]:
+    """Return all available skill cards (summary only)."""
+    skills = []
+    if not _SKILLS_DIR.exists():
+        return skills
+    for p in sorted(_SKILLS_DIR.glob("*.md")):
+        skill = _load_skill(p.stem)
+        if skill:
+            skills.append(skill)
+    return skills
+
+
+def _skill_for_speaker(speaker: str) -> dict | None:
+    """Look up a skill card by speaker name."""
+    skill_id = _SPEAKER_TO_SKILL.get(speaker, "")
+    if not skill_id:
+        return None
+    return _load_skill(skill_id)
+
+
+@app.get("/api/agents/skills")
+async def api_agents_skills():
+    """List all War Room agent skill cards.
+
+    Returns each agent's id, name, role, triggers, interaction graph, and
+    human interaction protocol — so humans and external systems can discover
+    who knows what before or during a meeting.
+    """
+    skills = _all_skills()
+    return JSONResponse({
+        "count": len(skills),
+        "skills_dir": str(_SKILLS_DIR),
+        "agents": [
+            {
+                "id":             s["id"],
+                "name":           s["name"],
+                "speaker":        s["speaker"],
+                "role":           s["role"],
+                "version":        s["version"],
+                "triggers":       s["triggers"],
+                "how_to_invoke":  s["how_to_invoke"],
+                "interacts_with": s["interacts_with"],
+                "human_interaction": s["human_interaction"],
+                "paperclip_agent":   s["paperclip_agent"],
+                "source":         s["source"],
+            }
+            for s in skills
+        ],
+    })
+
+
+@app.get("/api/agents/skills/{skill_id}")
+async def api_agents_skill_detail(skill_id: str):
+    """Full skill card for a specific agent (includes the full markdown body).
+
+    Use this to understand exactly what an agent knows, how to talk to it,
+    and how it hands off to other agents.
+    """
+    skill = _load_skill(skill_id)
+    if skill is None:
+        return JSONResponse({"error": f"skill '{skill_id}' not found"}, status_code=404)
+    return JSONResponse(skill)
+
+
+@app.get("/api/meeting/agents")
+async def api_meeting_agents(name: str = ""):
+    """Return skill cards for every agent present in a specific meeting.
+
+    Given a meeting report name, parses the script to find which speakers
+    appear, then returns their full skill cards. Use this to know who is in
+    the room and how to interact with each of them.
+    """
+    if not name:
+        return JSONResponse({"error": "name required"}, status_code=400)
+
+    # Load the report to extract speakers
+    report_path = _find_report(name)
+    if report_path is None:
+        return JSONResponse({"error": "report not found"}, status_code=404)
+
+    content = report_path.read_text(encoding="utf-8")
+
+    # Extract ## headings to find which agents are in this meeting
+    heading_re = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+    from meeting_skill import _route_section
+    speakers_seen: dict[str, bool] = {}
+    for m in heading_re.finditer(content):
+        speaker = _route_section(m.group(1))
+        speakers_seen[speaker] = True
+
+    # Always include David and Dan (orchestrator + boss)
+    speakers_seen["David"] = True
+    speakers_seen["Dan"] = True
+    speakers_seen["Narrator"] = True
+
+    agent_cards = []
+    for speaker in speakers_seen:
+        skill = _skill_for_speaker(speaker)
+        if skill:
+            agent_cards.append({
+                "id":               skill["id"],
+                "name":             skill["name"],
+                "speaker":          speaker,
+                "role":             skill["role"],
+                "how_to_invoke":    skill["how_to_invoke"],
+                "human_interaction": skill["human_interaction"],
+                "triggers":         skill["triggers"],
+                "interacts_with":   skill["interacts_with"],
+            })
+        else:
+            # Speaker present but no skill card — return minimal entry
+            agent_cards.append({
+                "id":     speaker.lower().replace(" ", "_"),
+                "name":   speaker,
+                "speaker": speaker,
+                "role":   "Specialist",
+                "how_to_invoke": f"Ask {speaker} directly about their domain.",
+                "human_interaction": "",
+                "triggers": [],
+                "interacts_with": [],
+            })
+
+    return JSONResponse({
+        "meeting": name,
+        "agent_count": len(agent_cards),
+        "agents": agent_cards,
+        "human_guide": (
+            "To interact with any agent mid-meeting: POST /api/meeting/inject with "
+            "your message and the agent's id (or leave agent_id blank for auto-routing). "
+            "The meeting will recalibrate remaining segments based on your input."
+        ),
+    })
+
+
+@app.post("/api/meeting/inject")
+async def api_meeting_inject(request: Request):
+    """Human injects new requirements or a question into a live meeting.
+
+    This is the primary human-in-the-loop endpoint. Unlike /redirect (pick
+    one agent to answer), inject handles three scenarios:
+
+    1. Question → auto-routes to best agent, returns answer
+    2. New requirement → recalibrates all remaining segments
+    3. Both → routes + answers + recalibrates in one call
+
+    Request body:
+    {
+      "message":    "string — the human's message",
+      "intent":     "question" | "requirement" | "both" (default: "both"),
+      "agent_id":   "string — optional, force route to this agent speaker name",
+      "meeting":    {
+        "name":      "report name",
+        "subject":   "meeting subject",
+        "attendees": ["David", "GSD", "Autoresearch", ...],
+        "history":   [{speaker, text}, ...],   // last N transcript turns
+        "remaining": [{speaker, text, role, pause_ms_after}, ...]  // segments not yet played
+      }
+    }
+
+    Response:
+    {
+      "responder":   "AgentName",
+      "response":    "The agent's answer",
+      "responder_skill": { ...skill card summary... },
+      "recalibrated_segments": [...],  // updated remaining segments (may be empty if intent=question)
+      "recalibrated": bool,
+      "inject_id":  "uuid"
+    }
+    """
+    _bump("questions_asked")
+    import uuid as _uuid_inj
+
+    data = await request.json()
+    message   = (data.get("message") or "").strip()
+    intent    = (data.get("intent") or "both").strip().lower()
+    forced_agent = (data.get("agent_id") or "").strip()
+
+    meeting   = data.get("meeting") or {}
+    name      = (meeting.get("name") or "").strip()
+    subject   = (meeting.get("subject") or "").strip()
+    attendees = meeting.get("attendees") or []
+    history   = meeting.get("history") or []
+    remaining = meeting.get("remaining") or []
+
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+
+    inject_id = str(_uuid_inj.uuid4())[:8]
+
+    # ---------------------------------------------------------------
+    # Step 1: Route to best agent (or use forced agent)
+    # ---------------------------------------------------------------
+    responder  = forced_agent if forced_agent else ""
+    response   = ""
+
+    if intent in ("question", "both") or not remaining:
+        # Build skill context for routing — tell LLM what each agent knows
+        skill_summaries = []
+        skills = _all_skills()
+        for s in skills:
+            if s["speaker"] in attendees:
+                skill_summaries.append(
+                    f"- {s['speaker']} ({s['role']}): {s['how_to_invoke']} "
+                    f"Triggers: {', '.join(s['triggers'][:5])}"
+                )
+        skill_context = "\n".join(skill_summaries) if skill_summaries else "No skill cards available."
+
+        attendees_str = ", ".join(a for a in attendees if a not in ("Narrator", "Dan"))
+        history_str   = "\n".join(
+            f"{h.get('speaker','?')}: {h.get('text','')[:300]}" for h in history[-8:]
+        )
+
+        if forced_agent and forced_agent in attendees:
+            responder = forced_agent
+            # Still generate a response from the forced agent
+            system = (
+                f"You are {forced_agent} in a live war-room meeting. "
+                f"Dan or a human attendee has sent you a direct message. "
+                f"Respond in character, concisely (≤3 sentences). "
+                f"Return STRICT JSON: {{\"response\":\"<your answer>\"}}"
+            )
+            user = (
+                f"Meeting subject: {subject}\n"
+                f"Recent transcript:\n{history_str}\n\n"
+                f"Human message directed to you: {message}\n\n"
+                "Return only JSON."
+            )
+        else:
+            system = (
+                "You are the orchestrator of a live war-room meeting. A human has sent a message. "
+                "Pick the single best agent to respond based on their skill domain. "
+                "Return STRICT JSON: {\"responder\":\"<AgentName>\",\"response\":\"<answer ≤3 sentences>\"}. "
+                "Stay in character for the chosen agent."
+            )
+            user = (
+                f"Meeting subject: {subject}\n"
+                f"Attendees (pick one): {attendees_str}\n\n"
+                f"Agent skill cards:\n{skill_context}\n\n"
+                f"Recent transcript:\n{history_str}\n\n"
+                f"Human message: {message}\n\n"
+                "Return only JSON."
+            )
+
+        raw = await _call_openrouter("google/gemini-2.5-flash", system, user)
+        if raw:
+            txt = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            try:
+                parsed = json.loads(txt)
+                if not forced_agent:
+                    responder = (parsed.get("responder") or "David").strip()
+                response  = (parsed.get("response") or parsed.get("answer") or "Noted.").strip()
+            except Exception:
+                if not forced_agent:
+                    responder = "David"
+                response = txt.splitlines()[0][:300]
+        else:
+            if not responder:
+                responder = "David"
+            response = "Noted. I'll factor that into the remaining discussion."
+
+        # Guardrail: ensure responder is an actual attendee
+        if responder not in attendees:
+            low = responder.lower()
+            match = next((a for a in attendees if a.lower() == low), None)
+            responder = match or "David"
+
+    # ---------------------------------------------------------------
+    # Step 2: Recalibrate remaining segments (if requirement/both)
+    # ---------------------------------------------------------------
+    recalibrated_segments = remaining
+    recalibrated = False
+
+    if intent in ("requirement", "both") and remaining and response:
+        attendees_str = ", ".join(a for a in attendees if a)
+        remaining_str = "\n".join(
+            f"{s.get('speaker','?')}: {s.get('text','')}" for s in remaining
+        )
+        system_r = (
+            "You are the meeting director for a live war-room. A human just injected "
+            "a new requirement or piece of context into the meeting. REPLAN the remaining "
+            "meeting turns so they naturally incorporate this new information. "
+            "Keep the same speakers and segment count. Update what they say so the "
+            "conversation reflects the new reality. "
+            "Return STRICT JSON: "
+            "{\"segments\":[{\"speaker\":\"...\",\"text\":\"...\",\"role\":\"agent|orchestrator|dan\","
+            "\"pause_ms_after\":300}, ...]}. "
+            f"Known attendees: {attendees_str}. Keep responses ≤2 sentences each."
+        )
+        user_r = (
+            f"Meeting subject: {subject}\n\n"
+            f"Human injected: \"{message}\"\n"
+            f"{responder} responded: \"{response}\"\n\n"
+            f"Remaining segments to recalibrate (keep count = {len(remaining)}):\n{remaining_str}\n\n"
+            "Return JSON only."
+        )
+        raw_r = await _call_openrouter("google/gemini-2.5-flash", system_r, user_r)
+        if raw_r:
+            txt_r = raw_r.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            try:
+                parsed_r = json.loads(txt_r)
+                segs = parsed_r.get("segments", [])
+                if segs and len(segs) == len(remaining):
+                    recalibrated_segments = segs
+                    recalibrated = True
+            except Exception:
+                pass  # fall back to original remaining
+
+    # ---------------------------------------------------------------
+    # Step 3: Look up the responder's skill card for the client
+    # ---------------------------------------------------------------
+    responder_skill = _skill_for_speaker(responder)
+    responder_skill_summary = None
+    if responder_skill:
+        responder_skill_summary = {
+            "id":            responder_skill["id"],
+            "name":          responder_skill["name"],
+            "role":          responder_skill["role"],
+            "how_to_invoke": responder_skill["how_to_invoke"],
+            "interacts_with": responder_skill["interacts_with"],
+        }
+
+    return JSONResponse({
+        "inject_id":             inject_id,
+        "responder":             responder,
+        "response":              response,
+        "responder_skill":       responder_skill_summary,
+        "recalibrated":          recalibrated,
+        "recalibrated_segments": recalibrated_segments,
+        "intent":                intent,
     })
 
 

@@ -89,7 +89,7 @@ def handle_semeclaw(ack, body, respond, logger):
         })
         r.raise_for_status()
         report = r.json()
-        s = _semeclaw("POST", f"/api/meetings/{report['name']}/share").json()
+        s = _semeclaw("GET", f"/api/meeting/share?name={report['name']}").json()
     except Exception as e:
         respond(f"⚠️ Failed: {e}")
         return
@@ -142,7 +142,7 @@ def handle_thread(ack, body, respond, client, logger):
         })
         r.raise_for_status()
         report = r.json()
-        s = _semeclaw("POST", f"/api/meetings/{report['name']}/share").json()
+        s = _semeclaw("GET", f"/api/meeting/share?name={report['name']}").json()
     except Exception as e:
         respond(f"⚠️ Failed: {e}")
         return
@@ -197,7 +197,7 @@ def semeclaw_webhook():
                 {"type": "button", "text": {"type": "plain_text", "text": "🔊 Replay"},
                  "url": f"{SEMECLAW_URL}/api/meeting/audio?name={name}"},
                 {"type": "button", "text": {"type": "plain_text", "text": "📄 Transcript"},
-                 "url": f"{SEMECLAW_URL}/api/meetings/{name}/transcript.html"},
+                 "url": f"{SEMECLAW_URL}/api/meeting/html?name={name}"},
             ]},
         ],
     )
