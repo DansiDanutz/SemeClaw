@@ -1,138 +1,316 @@
-# SemeClaw
+<div align="center">
 
-**The AI Brain of Dan's Lab** — A production-ready AI agent system built for research, ideation, and project management powering [NERVIX](https://nervix.ai).
+# 🎭 SemeClaw — Agent-Powered War Room
 
-Built from scratch following the [build-your-own-openclaw](https://github.com/czl9707/build-your-own-openclaw) tutorial, SemeClaw implements all 18 steps from basic chat to a full multi-agent orchestration platform.
+**Turn any markdown report into a cinematic multi-agent meeting with voice.**
+**Embed in any app. Own your AI operations.**
 
-## What It Does
+[![Version](https://img.shields.io/badge/version-0.2.0-10b981.svg)](./pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-Proprietary-8b5cf6.svg)](#license)
+[![Agent](https://img.shields.io/badge/OpenClaw-Agent-f59e0b.svg)](https://github.com/czl9707/build-your-own-openclaw)
 
-SemeClaw is a self-hosted AI agent system that runs on your machine. It connects to Claude (Anthropic) and gives you a personal AI brain with tools, memory, skills, and multi-platform access.
+</div>
 
-- **Chat** — Conversational interface powered by Claude via [litellm](https://docs.litellm.ai/)
-- **Tools** — Read/write files, run shell commands, search the web, extract web pages
-- **Skills** — Extend capabilities with markdown-based skill definitions
-- **Memory** — Long-term knowledge storage across topics, projects, and daily notes
-- **Multi-Agent** — Seme (primary brain) delegates to Cookie (memory manager)
-- **Multi-Platform** — CLI, Telegram, Discord, WebSocket
-- **Cron Jobs** — Scheduled tasks for automated research and notifications
-- **Context Management** — Auto-compaction when conversations get long
+---
 
-## Quick Start
+<div align="center">
+  <img src="docs/screenshots/dashboard.png" alt="SemeClaw War Room Dashboard" width="100%"/>
+  <p><em>SemeClaw War Room — Live fleet dashboard + agent pipeline + meeting library</em></p>
+</div>
+
+---
+
+## 🚀 What is SemeClaw?
+
+SemeClaw is a **self-hosted, embeddable AI agent** that turns any task report into a **cinematic multi-agent meeting**. Built from the ground up as the AI brain of [NERVIX](https://nervix.ai) and designed for distribution to other Paperclip companies.
+
+Drop it into any web app in 3 ways:
+- **HTTP API** — drive it from your backend
+- **`<iframe>`** — copy/paste a URL, done
+- **JS widget** — `<script>` + `<div data-semeclaw-meeting="…">`
+
+Every meeting includes a **host announcer**, a **conversational orchestrator**, up to **5 specialist agents** with distinct voices, a **2-question interjection budget** for the user, **live recalibration** when the user pushes back, and an **automatic task re-analysis** on close that appends `VERDICT: CORRECT — proceed` (or `NEEDS REVISION`) to the source markdown.
+
+---
+
+## ✨ Features
+
+| Feature | What it does |
+|---------|--------------|
+| 🎙 **Meeting-as-a-Script** | `meeting_skill.py` parses any markdown report → generates announcer + orchestrator handoffs + agent turns + Dan's closer |
+| 🎨 **Two cinematic layouts** | V1 flat compact roster for dev/ops · V2 orbital ring with live-speaker center card for premium demos |
+| 🗣 **ElevenLabs Flash v2.5** | Premium voice per speaker · automatic fallback to Microsoft `edge-tts` for non-English or offline |
+| 💬 **2-Question budget** | Users can interject mid-meeting; after each Q the meeting **recalibrates** via LLM and continues with a fresh plan |
+| 🏁 **Finish → Task Update** | Ends the meeting, appends Q&A to the report `.md`, runs a verification pass, emits `VERDICT:` line |
+| 💾 **48h rolling retention + pin-to-save** | Meetings and reports auto-clean after 48h · pin keeps forever |
+| 🔌 **Public `/api/agent/manifest`** | Discoverable agent contract — capabilities, endpoints, auth, tenant info |
+| 🪟 **iframe + JS SDK** | `/embed` + `/embed.js` — drop into Notion, CMS, NERVIX marketplace, anywhere |
+| 🔐 **Bearer auth on writes** | Reads stay open (so embeds work) · writes protected via `SEMECLAW_API_KEY` |
+| 🌐 **CORS + CSP configurable** | Allow-list origins + iframe parents via env |
+| 🐳 **Docker-ready** | Python 3.13 + uvicorn + ffmpeg + healthcheck |
+| 📎 **Paperclip bridge** | Hook into Paperclip fleet ops today · first-class agent adapter coming in Phase 4 |
+
+---
+
+## 🏃 Quickstart
+
+### Local dev
 
 ```bash
-# 1. Install uv (fast Python package manager)
-pip install uv
+git clone https://github.com/DansiDanutz/SemeClaw.git
+cd SemeClaw
 
-# 2. Set up your config
-cp default_workspace/config.example.yaml default_workspace/config.user.yaml
-# Edit config.user.yaml — add your Anthropic API key
+# copy env + add your keys
+cp .env.example .env
+# fill in ELEVENLABS_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY
 
-# 3. Run SemeClaw
-uv run semeclaw chat
+# run
+uv sync
+uv run python war_room/dashboard/server.py
+# → http://127.0.0.1:8765
 ```
 
-## Architecture
+Verify it's alive:
+```bash
+curl http://127.0.0.1:8765/api/agent/manifest | jq .version
+# "0.2.0"
+```
 
-SemeClaw is built in 4 phases across 18 progressive steps:
+### Docker
 
-| Phase | Steps | What It Adds |
-|-------|-------|-------------|
-| **Single Agent** | 00-06 | Chat loop, tools, skills, persistence, commands, compaction, web |
-| **Event-Driven** | 07-10 | Event bus, config hot reload, channels, WebSocket API |
-| **Multi-Agent** | 11-15 | Routing, cron jobs, layered prompts, messaging, agent dispatch |
-| **Production** | 16-17 | Concurrency control, long-term memory |
+```bash
+docker build -t semeclaw:0.2.0 .
+docker run -p 8765:8765 --env-file .env semeclaw:0.2.0
+```
 
-## Project Structure
+---
+
+## 🔌 Integration Paths
+
+### 1️⃣ Iframe — fastest
+
+```html
+<iframe
+  src="https://semeclaw.your-host.com/embed?meeting=ops-review.md&v=2&theme=dark"
+  style="width:100%;height:720px;border:0;border-radius:12px"
+  allow="autoplay"
+></iframe>
+```
+
+### 2️⃣ JS widget — cleanest for multiple embeds
+
+```html
+<script src="https://semeclaw.your-host.com/embed.js" defer></script>
+<div data-semeclaw-meeting="quarterly-review.md"
+     data-semeclaw-v="2"
+     style="width:100%;height:720px"></div>
+```
+
+### 3️⃣ HTTP API — full programmatic control
+
+```python
+import httpx, os
+c = httpx.Client(
+    base_url="https://semeclaw.your-host.com",
+    headers={"Authorization": f"Bearer {os.environ['SEMECLAW_API_KEY']}"}
+)
+
+# list reports
+reports = c.get("/api/reports").json()
+
+# generate meeting audio
+mp3 = c.get("/api/meeting/audio", params={"name": reports[0]["name"]}).content
+open("meeting.mp3", "wb").write(mp3)
+
+# finalize with Q&A — appends to source .md + runs verdict pass
+c.post("/api/meeting/finalize", json={
+    "name": reports[0]["name"],
+    "qa_pairs": [{"question": "How long?", "responder": "GSD", "response": "6 weeks."}],
+    "transcript": [...],
+})
+```
+
+See [**docs/API_REFERENCE.md**](./docs/API_REFERENCE.md) for the full endpoint spec and [**INTEGRATION.md**](./INTEGRATION.md) for integration examples.
+
+---
+
+## 🏗 Architecture
+
+```mermaid
+flowchart LR
+    subgraph Consumer
+        iframe[🪟 Iframe]
+        sdk[📦 JS SDK]
+        http[🔌 HTTP API]
+    end
+    subgraph SemeClaw[SemeClaw Agent :8765]
+        api[FastAPI]
+        mid[Auth + CORS + CSP]
+        skill[Meeting Skill]
+        cache[Audio Cache 48h+saved/]
+    end
+    subgraph External
+        eleven[🎙 ElevenLabs]
+        edge[🗣 edge-tts]
+        or[🧠 OpenRouter]
+    end
+    iframe & sdk & http --> mid --> api
+    api --> skill & cache
+    api --> eleven & edge
+    skill --> or
+```
+
+See [**docs/ARCHITECTURE.md**](./docs/ARCHITECTURE.md) for detailed sequence diagrams, storage model, and flow explanations.
+
+---
+
+## 🎛 Meeting Flow
+
+Every meeting follows the same reliable arc:
+
+```
+1. 🎙 Narrator announces:
+     "Meeting 75f6809d. Subject: ___. Attendees: Dan, David, GSD, Hermes.
+      Have a nice meeting."
+
+2. 🏛 Orchestrator (David) opens:
+     "Welcome. Today's question: ___. Let's dig in."
+
+3. 🏛 Handoff → 🔬 Agent 1 speaks
+4. 🏛 Handoff → 📐 Agent 2 speaks
+5. 🏛 Handoff → ✍️ Agent 3 speaks
+   ⋮
+6. 🏛 Closes: "That gives us what we need. Dan?"
+7. 👤 Dan adjourns: "Ship fast, stay sharp. Meeting adjourned."
+```
+
+If the user interjects via the **Send** button (max 2 questions):
+- LLM picks the best agent to answer
+- That agent answers (voiced)
+- Orchestrator acknowledges: *"Got it. Recalibrating the plan."*
+- Remaining segments are **rewritten** via `/api/meeting/replan` to incorporate the new context
+- Meeting continues seamlessly
+
+On **🏁 Finish**:
+- Audio stops
+- Q&A pairs are appended to the source `.md`
+- LLM runs a verification pass
+- Source report gets an `## 🔎 Updated Analysis` block ending in `VERDICT: CORRECT — proceed`
+- Cached MP3 is invalidated so next playback uses the updated flow
+
+---
+
+## 📁 Project Structure
 
 ```
 SemeClaw/
-├── src/semeclaw/           # Python source code
-│   ├── cli/                # Chat + server CLI commands
-│   ├── core/               # Agent, session, events, memory, routing
-│   ├── provider/           # LLM, web search, web read providers
-│   ├── server/             # Workers, WebSocket, FastAPI, cron
-│   ├── tools/              # Built-in + skill + dispatch + web tools
-│   ├── channel/            # Telegram, Discord support
-│   └── utils/              # Config, definition loader
-├── default_workspace/      # Agent definitions & workspace data
-│   ├── agents/             # Seme (brain) + Cookie (memory)
-│   ├── skills/             # danslab-company, research-workflow
-│   ├── memories/           # Long-term knowledge base
-│   └── research/           # Structured research workspace
-├── pyproject.toml          # Project config & dependencies
-└── SemeClaw-Guide.docx     # Complete usage guide
+├── src/semeclaw/              # Core agent (chat, tools, memory, skills)
+│   ├── core/                  # agent loop
+│   ├── channel/               # CLI · Telegram · Discord · WebSocket
+│   ├── provider/              # LLM adapters (litellm)
+│   └── tools/                 # tool registry + builtins
+├── war_room/                  # Monetizable surface — the Meeting Room
+│   ├── dashboard/
+│   │   ├── server.py          # FastAPI app (all public endpoints)
+│   │   ├── index.html         # V1 + V2 UI
+│   │   └── meeting_skill.py   # Pure module: report → segments
+│   ├── research/ saved/       # Reports (48h + pinned)
+│   ├── audio/meetings/ saved/ # MP3 cache (48h + pinned)
+│   ├── paperclip_bridge.py
+│   └── logs/
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── API_REFERENCE.md
+│   ├── ENHANCEMENTS.md        # Roadmap wish-list
+│   └── screenshots/
+├── Dockerfile
+├── .env.example
+├── INTEGRATION.md             # Integration guide for consumers
+├── SEMECLAW_AGENT_PLAN.md     # 5-phase product roadmap
+├── CLAUDE.md                  # Brief for AI agents working on the repo
+└── README.md
 ```
 
-## Agents
+---
 
-| Agent | Role | Temperature |
-|-------|------|-------------|
-| **Seme** | Primary brain — research, coding, ideation, strategy | 0.7 |
-| **Cookie** | Memory manager — stores and retrieves knowledge | 0.3 |
+## 🗺 Roadmap
 
-## Skills
+| Phase | Status | Scope |
+|-------|:------:|-------|
+| **1. Agent contract** | ✅ v0.2.0 | `/api/agent/manifest`, `/embed` + `/embed.js`, CORS, CSP, bearer auth |
+| **2. Deploy + CI** | 🟡 Next | Docker image on `ghcr.io`, GitHub Actions, release tags |
+| **3. NERVIX marketplace** | ⏳ | Agent card, tenant provisioning, webhook on finalize |
+| **4. Paperclip first-class** | ⏳ | Real agent type (not just bridged), bidirectional context |
+| **5. Multi-tenant SaaS** | 🔮 | Per-tenant isolation, Stripe metered billing, admin dashboard |
 
-| Skill | Purpose |
-|-------|---------|
-| `danslab-company` | Company context, infrastructure, NERVIX details |
-| `research-workflow` | Templates for research notes, competitor analysis, architecture decisions |
-| `skill-creator` | Instructions for creating new skills |
+See [**docs/ENHANCEMENTS.md**](./docs/ENHANCEMENTS.md) for the **full wish-list** covering:
+- 📥 `POST /api/reports` + webhooks + SSE events
+- 🎙 Voice cloning + per-agent overrides + streaming TTS
+- 🎭 Theater / Compact / Presentation / 3D cinematic modes
+- 📤 PDF/SRT/MP4 exports + share links + OpenGraph previews
+- 🔌 Slack/GitHub/Discord/Linear/Notion integrations
+- 📊 Prometheus metrics + audit log + cost ledger
 
-## Configuration
+---
 
-Edit `default_workspace/config.user.yaml`:
+## 🔑 Environment Variables
 
-```yaml
-llm:
-  provider: anthropic
-  model: claude-sonnet-4-20250514
-  api_key: your-key-here
+| Var | Purpose | Default |
+|-----|---------|---------|
+| `ELEVENLABS_API_KEY` | Tier-1 voice. Falls back to edge-tts if unset | — |
+| `OPENROUTER_API_KEY` | LLM for redirect/replan/finalize | — |
+| `SEMECLAW_API_KEY` | Bearer token for write endpoints. Unset = open mode | unset |
+| `SEMECLAW_CORS_ORIGINS` | Comma-sep allow-list. `*` for anyone | `*` |
+| `SEMECLAW_FRAME_ANCESTORS` | CSP directive for iframe embedding | `*` |
+| `SEMECLAW_TENANT_ID` | Tenant identifier in manifest + logs | `default` |
+| `SEMECLAW_PUBLIC_URL` | External URL baked into embed.js + manifest | `http://127.0.0.1:8765` |
 
-# Optional: web search
-websearch:
-  provider: brave
-  api_key: your-brave-api-key
+Full reference: [**.env.example**](./.env.example)
 
-# Optional: web page reading
-webread:
-  provider: crawl4ai
+---
 
-# Optional: Telegram bot
-channels:
-  enabled: true
-  telegram:
-    bot_token: your-bot-token
-    allowed_user_ids:
-      - "your_user_id"
-```
+## 🧪 API Reference Highlights
 
-See [PROVIDER_EXAMPLES.md](PROVIDER_EXAMPLES.md) for other LLM providers (OpenAI, Gemini, Grok, etc).
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/agent/manifest` | Capabilities + endpoints + auth descriptor |
+| `GET /api/reports` | List rolling + saved reports |
+| `GET /api/meeting/script?name=` | Generate scripted meeting segments |
+| `GET /api/meeting/audio?name=` | Generate + cache MP3 of the meeting |
+| `POST /api/meeting/redirect` 🔐 | Pick best agent to answer a user question |
+| `POST /api/meeting/replan` 🔐 | Rewrite remaining segments given Q&A |
+| `POST /api/meeting/finalize` 🔐 | Append Q&A + re-analyze source task |
+| `POST /api/meeting/pin` 🔐 | Save both report + meeting MP3 forever |
+| `GET /api/tts?text=&speaker=` | Stream MP3 for a given speaker |
+| `GET /embed?meeting=&v=1` | Iframe-safe page |
+| `GET /embed.js` | Drop-in JS widget |
 
-## Commands
+🔐 = Requires `Authorization: Bearer <SEMECLAW_API_KEY>` when the env var is set.
 
-| Command | Description |
-|---------|------------|
-| `uv run semeclaw chat` | Start interactive chat |
-| `uv run semeclaw server` | Start multi-platform server |
-| `/help` | List all slash commands |
-| `/skills` | Show available skills |
-| `/session` | Show session info |
-| `/context` | Show token usage |
-| `/compact` | Manually compact history |
+Full spec → [**docs/API_REFERENCE.md**](./docs/API_REFERENCE.md).
 
-## Tech Stack
+---
 
-- **Language:** Python 3.10+
-- **LLM:** Claude via [litellm](https://docs.litellm.ai/) (supports any provider)
-- **CLI:** [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/)
-- **API:** [FastAPI](https://fastapi.tiangolo.com/) + WebSocket
-- **Config:** YAML with hot reload via [watchdog](https://python-watchdog.readthedocs.io/)
-- **Storage:** JSONL for history, Markdown for memory/skills/agents
+## 🏛 Built On
 
-## Credits
+- Built from scratch following the [build-your-own-openclaw](https://github.com/czl9707/build-your-own-openclaw) tutorial
+- Powers [NERVIX](https://nervix.ai) — AI agent marketplace
+- Uses [ElevenLabs](https://elevenlabs.io/), [OpenRouter](https://openrouter.ai), [FastAPI](https://fastapi.tiangolo.com/), [uv](https://github.com/astral-sh/uv)
 
-Built following the [build-your-own-openclaw](https://github.com/czl9707/build-your-own-openclaw) tutorial by [@czl9707](https://github.com/czl9707). Customized for [Dan's Lab](https://nervix.ai) and the NERVIX AI agent marketplace.
+---
 
-## License
+## 🤝 Contributing
 
-MIT
+This is currently a private/proprietary repo for Dan's Lab + NERVIX. If you're an AI agent working on the code, start with [**CLAUDE.md**](./CLAUDE.md).
+
+External contributions welcome once we open-source (Phase 5).
+
+---
+
+## 📜 License
+
+Proprietary — © 2026 Dan Semenescu / NERVIX. All rights reserved.
+
+Contact: [dan@nervix.ai](mailto:dan@nervix.ai)
