@@ -29,3 +29,18 @@ Thumbs.db
 
 # Logs
 war_room/logs/*.log
+
+# SemeClaw v0.3.0 runtime state — NEVER commit (contains secrets + PII)
+war_room/webhooks.json
+war_room/shares.json
+war_room/audio/_test.mp3
+war_room/audio/meetings/*.mp3
+war_room/audio/meetings/saved/*.mp3
+war_room/audio/scripts/*.json
+war_room/audio/segments/
+war_room/tenants/
+war_room/shared_state.json
+
+# Rolling reports — examples only in repo
+war_room/research/test-ingest*.md
+war_room/research/tenant-test*.md

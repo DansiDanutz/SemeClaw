@@ -2,7 +2,20 @@
 
 This is the wish-list for turning SemeClaw from "v0.2.0 embeddable agent" into a full-blown SaaS product. Items are grouped by category and priority.
 
-Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experimental
+Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experimental · ✅ Shipped in v0.3.0
+
+---
+
+## ✅ Delivered in v0.3.0 (2026-04-18)
+
+- ✅ `POST /api/reports` — external systems (NERVIX, Paperclip) can create reports
+- ✅ `POST /api/reports/upload` — multipart `.md` file upload
+- ✅ `DELETE /api/reports?name=` — cleanup endpoint
+- ✅ **X-Tenant-Id header + per-tenant isolation** — reports namespaced under `war_room/tenants/<id>/`
+- ✅ **Webhooks** — `POST /api/webhooks` register, list, delete; fires on `report.created`, `report.deleted`, `meeting.finalized` with HMAC SHA-256 signature header
+- ✅ **`/metrics` Prometheus** — counters for meetings, questions, TTS, reports, webhooks
+- ✅ **Share links** — `POST /api/meetings/{name}/share` → `/share/{token}` public playback URLs (30d TTL)
+- ✅ **GitHub Actions CI** — lint + meeting_skill smoke test + server boot check + Docker build + optional release push to ghcr.io on `v*` tag
 
 ---
 

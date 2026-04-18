@@ -378,6 +378,346 @@ async def api_report_content(name: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# ---------------------------------------------------------------------------
+# Ingest endpoints — external systems (NERVIX, Paperclip) create reports
+# ---------------------------------------------------------------------------
+
+import re as _re_ing, time as _time_ing, uuid as _uuid_ing, hashlib as _hash_ing, hmac as _hmac_ing
+
+
+def _safe_report_name(raw: str, fallback_task: str = "task") -> str:
+    """Turn any string into a safe .md filename."""
+    stem = _re_ing.sub(r"[^a-zA-Z0-9_-]+", "-", (raw or fallback_task).strip())
+    stem = stem.strip("-").lower()[:80] or "report"
+    if not stem.endswith(".md"):
+        stem += ".md"
+    return stem
+
+
+@app.post("/api/reports")
+async def api_reports_create(request: Request):
+    """Create a new report from JSON. Called by external systems (NERVIX,
+    Paperclip adapters) when they want SemeClaw to convene a meeting.
+
+    Body:
+        {
+          "name":  optional safe filename — auto-generated from `task` if missing
+          "task":  one-line subject
+          "content": full markdown body (agents as ## sections recommended)
+          "auto_audio": bool — if true, build the MP3 now
+          "tags": optional list
+        }
+    Response:
+        {name, url, audio_url, saved: false}
+    """
+    data = await request.json()
+    name    = (data.get("name") or "").strip()
+    task    = (data.get("task") or "").strip()
+    content = (data.get("content") or "").strip()
+
+    if not content:
+        return JSONResponse({"error": "content is required"}, status_code=400)
+    if not name:
+        # Auto-generate: "<slug>-YYYY-MM-DD.md"
+        base = _safe_report_name(task).rstrip(".md")
+        name = f"{base}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.md"
+    name = Path(_safe_report_name(name)).name
+
+    # Ensure well-formed header
+    if not content.lstrip().startswith("#"):
+        header = f"# War Room Report\n\n**Task:** {task or name}\n**Date:** {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n**Via:** API\n\n---\n\n"
+        content = header + content
+
+    path = _report_dir_for_tenant(request) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+    # Optional: generate the audio now
+    audio_url = None
+    if data.get("auto_audio"):
+        mp3 = await _build_meeting_mp3(name)
+        if mp3:
+            audio_url = f"/api/meeting/audio?name={name}"
+
+    url = f"/api/reports/content?name={name}"
+    await _dispatch_webhook("report.created", {
+        "name": name, "task": task, "url": url, "audio_url": audio_url,
+        "tenant_id": _tenant_id(request),
+    })
+    return JSONResponse({
+        "name": name, "saved": False,
+        "url": url, "audio_url": audio_url,
+        "tenant_id": _tenant_id(request),
+    }, status_code=201)
+
+
+@app.post("/api/reports/upload")
+async def api_reports_upload(request: Request):
+    """Multipart upload — drop a .md file directly.
+
+    Form fields:
+        file:  the .md file
+        task:  optional subject (defaults to file stem)
+        auto_audio: "true"/"false"
+    """
+    from fastapi import File, UploadFile, Form  # noqa: F401
+    form = await request.form()
+    f = form.get("file")
+    if not f or not hasattr(f, "read"):
+        return JSONResponse({"error": "file field required"}, status_code=400)
+    raw = await f.read()
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return JSONResponse({"error": "file must be utf-8 text"}, status_code=400)
+    task = (form.get("task") or Path(f.filename or "").stem or "task")
+    name = _safe_report_name(Path(f.filename or "").stem or task)
+
+    path = _report_dir_for_tenant(request) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+    audio_url = None
+    if (form.get("auto_audio") or "").lower() in ("1", "true", "yes"):
+        mp3 = await _build_meeting_mp3(name)
+        if mp3:
+            audio_url = f"/api/meeting/audio?name={name}"
+
+    await _dispatch_webhook("report.created", {
+        "name": name, "task": task, "via": "upload",
+        "url": f"/api/reports/content?name={name}", "audio_url": audio_url,
+        "tenant_id": _tenant_id(request),
+    })
+    return JSONResponse({
+        "name": name, "saved": False,
+        "url": f"/api/reports/content?name={name}",
+        "audio_url": audio_url,
+        "tenant_id": _tenant_id(request),
+    }, status_code=201)
+
+
+@app.delete("/api/reports")
+async def api_reports_delete(name: str):
+    """Delete a report and its cached meeting audio (if any)."""
+    path = _find_report(name)
+    if not path:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    try:
+        path.unlink()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    # Also remove any cached meeting MP3 whose stem matches this report
+    removed_audio = 0
+    for d in (MEETINGS_DIR, MEETINGS_SAVED):
+        for f in d.glob("*.mp3"):
+            if path.stem in f.stem:
+                try:
+                    f.unlink()
+                    removed_audio += 1
+                except Exception:
+                    pass
+    await _dispatch_webhook("report.deleted", {"name": name})
+    return JSONResponse({"ok": True, "deleted": name, "audio_files_removed": removed_audio})
+
+
+# ---------------------------------------------------------------------------
+# Tenant isolation — honours X-Tenant-Id header (falls back to env default)
+# ---------------------------------------------------------------------------
+
+def _tenant_id(request: Request) -> str:
+    """Resolve tenant id. Header wins, then env default."""
+    t = (request.headers.get("x-tenant-id") or "").strip()
+    return t or SEMECLAW_TENANT_ID or "default"
+
+
+def _report_dir_for_tenant(request: Request) -> Path:
+    """Return the research dir, scoped to tenant when non-default."""
+    t = _tenant_id(request)
+    if t == "default":
+        return RESEARCH_DIR
+    base = WAR_ROOM_DIR / "tenants" / _re_ing.sub(r"[^a-zA-Z0-9_-]", "-", t) / "research"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Webhooks — register URL + receive lifecycle events
+# ---------------------------------------------------------------------------
+
+WEBHOOKS_FILE = WAR_ROOM_DIR / "webhooks.json"
+
+
+def _load_webhooks() -> list[dict]:
+    if not WEBHOOKS_FILE.exists():
+        return []
+    try:
+        return json.loads(WEBHOOKS_FILE.read_text())
+    except Exception:
+        return []
+
+
+def _save_webhooks(hooks: list[dict]) -> None:
+    WEBHOOKS_FILE.write_text(json.dumps(hooks, indent=2))
+
+
+async def _dispatch_webhook(event: str, payload: dict) -> None:
+    """Fire-and-forget POST to every registered webhook subscribed to `event`."""
+    hooks = _load_webhooks()
+    matches = [h for h in hooks if event in (h.get("events") or []) or "*" in (h.get("events") or [])]
+    if not matches:
+        return
+    body = {
+        "event": event,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "agent_version": "0.2.0",
+        "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
+        "data": payload,
+    }
+    raw = json.dumps(body).encode("utf-8")
+    for h in matches:
+        try:
+            secret = (h.get("secret") or "").encode("utf-8")
+            sig = _hmac_ing.new(secret, raw, _hash_ing.sha256).hexdigest() if secret else ""
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                await client.post(
+                    h["url"],
+                    content=raw,
+                    headers={
+                        "content-type": "application/json",
+                        "x-semeclaw-event": event,
+                        "x-semeclaw-signature": f"sha256={sig}" if sig else "",
+                        "user-agent": "SemeClaw/0.2.0",
+                    },
+                )
+        except Exception as e:
+            logger.warning("webhook %s → %s failed: %s", event, h.get("url"), e)
+
+
+@app.post("/api/webhooks")
+async def api_webhooks_register(request: Request):
+    """Register a webhook URL for lifecycle events.
+    Body: {url, events: ["meeting.finalized", ...], secret?}"""
+    data = await request.json()
+    url = (data.get("url") or "").strip()
+    if not url or not url.startswith("http"):
+        return JSONResponse({"error": "valid url required"}, status_code=400)
+    events = data.get("events") or ["*"]
+    secret = data.get("secret") or ""
+    hooks = _load_webhooks()
+    hook_id = str(_uuid_ing.uuid4())[:8]
+    hooks.append({"id": hook_id, "url": url, "events": events, "secret": secret,
+                  "created": datetime.now(timezone.utc).isoformat()})
+    _save_webhooks(hooks)
+    return JSONResponse({"ok": True, "id": hook_id, "url": url, "events": events})
+
+
+@app.get("/api/webhooks")
+async def api_webhooks_list():
+    hooks = _load_webhooks()
+    # Redact secrets
+    return JSONResponse([{**h, "secret": "***" if h.get("secret") else ""} for h in hooks])
+
+
+@app.delete("/api/webhooks/{hook_id}")
+async def api_webhooks_delete(hook_id: str):
+    hooks = _load_webhooks()
+    before = len(hooks)
+    hooks = [h for h in hooks if h.get("id") != hook_id]
+    if len(hooks) == before:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    _save_webhooks(hooks)
+    return JSONResponse({"ok": True, "deleted": hook_id})
+
+
+# ---------------------------------------------------------------------------
+# Share links — public playback URLs without bearer auth
+# ---------------------------------------------------------------------------
+
+SHARES_FILE = WAR_ROOM_DIR / "shares.json"
+SHARE_TTL_DAYS = 30
+
+
+def _load_shares() -> dict:
+    if not SHARES_FILE.exists():
+        return {}
+    try:
+        return json.loads(SHARES_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_shares(shares: dict) -> None:
+    SHARES_FILE.write_text(json.dumps(shares, indent=2))
+
+
+@app.post("/api/meetings/{name}/share")
+async def api_meeting_share(name: str):
+    """Create a share token for a meeting. Returns public URL good for SHARE_TTL_DAYS days."""
+    safe = Path(name).name
+    if not _find_report(safe):
+        return JSONResponse({"error": "report not found"}, status_code=404)
+    token = _uuid_ing.uuid4().hex[:16]
+    expires = int(_time_ing.time()) + SHARE_TTL_DAYS * 86400
+    shares = _load_shares()
+    shares[token] = {"name": safe, "expires": expires,
+                     "created": datetime.now(timezone.utc).isoformat()}
+    _save_shares(shares)
+    return JSONResponse({
+        "ok": True,
+        "token": token,
+        "url": f"{SEMECLAW_PUBLIC_URL}/share/{token}",
+        "expires_at": datetime.fromtimestamp(expires, timezone.utc).isoformat(),
+    })
+
+
+@app.get("/share/{token}")
+async def share_page(token: str):
+    """Public landing page for a shared meeting — serves the embed UI without auth."""
+    from fastapi.responses import FileResponse
+    shares = _load_shares()
+    s = shares.get(token)
+    if not s or s.get("expires", 0) < _time_ing.time():
+        return JSONResponse({"error": "share link invalid or expired"}, status_code=410)
+    index = Path(__file__).parent / "index.html"
+    return FileResponse(index, media_type="text/html",
+                        headers={"X-SemeClaw-Share": token,
+                                 "X-SemeClaw-Meeting": s["name"]})
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+_METRICS = {
+    "meetings_started":   0,
+    "meetings_finalized": 0,
+    "questions_asked":    0,
+    "tts_requests":       0,
+    "reports_created":    0,
+    "webhooks_fired":     0,
+}
+
+
+def _bump(key: str, n: int = 1) -> None:
+    _METRICS[key] = _METRICS.get(key, 0) + n
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus exposition format. Scrape with Prometheus, Grafana Agent, etc."""
+    from fastapi.responses import Response as FR
+    lines = [
+        "# HELP semeclaw_info SemeClaw agent info",
+        "# TYPE semeclaw_info gauge",
+        f'semeclaw_info{{version="0.2.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
+    ]
+    for k, v in _METRICS.items():
+        lines.append(f"# HELP semeclaw_{k} Count of {k}")
+        lines.append(f"# TYPE semeclaw_{k} counter")
+        lines.append(f"semeclaw_{k}_total {v}")
+    return FR("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+
 def _extract_task_from_report(content: str) -> str:
     for line in content.splitlines():
         s = line.strip()
@@ -444,6 +784,7 @@ async def _translate_script(segments: list[dict], lang: str) -> list[dict]:
 @app.post("/api/meeting/redirect")
 async def api_meeting_redirect(request: Request):
     """User injects a question/command mid-meeting. Pick best agent + generate response."""
+    _bump("questions_asked")
     data = await request.json()
     question = (data.get("question") or "").strip()
     attendees = data.get("attendees") or []
@@ -571,6 +912,7 @@ async def api_meeting_finalize(request: Request):
     """Append the full Q&A transcript to the original report .md, then run a
     verification pass and persist an 'Updated Analysis' section. This is what
     ensures the task is correct going forward after Dan's interjections."""
+    _bump("meetings_finalized")
     data = await request.json()
     name = Path(data.get("name", "")).name
     transcript = data.get("transcript") or []   # [{speaker,text,type}]
@@ -624,12 +966,19 @@ async def api_meeting_finalize(request: Request):
                 try: f.unlink()
                 except Exception: pass
 
-    return JSONResponse({
+    result = {
         "ok": True,
         "updated": True,
         "verdict_line": updated.strip().splitlines()[-1] if updated else "",
         "qa_count": len(qa_pairs),
+    }
+    await _dispatch_webhook("meeting.finalized", {
+        "name": name,
+        "verdict_line": result["verdict_line"],
+        "qa_count": result["qa_count"],
+        "tenant_id": _tenant_id(request),
     })
+    return JSONResponse(result)
 
 
 @app.get("/api/meeting/script")
