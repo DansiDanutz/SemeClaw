@@ -25,6 +25,8 @@ API endpoints:
 import asyncio
 import json
 import logging
+import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -138,7 +140,56 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="War Room Dashboard")
+app = FastAPI(title="SemeClaw War Room Agent", version="0.2.0")
+
+# ---------------------------------------------------------------------------
+# Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
+# ---------------------------------------------------------------------------
+try:
+    from fastapi.middleware.cors import CORSMiddleware
+    _cors_origins = os.environ.get("SEMECLAW_CORS_ORIGINS", "*").strip()
+    _allowed = ["*"] if _cors_origins == "*" else [o.strip() for o in _cors_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed,
+        allow_credentials=True if _allowed != ["*"] else False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Speaker", "X-Voice", "X-TTS-Engine"],
+    )
+except Exception as _cors_err:
+    logging.getLogger(__name__).warning("CORS setup failed: %s", _cors_err)
+
+SEMECLAW_API_KEY = os.environ.get("SEMECLAW_API_KEY", "").strip()
+SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*").strip()
+SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default").strip()
+SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
+
+# Write endpoints protected by bearer when SEMECLAW_API_KEY is set
+_PROTECTED_WRITE_PATHS = (
+    "/api/meeting/pin", "/api/meeting/unpin",
+    "/api/meeting/finalize", "/api/meeting/replan",
+    "/api/meeting/redirect",
+    "/api/reports/delete",
+)
+
+
+@app.middleware("http")
+async def _semeclaw_auth_and_csp(request, call_next):
+    # Bearer auth on protected write endpoints
+    if SEMECLAW_API_KEY and request.method != "OPTIONS":
+        path = request.url.path
+        if any(path.startswith(p) for p in _PROTECTED_WRITE_PATHS):
+            auth = request.headers.get("authorization", "")
+            if auth != f"Bearer {SEMECLAW_API_KEY}":
+                from fastapi.responses import JSONResponse as _J
+                return _J({"error": "unauthorized"}, status_code=401)
+    response = await call_next(request)
+    # Iframe-embed-friendly CSP
+    if SEMECLAW_FRAME_ANCESTORS:
+        response.headers["Content-Security-Policy"] = f"frame-ancestors {SEMECLAW_FRAME_ANCESTORS}"
+    response.headers["X-SemeClaw-Version"] = "0.2.0"
+    return response
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -194,6 +245,13 @@ async def _get_company_id() -> Optional[str]:
 # Meeting context (shared cross-client, in-memory)
 # ---------------------------------------------------------------------------
 _meeting: list[dict] = []
+
+# ---------------------------------------------------------------------------
+# Task-driven meeting system (in-memory, no Supabase required)
+# ---------------------------------------------------------------------------
+_meeting_sessions: dict[str, dict] = {}           # meeting_id -> session
+_meeting_waiters:  dict[str, asyncio.Event] = {}  # meeting_id -> event for user answer
+_meeting_user_answers: dict[str, str] = {}        # meeting_id -> user answer text
 
 # ---------------------------------------------------------------------------
 # File watcher: polls for changes and broadcasts updates
@@ -284,16 +342,599 @@ async def api_stats():
 
 @app.get("/api/reports")
 async def api_reports():
-    files = sorted(RESEARCH_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+    _prune_old()  # enforce retention on listing
+    files = []
+    for d, saved in ((RESEARCH_SAVED, True), (RESEARCH_DIR, False)):
+        for f in d.glob("*.md"):
+            if not f.is_file():
+                continue
+            if d == RESEARCH_DIR and f.parent == RESEARCH_SAVED:
+                continue  # skip dir-ception
+            files.append((f, saved))
+    files.sort(key=lambda t: t[0].stat().st_mtime, reverse=True)
+
     reports = []
-    for f in files[:20]:
+    for f, saved in files[:40]:
         reports.append({
             "name":     f.name,
+            "saved":    saved,
             "size":     f.stat().st_size,
             "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
             "preview":  f.read_text(encoding="utf-8")[:300],
         })
     return JSONResponse(reports)
+
+
+@app.get("/api/reports/content")
+async def api_report_content(name: str):
+    """Return the full markdown content of a report (checks saved/ first, then rolling)."""
+    path = _find_report(name)
+    if not path or path.suffix != ".md":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    try:
+        saved = path.parent == RESEARCH_SAVED
+        return JSONResponse({"name": path.name, "saved": saved, "content": path.read_text(encoding="utf-8")})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+def _extract_task_from_report(content: str) -> str:
+    for line in content.splitlines():
+        s = line.strip()
+        if s.startswith("**Task:**"):
+            return s.removeprefix("**Task:**").strip()
+        if s.lower().startswith("# ") and "report" not in s.lower():
+            return s[2:].strip()
+    return "Fleet review"
+
+
+def _lookup_run_id_for_task(task: str) -> str:
+    """Find the most recent run_id whose task matches this report, if any."""
+    if not task:
+        return ""
+    try:
+        for log_file in sorted(LOGS_DIR.glob("run-*.jsonl"), reverse=True)[:5]:
+            for line in reversed(log_file.read_text(encoding="utf-8").splitlines()):
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if entry.get("task", "").strip().lower() == task.strip().lower():
+                    return entry.get("run_id", "")
+    except Exception:
+        pass
+    return ""
+
+
+SCRIPTS_CACHE_DIR = WAR_ROOM_DIR / "audio" / "scripts"
+SCRIPTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+_LANG_FULL_NAMES = {
+    "en": "English", "ro": "Romanian", "de": "German", "fr": "French",
+    "es": "Spanish", "pt": "Portuguese", "it": "Italian", "zh": "Simplified Chinese",
+    "ja": "Japanese", "ko": "Korean", "ar": "Arabic", "ru": "Russian",
+}
+
+
+async def _translate_script(segments: list[dict], lang: str) -> list[dict]:
+    """Translate each segment individually (reliable order preservation)."""
+    target = _LANG_FULL_NAMES.get(lang, lang)
+    system = (
+        f"You are a professional meeting interpreter. Translate the following line into natural, "
+        f"spoken {target}. Preserve tone and intent. Keep product/person names (NERVIX, David, Dan, "
+        f"GSD, Hermes, Autoresearch, Narrator) exactly as-is. Output ONLY the translated line — "
+        f"no commentary, no quotes, no prefix, no numbering."
+    )
+
+    # Concurrent translation with bounded parallelism
+    sem = asyncio.Semaphore(4)
+
+    async def _one(seg: dict) -> dict:
+        async with sem:
+            try:
+                tr = await _call_openrouter("google/gemini-2.5-flash", system, seg["text"])
+            except Exception:
+                tr = None
+        text = (tr or "").strip().strip('"').strip("'") or seg["text"]
+        return {**seg, "text": text}
+
+    return await asyncio.gather(*[_one(s) for s in segments])
+
+
+@app.post("/api/meeting/redirect")
+async def api_meeting_redirect(request: Request):
+    """User injects a question/command mid-meeting. Pick best agent + generate response."""
+    data = await request.json()
+    question = (data.get("question") or "").strip()
+    attendees = data.get("attendees") or []
+    history = data.get("history") or []  # list of {speaker,text}
+    subject = (data.get("subject") or "").strip()
+    if not question:
+        return JSONResponse({"error": "no question"}, status_code=400)
+
+    # Compose a short context for the LLM
+    attendees_str = ", ".join(a for a in attendees if a and a not in ("Narrator", "Dan"))
+    history_str = "\n".join(f"{h.get('speaker','?')}: {h.get('text','')[:300]}" for h in history[-8:])
+    system = (
+        "You are the orchestrator of a live war-room meeting. Dan just interjected with a "
+        "question. Pick the single best agent from the attendees to answer. Return STRICT JSON "
+        'with this shape: {"responder":"<AgentName>","response":"<one or two sentences>"}. '
+        "The response must stay in character for that agent, be concise (<=2 sentences), and "
+        "directly address Dan's question."
+    )
+    user = (
+        f"Meeting subject: {subject}\n"
+        f"Attendees (pick one): {attendees_str}\n"
+        f"Recent transcript:\n{history_str}\n\n"
+        f"Dan's interjection: {question}\n\n"
+        'Return only JSON. Example: {"responder":"GSD","response":"Short answer."}'
+    )
+    raw = await _call_openrouter("google/gemini-2.5-flash", system, user)
+    if not raw:
+        return JSONResponse({"responder": "David", "response": "Noted, Dan. I'll route that to the team now."})
+
+    # Parse JSON (LLM sometimes wraps in code fences)
+    txt = raw.strip()
+    if txt.startswith("```"):
+        txt = txt.strip("`").split("\n", 1)[-1]
+        if txt.endswith("```"):
+            txt = txt.rsplit("```", 1)[0]
+    try:
+        parsed = json.loads(txt)
+        responder = parsed.get("responder", "").strip() or "David"
+        response = parsed.get("response", "").strip() or "Noted, Dan."
+    except Exception:
+        responder, response = "David", txt.splitlines()[0][:240]
+
+    # Guardrail: ensure responder is an actual attendee
+    if responder not in attendees:
+        # Best-effort fuzzy match
+        low = responder.lower()
+        match = next((a for a in attendees if a.lower() == low), None)
+        responder = match or "David"
+
+    return JSONResponse({"responder": responder, "response": response})
+
+
+@app.post("/api/meeting/replan")
+async def api_meeting_replan(request: Request):
+    """Given the remaining segments + user's question + agent's answer,
+    return a RECALIBRATED list of remaining segments that incorporates the
+    new context. Agents may shift their take based on what Dan asked."""
+    data = await request.json()
+    remaining = data.get("remaining") or []      # [{speaker,text,role,pause_ms_after}, ...]
+    question = (data.get("question") or "").strip()
+    answer = (data.get("answer") or "").strip()
+    answerer = (data.get("answerer") or "").strip()
+    subject = (data.get("subject") or "").strip()
+    attendees = data.get("attendees") or []
+
+    if not remaining or not question:
+        return JSONResponse({"segments": remaining, "changed": False})
+
+    # Build context for the LLM
+    attendees_str = ", ".join(a for a in attendees if a)
+    remaining_str = "\n".join(f"{s.get('speaker','?')}: {s.get('text','')}" for s in remaining)
+    system = (
+        "You are the meeting director. Dan just asked a clarifying question mid-meeting and an "
+        "agent answered. Now REPLAN the remaining meeting turns so they incorporate this new "
+        "context naturally. Keep the same speakers where possible, but update what they say so "
+        "the conversation flows smoothly from the new information. Do NOT add or remove turns; "
+        "keep the same count. Return STRICT JSON: "
+        '{"segments":[{"speaker":"...","text":"...","role":"agent|orchestrator|dan","pause_ms_after":300}, ...]}. '
+        f"Known attendees: {attendees_str}. Keep responses short (≤2 sentences each)."
+    )
+    user = (
+        f"Meeting subject: {subject}\n\n"
+        f"Dan interjected: \"{question}\"\n"
+        f"{answerer} answered: \"{answer}\"\n\n"
+        f"Remaining segments to replan (keep count = {len(remaining)}):\n{remaining_str}\n\n"
+        "Return JSON only."
+    )
+    raw = await _call_openrouter("google/gemini-2.5-flash", system, user)
+    if not raw:
+        return JSONResponse({"segments": remaining, "changed": False})
+
+    txt = raw.strip()
+    if txt.startswith("```"):
+        txt = txt.strip("`").split("\n", 1)[-1]
+        if txt.endswith("```"):
+            txt = txt.rsplit("```", 1)[0]
+    try:
+        parsed = json.loads(txt)
+        new_segs = parsed.get("segments") or []
+    except Exception:
+        return JSONResponse({"segments": remaining, "changed": False})
+
+    # Guardrails: same length, valid speakers, sane text lengths
+    if len(new_segs) != len(remaining):
+        return JSONResponse({"segments": remaining, "changed": False})
+
+    valid = set(attendees) | {"Dan", "David", "Narrator"}
+    out = []
+    for orig, nxt in zip(remaining, new_segs):
+        speaker = nxt.get("speaker") or orig.get("speaker")
+        if speaker not in valid:
+            speaker = orig.get("speaker")
+        text = (nxt.get("text") or "").strip()[:600] or orig.get("text", "")
+        out.append({
+            "speaker": speaker,
+            "text": text,
+            "role": nxt.get("role") or orig.get("role") or "agent",
+            "pause_ms_after": int(orig.get("pause_ms_after") or 300),
+        })
+    return JSONResponse({"segments": out, "changed": True})
+
+
+@app.post("/api/meeting/finalize")
+async def api_meeting_finalize(request: Request):
+    """Append the full Q&A transcript to the original report .md, then run a
+    verification pass and persist an 'Updated Analysis' section. This is what
+    ensures the task is correct going forward after Dan's interjections."""
+    data = await request.json()
+    name = Path(data.get("name", "")).name
+    transcript = data.get("transcript") or []   # [{speaker,text,type}]
+    qa_pairs = data.get("qa_pairs") or []       # [{question, responder, response}]
+
+    path = _find_report(name)
+    if not path or path.suffix != ".md":
+        return JSONResponse({"error": "report not found"}, status_code=404)
+
+    if not qa_pairs:
+        return JSONResponse({"ok": True, "updated": False, "reason": "no interjections"})
+
+    # Build the Q&A block
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    qa_block = [f"\n\n---\n\n## 💬 Meeting Interjections — {ts}\n"]
+    for i, qa in enumerate(qa_pairs, 1):
+        qa_block.append(f"\n### Q{i}. {qa.get('question','').strip()}")
+        qa_block.append(f"\n**{qa.get('responder','David')}:** {qa.get('response','').strip()}\n")
+
+    # Run the re-analysis via LLM
+    original = path.read_text(encoding="utf-8")
+    task = _extract_task_from_report(original)
+    qa_text = "\n".join(f"Q: {qa.get('question','')}\nA ({qa.get('responder','')}): {qa.get('response','')}"
+                        for qa in qa_pairs)
+    system = (
+        "You verify the correctness of a task analysis after new clarifications surfaced in a "
+        "live meeting. Produce an 'Updated Analysis' paragraph (≤120 words) that integrates the "
+        "Q&A into the original finding. End with a single-line verdict: "
+        "'VERDICT: CORRECT — proceed' OR 'VERDICT: NEEDS REVISION — <what to change>'."
+    )
+    user = (
+        f"Original task: {task}\n\n"
+        f"Original report:\n{original[:4000]}\n\n"
+        f"New Q&A surfaced in meeting:\n{qa_text}\n\n"
+        "Write the Updated Analysis paragraph + verdict line."
+    )
+    updated = await _call_openrouter("google/gemini-2.5-flash", system, user) or "(re-analysis unavailable)"
+    qa_block.append(f"\n### 🔎 Updated Analysis\n\n{updated.strip()}\n")
+
+    # Append + save
+    try:
+        path.write_text(original + "".join(qa_block), encoding="utf-8")
+    except Exception as e:
+        return JSONResponse({"error": f"write failed: {e}"}, status_code=500)
+
+    # Invalidate any cached meeting MP3 so next playback regenerates from updated .md
+    for d in (MEETINGS_DIR, MEETINGS_SAVED):
+        for f in d.glob("*.mp3"):
+            stem = f.stem.split("_", 1)[-1]
+            if stem in path.stem:
+                try: f.unlink()
+                except Exception: pass
+
+    return JSONResponse({
+        "ok": True,
+        "updated": True,
+        "verdict_line": updated.strip().splitlines()[-1] if updated else "",
+        "qa_count": len(qa_pairs),
+    })
+
+
+@app.get("/api/meeting/script")
+async def api_meeting_script(name: str, lang: str = "en"):
+    """Convert a report into a playable meeting script. Translates when lang != en."""
+    from meeting_skill import build_script
+
+    path = _find_report(name)
+    if not path or path.suffix != ".md":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    content = path.read_text(encoding="utf-8")
+    task = _extract_task_from_report(content)
+    run_id = _lookup_run_id_for_task(task) or path.stem
+
+    script = build_script(report_content=content, task=task, meeting_id=run_id)
+    payload = script.to_dict()
+
+    if lang and lang != "en":
+        cache_stem = f"{payload['meeting_id']}_{lang}.json"
+        cache_path = SCRIPTS_CACHE_DIR / cache_stem
+        if cache_path.exists():
+            try:
+                return JSONResponse(json.loads(cache_path.read_text(encoding="utf-8")))
+            except Exception:
+                cache_path.unlink(missing_ok=True)
+        payload["segments"] = await _translate_script(payload["segments"], lang)
+        payload["lang"] = lang
+        try:
+            cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        except Exception:
+            pass
+    else:
+        payload["lang"] = "en"
+    return JSONResponse(payload)
+
+
+# ---------------------------------------------------------------------------
+# Persistent audio cache for meetings
+# ---------------------------------------------------------------------------
+
+AUDIO_DIR        = WAR_ROOM_DIR / "audio"
+MEETINGS_DIR     = AUDIO_DIR / "meetings"              # rolling — 48h retention
+MEETINGS_SAVED   = AUDIO_DIR / "meetings" / "saved"    # pinned — kept forever
+SEGMENTS_DIR     = AUDIO_DIR / "segments"
+for d in (AUDIO_DIR, MEETINGS_DIR, MEETINGS_SAVED, SEGMENTS_DIR):
+    d.mkdir(parents=True, exist_ok=True)
+
+MEETING_RETENTION_HOURS = 48
+REPORT_RETENTION_HOURS = 48
+
+RESEARCH_SAVED = RESEARCH_DIR / "saved"
+RESEARCH_SAVED.mkdir(parents=True, exist_ok=True)
+
+
+def _find_report(name: str) -> Path | None:
+    """Find a report by filename, checking saved/ first, then rolling."""
+    safe = Path(name).name
+    for d in (RESEARCH_SAVED, RESEARCH_DIR):
+        p = d / safe
+        if p.exists() and p.is_file():
+            return p
+    return None
+
+
+def _find_cached_meeting(stem_prefix: str) -> Path | None:
+    """Look for a cached meeting file (saved first, then rolling)."""
+    for d in (MEETINGS_SAVED, MEETINGS_DIR):
+        for f in d.glob(f"{stem_prefix}*.mp3"):
+            return f
+    return None
+
+
+def _prune_old() -> dict[str, int]:
+    """Delete unpinned meeting MP3s and report MDs older than their retention window."""
+    import time
+    now = time.time()
+    out = {"meetings": 0, "reports": 0}
+
+    # Meetings (48h)
+    m_cutoff = now - MEETING_RETENTION_HOURS * 3600
+    for f in MEETINGS_DIR.glob("*.mp3"):
+        if f.parent == MEETINGS_SAVED:
+            continue
+        try:
+            if f.stat().st_mtime < m_cutoff:
+                f.unlink()
+                out["meetings"] += 1
+        except Exception:
+            pass
+
+    # Reports (48h) — rolling only, skip saved/
+    r_cutoff = now - REPORT_RETENTION_HOURS * 3600
+    for f in RESEARCH_DIR.glob("*.md"):
+        if f.parent == RESEARCH_SAVED:
+            continue
+        try:
+            if f.stat().st_mtime < r_cutoff:
+                f.unlink()
+                out["reports"] += 1
+        except Exception:
+            pass
+    return out
+
+
+# Backward-compat alias (old call sites)
+def _prune_old_meetings() -> int:
+    return _prune_old()["meetings"]
+
+
+def _meeting_cache_path(meeting_id: str, safe_name: str) -> Path:
+    stem = re.sub(r"[^a-zA-Z0-9_-]", "_", safe_name.removesuffix(".md"))[:80]
+    return MEETINGS_DIR / f"{meeting_id}_{stem}.mp3"
+
+
+async def _synthesize_segment(client: httpx.AsyncClient, speaker: str, text: str) -> bytes | None:
+    """Call our own /api/tts via localhost to leverage the existing ElevenLabs/edge-tts pipeline."""
+    try:
+        resp = await client.get(
+            "http://127.0.0.1:8765/api/tts",
+            params={"text": text, "speaker": speaker, "lang": "en"},
+            timeout=30.0,
+        )
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+    except Exception as e:
+        logger.warning(f"segment synth failed for {speaker}: {e}")
+    return None
+
+
+async def _build_meeting_mp3(name: str) -> Path | None:
+    """Generate + cache the concatenated meeting MP3 for a report. Returns cached path."""
+    import re as _re, shutil, subprocess, tempfile
+    from meeting_skill import build_script
+
+    report_path = _find_report(name)
+    if not report_path:
+        return None
+    safe_name = report_path.name
+    content = report_path.read_text(encoding="utf-8")
+    task = _extract_task_from_report(content)
+    meeting_id = _lookup_run_id_for_task(task) or _re.sub(r"\W", "", safe_name)[:8] or "000"
+    script = build_script(report_content=content, task=task, meeting_id=meeting_id)
+
+    cache_path = _meeting_cache_path(script.meeting_id, safe_name)
+    if cache_path.exists() and cache_path.stat().st_size > 2048:
+        return cache_path
+
+    ffmpeg = shutil.which("ffmpeg") or next(
+        (p for p in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg") if Path(p).exists()),
+        None,
+    )
+    if not ffmpeg:
+        logger.warning("ffmpeg not found — cannot build meeting MP3 cache")
+        return None
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        list_lines: list[str] = []
+
+        async with httpx.AsyncClient() as client:
+            for i, seg in enumerate(script.segments):
+                audio = await _synthesize_segment(client, seg.speaker, seg.text)
+                if not audio:
+                    continue
+                seg_path = tmp_dir / f"{i:02d}_{seg.speaker}.mp3"
+                seg_path.write_bytes(audio)
+                list_lines.append(f"file '{seg_path}'")
+
+                pause_ms = max(0, min(1500, seg.pause_ms_after))
+                if pause_ms:
+                    sil = tmp_dir / f"sil_{pause_ms}.mp3"
+                    if not sil.exists():
+                        subprocess.run(
+                            [ffmpeg, "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                             "-t", f"{pause_ms/1000:.2f}", "-q:a", "2", str(sil)],
+                            capture_output=True,
+                        )
+                    list_lines.append(f"file '{sil}'")
+
+        if not list_lines:
+            return None
+
+        list_path = tmp_dir / "concat.txt"
+        list_path.write_text("\n".join(list_lines))
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
+             "-c:a", "libmp3lame", "-q:a", "2", str(cache_path)],
+            capture_output=True,
+        )
+
+    if not cache_path.exists() or cache_path.stat().st_size < 2048:
+        return None
+    return cache_path
+
+
+@app.get("/api/meeting/audio")
+async def api_meeting_audio(name: str, download: bool = False):
+    """Return the cached meeting MP3 for a report (generated on first call)."""
+    from fastapi.responses import FileResponse
+
+    path = await _build_meeting_mp3(name)
+    if not path:
+        return JSONResponse({"error": "could not build meeting audio"}, status_code=500)
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
+    return FileResponse(path, media_type="audio/mpeg", headers=headers)
+
+
+@app.get("/api/meeting/list")
+async def api_meeting_list():
+    """List all cached meeting MP3s (rolling + saved). Prunes unsaved ones >48h first."""
+    pruned = _prune_old()
+    items = []
+    for d, saved in ((MEETINGS_SAVED, True), (MEETINGS_DIR, False)):
+        for f in sorted(d.glob("*.mp3"), key=lambda x: x.stat().st_mtime, reverse=True):
+            if f.parent.name == "saved" and not saved:
+                continue
+            items.append({
+                "file":     f.name,
+                "saved":    saved,
+                "size_kb":  round(f.stat().st_size / 1024, 1),
+                "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+            })
+    return JSONResponse({
+        "items": items,
+        "pruned_this_call": pruned,
+        "retention_hours": {"meetings": MEETING_RETENTION_HOURS, "reports": REPORT_RETENTION_HOURS},
+    })
+
+
+def _move_file(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        src.rename(dest)
+    except OSError:
+        dest.write_bytes(src.read_bytes())
+        src.unlink(missing_ok=True)
+
+
+@app.post("/api/meeting/pin")
+async def api_meeting_pin(name: str):
+    """Pin the REPORT + its cached meeting MP3. Both survive 48h cleanup."""
+    # 1. Build (or find) the meeting audio
+    audio_path = await _build_meeting_mp3(name)
+    if not audio_path:
+        return JSONResponse({"error": "could not build meeting audio"}, status_code=500)
+    if audio_path.parent != MEETINGS_SAVED:
+        _move_file(audio_path, MEETINGS_SAVED / audio_path.name)
+
+    # 2. Pin the underlying report .md too
+    report_path = _find_report(name)
+    if report_path and report_path.parent != RESEARCH_SAVED:
+        _move_file(report_path, RESEARCH_SAVED / report_path.name)
+
+    return JSONResponse({
+        "ok": True,
+        "audio_file": audio_path.name,
+        "report_file": Path(name).name,
+        "saved": True,
+    })
+
+
+@app.post("/api/meeting/unpin")
+async def api_meeting_unpin(name: str = "", file: str = ""):
+    """Unpin a meeting + its report. Accepts either the report name or the audio filename."""
+    moved = []
+    # Report side
+    report_name = Path(name).name if name else ""
+    if report_name:
+        src = RESEARCH_SAVED / report_name
+        if src.exists():
+            _move_file(src, RESEARCH_DIR / report_name)
+            moved.append(report_name)
+    # Audio side
+    if file:
+        src = MEETINGS_SAVED / Path(file).name
+        if src.exists():
+            _move_file(src, MEETINGS_DIR / Path(file).name)
+            moved.append(Path(file).name)
+    elif report_name:
+        # Try to locate the audio by filename pattern
+        for f in MEETINGS_SAVED.glob("*.mp3"):
+            if report_name.removesuffix(".md").lower() in f.name.lower():
+                _move_file(f, MEETINGS_DIR / f.name)
+                moved.append(f.name)
+                break
+    if not moved:
+        return JSONResponse({"error": "nothing to unpin"}, status_code=404)
+    return JSONResponse({"ok": True, "moved": moved, "saved": False})
+
+
+@app.on_event("startup")
+async def _schedule_meeting_prune() -> None:
+    async def _loop():
+        while True:
+            try:
+                removed = _prune_old_meetings()
+                if removed:
+                    logger.info(f"meeting prune: removed {removed} files older than {MEETING_RETENTION_HOURS}h")
+            except Exception as e:
+                logger.warning(f"meeting prune failed: {e}")
+            await asyncio.sleep(3600)  # hourly
+    asyncio.create_task(_loop())
 
 
 @app.get("/api/logs")
@@ -307,6 +948,171 @@ async def api_logs():
                 pass
     entries.sort(key=lambda x: x.get("completed", ""), reverse=True)
     return JSONResponse(entries[:50])
+
+
+# ---------------------------------------------------------------------------
+# Standalone-agent manifest + embed
+# ---------------------------------------------------------------------------
+
+@app.get("/api/agent/manifest")
+async def api_agent_manifest():
+    """Describe what this SemeClaw agent can do. Used by consumers (NERVIX,
+    Paperclip companies, direct integrators) to discover capabilities."""
+    auth_required = bool(SEMECLAW_API_KEY)
+    return JSONResponse({
+        "id":          "semeclaw-war-room",
+        "name":        "SemeClaw War Room",
+        "version":     "0.2.0",
+        "tenant":      SEMECLAW_TENANT_ID,
+        "public_url":  SEMECLAW_PUBLIC_URL,
+        "description": ("Cinematic AI agent meeting room. Converts any task report "
+                        "into a scripted multi-agent dialogue with voice, user "
+                        "interjections (2-question budget), live recalibration, "
+                        "and task re-analysis."),
+        "capabilities": [
+            "meeting.script",      # turn a report into scripted segments
+            "meeting.audio",       # generate + cache MP3 of the meeting
+            "meeting.redirect",    # pick best agent to answer a question
+            "meeting.replan",      # rewrite remaining segments given Q&A
+            "meeting.finalize",    # append Q&A + re-analyze source task
+            "meeting.pin",         # save meeting+report beyond 48h
+            "reports.list",
+            "reports.content",
+            "tts.synthesize",      # ElevenLabs Flash v2.5 → edge-tts fallback
+            "embed.iframe",        # renders inside an iframe
+            "embed.widget",        # script-tag SDK
+        ],
+        "endpoints": {
+            "health":      "/api/agent/health",
+            "manifest":    "/api/agent/manifest",
+            "reports":     "/api/reports",
+            "report":      "/api/reports/content?name={name}",
+            "script":      "/api/meeting/script?name={name}&lang=en",
+            "audio":       "/api/meeting/audio?name={name}",
+            "redirect":    "/api/meeting/redirect",
+            "replan":      "/api/meeting/replan",
+            "finalize":    "/api/meeting/finalize",
+            "pin":         "/api/meeting/pin?name={name}",
+            "unpin":       "/api/meeting/unpin?file={file}&name={name}",
+            "list":        "/api/meeting/list",
+            "tts":         "/api/tts?text={text}&speaker={speaker}&lang=en",
+            "embed_html":  "/embed?meeting={name}&v=2",
+            "embed_js":    "/embed.js",
+        },
+        "auth": {
+            "required_for_writes": auth_required,
+            "scheme":   "bearer" if auth_required else "none",
+            "header":   "Authorization: Bearer <SEMECLAW_API_KEY>" if auth_required else None,
+            "protected_paths": list(_PROTECTED_WRITE_PATHS) if auth_required else [],
+        },
+        "tts": {
+            "engine":          "elevenlabs-flash-v2.5 + edge-tts fallback",
+            "languages":       ["en"],
+            "voice_map_size":  len(_ELEVEN_VOICES),
+        },
+        "retention": {
+            "meetings_hours": MEETING_RETENTION_HOURS,
+            "reports_hours":  REPORT_RETENTION_HOURS,
+            "pin_to_save":    True,
+        },
+        "layouts":  ["v1-flat", "v2-orbital"],
+        "meeting_budget": {
+            "max_user_questions_per_meeting": 2,
+            "recalibration": "orchestrator/hermes",
+            "finalize_verdict_line": True,
+        },
+        "integrations": {
+            "paperclip": True,
+            "nervix":    "planned-phase-3",
+            "supabase":  True,
+            "telegram":  False,
+        },
+    })
+
+
+@app.get("/embed.js")
+async def api_embed_js():
+    """Tiny JS SDK — drop-in <script> that mounts the War Room in any page.
+
+    Usage:
+        <script src="https://semeclaw.example.com/embed.js"></script>
+        <div data-semeclaw-meeting="ops-review.md"
+             data-semeclaw-v="2"
+             style="width:100%;height:640px"></div>
+    """
+    from fastapi.responses import Response as FResponse
+    base = SEMECLAW_PUBLIC_URL
+    js = f"""(function() {{
+  var BASE = {json.dumps(base)};
+  function mount(el) {{
+    if (el.getAttribute("data-semeclaw-mounted") === "1") return;
+    el.setAttribute("data-semeclaw-mounted", "1");
+    var meeting = el.getAttribute("data-semeclaw-meeting") || "";
+    var layout  = el.getAttribute("data-semeclaw-v") || "1";
+    var theme   = el.getAttribute("data-semeclaw-theme") || "dark";
+    var url = BASE + "/embed?v=" + encodeURIComponent(layout) +
+              "&theme=" + encodeURIComponent(theme) +
+              (meeting ? "&meeting=" + encodeURIComponent(meeting) : "");
+    var iframe = document.createElement("iframe");
+    iframe.src = url;
+    iframe.style.width = el.style.width || "100%";
+    iframe.style.height = el.style.height || "640px";
+    iframe.style.border = "0";
+    iframe.style.borderRadius = el.style.borderRadius || "12px";
+    iframe.setAttribute("allow", "autoplay; clipboard-write");
+    iframe.setAttribute("loading", "lazy");
+    iframe.title = "SemeClaw War Room";
+    el.innerHTML = "";
+    el.appendChild(iframe);
+  }}
+  function scan() {{
+    var nodes = document.querySelectorAll("[data-semeclaw-meeting], [data-semeclaw-embed]");
+    for (var i = 0; i < nodes.length; i++) mount(nodes[i]);
+  }}
+  if (document.readyState === "loading") {{
+    document.addEventListener("DOMContentLoaded", scan);
+  }} else {{
+    scan();
+  }}
+  window.SemeClaw = {{ mount: mount, scan: scan, base: BASE }};
+}})();
+"""
+    return FResponse(
+        content=js,
+        media_type="application/javascript; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/embed/manifest.json")
+async def api_embed_manifest():
+    return JSONResponse({
+        "widget": "semeclaw-war-room",
+        "script_url": f"{SEMECLAW_PUBLIC_URL}/embed.js",
+        "iframe_url": f"{SEMECLAW_PUBLIC_URL}/embed",
+        "min_width":  320,
+        "min_height": 420,
+        "attributes": [
+            {"name": "data-semeclaw-meeting", "required": False, "desc": "Report filename to play"},
+            {"name": "data-semeclaw-v",       "required": False, "desc": "Layout version: 1 | 2 (orbital)"},
+            {"name": "data-semeclaw-theme",   "required": False, "desc": "dark | light (dark only for now)"},
+        ],
+    })
+
+
+@app.get("/embed")
+async def embed_page(meeting: str = "", v: str = "1", theme: str = "dark"):
+    """Serve the dashboard HTML with query-param hints for embed consumers.
+    The main index.html reads window.location.search to auto-open a meeting."""
+    from fastapi.responses import FileResponse
+    from pathlib import Path as _P
+    index = _P(__file__).parent / "index.html"
+    if not index.exists():
+        return JSONResponse({"error": "index not found"}, status_code=500)
+    return FileResponse(index, media_type="text/html",
+                        headers={"X-SemeClaw-Embed": "1",
+                                 "X-SemeClaw-Meeting": meeting or "",
+                                 "X-SemeClaw-Layout": v})
 
 
 @app.get("/api/agents")
@@ -606,18 +1412,22 @@ _OLLAMA_BASE     = "http://127.0.0.1:11434"
 
 # Load OpenRouter key from environment / fleet env file
 def _openrouter_key() -> str:
-    import os
-    key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not key:
-        # Try fleet env
+    import os as _os
+    key = _os.environ.get("OPENROUTER_API_KEY") or _os.environ.get("DLS_OPENROUTER_API_KEY") or ""
+    if key:
+        return key
+    for env_file in (Path("/etc/openclaw-env"), Path.home() / ".openclaw" / "fleet.env"):
+        if not env_file.exists():
+            continue
         try:
-            for line in Path("/etc/openclaw-env").read_text().splitlines():
-                if line.startswith("OPENROUTER_API_KEY="):
-                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
+            for line in env_file.read_text().splitlines():
+                s = line.strip().removeprefix("export ").strip()
+                for prefix in ("OPENROUTER_API_KEY=", "DLS_OPENROUTER_API_KEY="):
+                    if s.startswith(prefix):
+                        return s.split("=", 1)[1].strip().strip('"').strip("'")
         except Exception:
-            pass
-    return key
+            continue
+    return ""
 
 
 async def _call_openrouter(model: str, system: str, user: str) -> str | None:
@@ -715,6 +1525,760 @@ async def api_meeting_ai_respond(request: Request):
         return JSONResponse({"error": "All AI models unavailable"}, status_code=503)
 
     return JSONResponse({"response": response, "model": used_model, "speaker": speaker})
+
+
+# ---------------------------------------------------------------------------
+# Task-driven meeting system — LLM script generation + background runner
+# ---------------------------------------------------------------------------
+
+_TASK_MEETING_SYSTEM = """\
+You are the War Room Orchestrator AI. Generate a meeting script where AI agents collaboratively plan a task.
+
+AGENTS:
+- Orchestrator: Strategic coordination, task decomposition, final assignments
+- Dexter: Senior developer, architecture, backend systems, DevOps, NERVIX platform
+- Memo: Project manager, planning, workflows, n8n automations, MyWork framework
+- Sienna: Crypto/finance specialist, TON/Solana blockchain, smarty.me payments
+- Nano: Agent creator, NERVIX agents, frontend builds, CLI tooling
+- GSD: Execution planner, phase breakdown, sprint planning, deliverables
+- Hermes: Telegram bots, communications routing, messaging infrastructure
+- Pi: AI researcher, model selection, pipelines, LLM integrations
+
+RULES:
+1. Orchestrator opens with a 2-3 sentence analysis of the task
+2. Invite 2-4 agents most relevant to this specific task (not all of them)
+3. Each invited agent speaks 1-2 sentences about their concrete piece of the work
+4. Include ONE clarifying question from an agent ONLY if genuinely needed — skip if the task is clear
+5. Orchestrator closes with concrete, specific assignments per agent
+
+OUTPUT FORMAT: strict JSON only, no markdown fences, no extra text:
+{
+  "title": "short meeting title (5-8 words)",
+  "narrator_intro": "2-3 sentences. State the task briefly, then explain WHY each selected agent is ideal for this task — one specific reason per agent.",
+  "agents": ["Orchestrator", "Dexter"],
+  "turns": [
+    {"speaker": "Orchestrator", "text": "...", "type": "intro"},
+    {"speaker": "Dexter", "text": "...", "type": "expertise"},
+    {"speaker": "Memo", "text": "...", "type": "question", "to_user": true, "question": "One specific question?"},
+    {"speaker": "Dexter", "text": "...", "type": "assignment", "tasks": ["Build X", "Deploy Y"]},
+    {"speaker": "Memo", "text": "...", "type": "assignment", "tasks": ["Track Z"]},
+    {"speaker": "Orchestrator", "text": "...", "type": "close"}
+  ]
+}
+"""
+
+_TASK_MEETING_FALLBACK_SCRIPT = {
+    "title": "Task Planning Session",
+    "agents": ["Orchestrator", "Dexter", "Memo"],
+    "turns": [
+        {
+            "speaker": "Orchestrator",
+            "text": "We have a new task that needs immediate attention. Let me break this down for the team and assign clear ownership.",
+            "type": "intro",
+        },
+        {
+            "speaker": "Dexter",
+            "text": "I'll handle the technical implementation — architecture, code, and deployment. Give me the specs and I'll ship it.",
+            "type": "expertise",
+        },
+        {
+            "speaker": "Memo",
+            "text": "I'll track progress, coordinate dependencies, and make sure milestones are logged in the system.",
+            "type": "expertise",
+        },
+        {
+            "speaker": "Dexter",
+            "text": "Assigned: technical build and deployment pipeline.",
+            "type": "assignment",
+            "tasks": ["Technical implementation", "Deployment"],
+        },
+        {
+            "speaker": "Memo",
+            "text": "Assigned: project tracking and coordination.",
+            "type": "assignment",
+            "tasks": ["Progress tracking", "Milestone logging"],
+        },
+        {
+            "speaker": "Orchestrator",
+            "text": "Clear ownership established. Dexter leads implementation, Memo owns coordination. Execute and report back.",
+            "type": "close",
+        },
+    ],
+}
+
+
+async def _generate_meeting_script(task: str, user_context: str = "", lang: str = "en") -> dict:
+    """Call LLM waterfall to generate a structured meeting script JSON.
+    Returns parsed dict on success, falls back to _TASK_MEETING_FALLBACK_SCRIPT on any failure.
+    """
+    prompt = task
+    if user_context:
+        prompt = f"{task}\n\nAdditional context: {user_context}"
+    if lang and lang != "en":
+        lang_name = _LANG_NAMES.get(lang, "English")
+        prompt += f"\n\nIMPORTANT: Generate ALL text in this meeting script in {lang_name}. The title, narrator_intro, and every speaker turn MUST be written in {lang_name}."
+
+    raw: str | None = None
+    for provider, model in _AI_MODELS:
+        try:
+            if provider == "openrouter":
+                raw = await _call_openrouter_meeting(model, _TASK_MEETING_SYSTEM, prompt)
+            else:
+                raw = await _call_ollama_meeting(model, _TASK_MEETING_SYSTEM, prompt)
+            if raw:
+                break
+        except Exception as e:
+            logger.warning("_generate_meeting_script %s/%s failed: %s", provider, model, e)
+
+    if not raw:
+        logger.warning("_generate_meeting_script: all models failed, using fallback")
+        return _TASK_MEETING_FALLBACK_SCRIPT
+
+    # Strip possible markdown fences the model may add despite instructions
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```", 2)[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+    if raw.endswith("```"):
+        raw = raw[: raw.rfind("```")].strip()
+
+    try:
+        script = json.loads(raw)
+        # Minimal validation
+        if not isinstance(script.get("turns"), list) or not script["turns"]:
+            raise ValueError("turns missing or empty")
+        if not isinstance(script.get("title"), str):
+            script["title"] = "Task Planning Session"
+        if not isinstance(script.get("agents"), list):
+            script["agents"] = list({t["speaker"] for t in script["turns"]})
+        return script
+    except Exception as e:
+        logger.warning("_generate_meeting_script JSON parse error: %s — raw: %.200s", e, raw)
+        return _TASK_MEETING_FALLBACK_SCRIPT
+
+
+async def _call_openrouter_meeting(model: str, system: str, user: str) -> str | None:
+    """OpenRouter call with higher token limit for meeting script generation."""
+    key = _openrouter_key()
+    if not key:
+        return None
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "HTTP-Referer": "https://nervix.ai",
+        "X-Title": "NERVIX War Room",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "max_tokens": 1200,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OPENROUTER_BASE, timeout=45.0) as c:
+            r = await c.post("/chat/completions", headers=headers, json=payload)
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("OpenRouter meeting %s failed: %s", model, e)
+        return None
+
+
+async def _call_ollama_meeting(model: str, system: str, user: str) -> str | None:
+    """Ollama call with higher token limit for meeting script generation."""
+    payload = {
+        "model": model,
+        "stream": False,
+        "options": {"num_predict": 1200},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(base_url=_OLLAMA_BASE, timeout=90.0) as c:
+            r = await c.post("/api/chat", json=payload)
+            r.raise_for_status()
+            return r.json()["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("Ollama meeting %s failed: %s", model, e)
+        return None
+
+
+async def _run_task_meeting(meeting_id: str, task: str, user_answer: str | None = None, lang: str = "en"):
+    """Background asyncio task that drives the full meeting turn-by-turn."""
+    session = _meeting_sessions[meeting_id]
+
+    # 1. Announce start
+    await manager.broadcast({
+        "type": "meeting_task_start",
+        "meeting_id": meeting_id,
+        "task": task,
+        "title": session.get("title", "Task Planning Session"),
+    })
+
+    # 2. Generate script
+    script = await _generate_meeting_script(task, session.get("user_context", ""), lang=lang)
+
+    # Narrator intro: read task + agent reasons before meeting starts
+    narrator_text = script.get("narrator_intro", "")
+    if narrator_text:
+        session["turns"].append({"speaker": "Narrator", "text": narrator_text, "type": "narrator"})
+        await manager.broadcast({
+            "type": "meeting_task_message",
+            "meeting_id": meeting_id,
+            "speaker": "Narrator",
+            "text": narrator_text,
+            "turn_type": "narrator",
+        })
+        await asyncio.sleep(2.5)
+    session["title"]   = script.get("title", "Task Planning Session")
+    session["agents"]  = script.get("agents", [])
+    turns              = script.get("turns", [])
+
+    # Broadcast updated title/agents now that we have them
+    await manager.broadcast({
+        "type": "meeting_task_meta",
+        "meeting_id": meeting_id,
+        "title": session["title"],
+        "agents": session["agents"],
+    })
+
+    assignments: list[dict] = []
+
+    # 3. Walk through each turn
+    for turn in turns:
+        speaker   = turn.get("speaker", "Orchestrator")
+        text      = turn.get("text", "").strip()
+        turn_type = turn.get("type", "talk")
+        to_user   = turn.get("to_user", False)
+        ts        = datetime.now(timezone.utc).isoformat()
+
+        if not text:
+            continue
+
+        # Record in session
+        session["turns"].append({
+            "speaker":    speaker,
+            "text":       text,
+            "type":       turn_type,
+            "to_user":    to_user,
+            "ts":         ts,
+        })
+
+        # Collect assignments
+        if turn.get("tasks"):
+            assignments.append({"agent": speaker, "tasks": turn["tasks"]})
+
+        # Broadcast the full turn message (streaming: true signals UI should animate)
+        await manager.broadcast({
+            "type":       "meeting_task_message",
+            "meeting_id": meeting_id,
+            "speaker":    speaker,
+            "text":       text,
+            "turn_type":  turn_type,
+            "streaming":  True,
+            "ts":         ts,
+        })
+
+        # Stream word-by-word chunks (~50 ms between words)
+        words = text.split()
+        for word in words:
+            await manager.broadcast({
+                "type":       "meeting_task_chunk",
+                "meeting_id": meeting_id,
+                "chunk":      word + " ",
+            })
+            await asyncio.sleep(0.05)
+
+        # Simulate realistic speaking time: 50 ms per word, capped at 4 s
+        speak_delay = min(len(words) * 0.05, 4.0)
+        await asyncio.sleep(speak_delay)
+
+        # If this turn asks the user a question, pause and wait
+        if to_user:
+            session["status"] = "awaiting_user"
+            event = asyncio.Event()
+            _meeting_waiters[meeting_id] = event
+
+            await manager.broadcast({
+                "type":       "meeting_task_user_question",
+                "meeting_id": meeting_id,
+                "question":   turn.get("question", text),
+                "speaker":    speaker,
+            })
+
+            # Wait up to 5 minutes for a user answer
+            try:
+                await asyncio.wait_for(event.wait(), timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.info("Meeting %s: user question timed out, continuing", meeting_id)
+
+            # Consume the answer
+            answer = _meeting_user_answers.pop(meeting_id, None)
+            session["status"] = "running"
+            _meeting_waiters.pop(meeting_id, None)
+
+            if answer:
+                answer_ts = datetime.now(timezone.utc).isoformat()
+                user_turn = {
+                    "speaker": "Dan",
+                    "text":    answer,
+                    "type":    "user_answer",
+                    "ts":      answer_ts,
+                }
+                session["turns"].append(user_turn)
+                await manager.broadcast({
+                    "type":       "meeting_task_message",
+                    "meeting_id": meeting_id,
+                    "speaker":    "Dan",
+                    "text":       answer,
+                    "turn_type":  "user_answer",
+                    "streaming":  False,
+                    "ts":         answer_ts,
+                })
+
+        await asyncio.sleep(0.3)  # Brief pause between speakers
+
+    # 4. Mark complete and broadcast final assignments
+    session["status"]      = "complete"
+    session["assignments"] = assignments
+    await manager.broadcast({
+        "type":         "meeting_task_complete",
+        "meeting_id":   meeting_id,
+        "title":        session["title"],
+        "assignments":  assignments,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Task meeting REST endpoints
+# ---------------------------------------------------------------------------
+
+import secrets as _secrets
+
+
+@app.post("/api/meeting/task")
+async def api_meeting_task(request: Request):
+    """Start an AI-driven task planning meeting.
+
+    Body: {"task": "...", "user_context": "..."}
+    Returns: {"meeting_id": "...", "status": "starting"}
+    """
+    data         = await request.json()
+    task         = (data.get("task") or "").strip()
+    user_context = (data.get("user_context") or "").strip()
+    lang         = (data.get("lang") or "en").strip()
+
+    if not task:
+        return JSONResponse({"error": "task required"}, status_code=400)
+
+    meeting_id = _secrets.token_hex(4)  # 8-char hex
+
+    session: dict = {
+        "id":           meeting_id,
+        "title":        "Task Planning Session",
+        "task":         task,
+        "user_context": user_context,
+        "lang":         lang,
+        "agents":       [],
+        "status":       "running",
+        "created_at":   datetime.now(timezone.utc).isoformat(),
+        "turns":        [],
+        "assignments":  [],
+    }
+    _meeting_sessions[meeting_id] = session
+
+    asyncio.create_task(_run_task_meeting(meeting_id, task, lang=lang))
+
+    return JSONResponse({"meeting_id": meeting_id, "status": "starting"})
+
+
+@app.get("/api/meeting/history")
+async def api_meeting_history():
+    """List all past task-driven meetings (summary, no full turns)."""
+    result = []
+    for session in _meeting_sessions.values():
+        result.append({
+            "id":          session["id"],
+            "title":       session["title"],
+            "task":        session["task"],
+            "agents":      session["agents"],
+            "status":      session["status"],
+            "created_at":  session["created_at"],
+            "assignments": session["assignments"],
+        })
+    # Newest first
+    result.sort(key=lambda s: s["created_at"], reverse=True)
+    return JSONResponse(result)
+
+
+@app.get("/api/meeting/history/{meeting_id}")
+async def api_meeting_history_detail(meeting_id: str):
+    """Full transcript for a single task-driven meeting."""
+    session = _meeting_sessions.get(meeting_id)
+    if not session:
+        return JSONResponse({"error": "meeting not found"}, status_code=404)
+    return JSONResponse(session)
+
+
+@app.post("/api/meeting/task/{meeting_id}/answer")
+async def api_meeting_task_answer(meeting_id: str, request: Request):
+    """Submit a user answer to a paused meeting waiting for input.
+
+    Body: {"answer": "..."}
+    """
+    session = _meeting_sessions.get(meeting_id)
+    if not session:
+        return JSONResponse({"error": "meeting not found"}, status_code=404)
+
+    data   = await request.json()
+    answer = (data.get("answer") or "").strip()
+    if not answer:
+        return JSONResponse({"error": "answer required"}, status_code=400)
+
+    _meeting_user_answers[meeting_id] = answer
+
+    event = _meeting_waiters.get(meeting_id)
+    if event:
+        event.set()
+
+    return JSONResponse({"ok": True, "meeting_id": meeting_id})
+
+
+# ---------------------------------------------------------------------------
+# Live comment injected into an ongoing meeting
+# ---------------------------------------------------------------------------
+@app.post("/api/meeting/task/{meeting_id}/comment")
+async def api_meeting_task_comment(meeting_id: str, request: Request):
+    """Inject a live user comment into an ongoing meeting.
+
+    The comment is broadcast to all WS clients as a meeting_task_message
+    (user type) and also stored in the session transcript so the LLM can
+    read it on the next agent turn.
+
+    Body: {"comment": "..."}
+    """
+    session = _meeting_sessions.get(meeting_id)
+    if not session:
+        return JSONResponse({"error": "meeting not found"}, status_code=404)
+
+    data    = await request.json()
+    comment = (data.get("comment") or "").strip()
+    if not comment:
+        return JSONResponse({"error": "comment required"}, status_code=400)
+
+    ts = datetime.now(timezone.utc).isoformat()
+    turn = {"speaker": "Dan", "text": comment, "type": "user_comment", "ts": ts}
+
+    # Store in session so agents can see it
+    session.setdefault("turns", []).append(turn)
+
+    # Broadcast to all WS clients
+    msg = {
+        "type":      "meeting_task_message",
+        "meeting_id": meeting_id,
+        "speaker":   "Dan",
+        "text":      comment,
+        "turn_type": "user_comment",
+        "streaming": False,
+        "ts":        ts,
+    }
+    for ws in list(_ws_clients):
+        try:
+            await ws.send_text(json.dumps(msg))
+        except Exception:
+            pass
+
+    # Also signal the meeting loop if it's waiting for a user answer
+    # (comment can act as an implicit answer)
+    _meeting_user_answers[meeting_id] = comment
+    event = _meeting_waiters.get(meeting_id)
+    if event:
+        event.set()
+
+    return JSONResponse({"ok": True, "meeting_id": meeting_id})
+
+
+# ---------------------------------------------------------------------------
+# Neural TTS via edge-tts (Microsoft Edge neural voices — free, no API key)
+# ---------------------------------------------------------------------------
+
+# Per-agent voice map — every agent has a distinct neural voice matching their personality.
+# 20+ unique voices so no two agents ever sound the same.
+# Rate -20% = noticeably slower; -10% = comfortable human pace; -5% = near-normal.
+_AGENT_VOICES: dict[str, dict] = {
+    # ── Core team — primary voices ────────────────────────────────────────────
+    # Deep, slow, wise commander voice. The elder of the fleet.
+    "David":           {"voice": "en-US-ChristopherNeural", "rate": "-22%", "pitch": "-5Hz"},
+    "Orchestrator":    {"voice": "en-US-ChristopherNeural", "rate": "-22%", "pitch": "-5Hz"},
+    # Focused engineer, steady American male, no frills.
+    "Dexter":          {"voice": "en-US-GuyNeural",         "rate": "-10%", "pitch": "+0Hz"},
+    # Clear-spoken PM — organised, articulate, measured.
+    "Memo":            {"voice": "en-US-AndrewNeural",      "rate": "-8%",  "pitch": "+0Hz"},
+    # Confident female, sophisticated — crypto analyst energy.
+    "Sienna":          {"voice": "en-US-JennyNeural",       "rate": "-12%", "pitch": "+2Hz"},
+    # Quick, sharp, energetic — the fastest thinker on the team.
+    "Nano":            {"voice": "en-US-RogerNeural",       "rate": "-5%",  "pitch": "+2Hz"},
+    # Intelligent female strategist — clarity above all else.
+    "GSD":             {"voice": "en-US-AvaNeural",         "rate": "-10%", "pitch": "+1Hz"},
+    # British writer — precise, literary, unhurried.
+    "Hermes":          {"voice": "en-GB-LibbyNeural",       "rate": "-15%", "pitch": "+1Hz"},
+    # Hermes Strategy shares Hermes' voice — same brain, same cadence.
+    "Hermes Strategy": {"voice": "en-GB-LibbyNeural",       "rate": "-15%", "pitch": "+1Hz"},
+    # The boss — calm, decisive, expects concise answers. (Canadian male — authoritative)
+    "Dan":             {"voice": "en-CA-LiamNeural",        "rate": "-8%",  "pitch": "+0Hz"},
+    # ── Extended team — all distinct ─────────────────────────────────────────
+    # Autonomous senior dev — Australian, self-assured, practical.
+    "Pi":              {"voice": "en-AU-WilliamMultilingualNeural", "rate": "-8%",  "pitch": "+0Hz"},
+    "Pi Stability":    {"voice": "en-AU-WilliamMultilingualNeural", "rate": "-12%", "pitch": "-1Hz"},
+    # Research explorer — British male, inquisitive, thoughtful.
+    "Discovery":       {"voice": "en-GB-RyanNeural",        "rate": "-12%", "pitch": "+0Hz"},
+    # Deep research — analytical American male, precise.
+    "Autoresearch":    {"voice": "en-US-EricNeural",        "rate": "-10%", "pitch": "+0Hz"},
+    # Fleet doctor — mature British male, clinical authority.
+    "Doctor":          {"voice": "en-GB-ThomasNeural",      "rate": "-18%", "pitch": "-3Hz"},
+    "DoctorLocal":     {"voice": "en-GB-ThomasNeural",      "rate": "-15%", "pitch": "-2Hz"},
+    # Watchdog — concise, alert American female.
+    "Monitor":         {"voice": "en-US-EmmaNeural",        "rate": "-5%",  "pitch": "+0Hz"},
+    # Growth hacker — conversational, upbeat American male.
+    "Growth":          {"voice": "en-US-BrianNeural",       "rate": "-8%",  "pitch": "+1Hz"},
+    # Finance — measured, careful, British female.
+    "Finance":         {"voice": "en-GB-SoniaNeural",       "rate": "-14%", "pitch": "+0Hz"},
+    # Automation expert — Irish male, methodical, distinctive.
+    "N8N":             {"voice": "en-IE-ConnorNeural",      "rate": "-8%",  "pitch": "+0Hz"},
+    # Teacher — warm Australian female, patient and clear.
+    "Teacher":         {"voice": "en-AU-NatashaNeural",     "rate": "-14%", "pitch": "+1Hz"},
+    "Learning":        {"voice": "en-AU-NatashaNeural",     "rate": "-12%", "pitch": "+1Hz"},
+    # Codex AI — professional American female, assistant energy.
+    "Codex":           {"voice": "en-US-MichelleNeural",    "rate": "-8%",  "pitch": "+0Hz"},
+    "CodexMax":        {"voice": "en-CA-ClaraNeural",       "rate": "-10%", "pitch": "+0Hz"},
+    # Xlaude — premium American female, direct, high-quality.
+    "Xlaude":          {"voice": "en-US-AriaNeural",        "rate": "-8%",  "pitch": "+0Hz"},
+    # KiloClaw — external agent, confident American male.
+    "KiloClaw":        {"voice": "en-US-SteffanNeural",     "rate": "-8%",  "pitch": "+0Hz"},
+    # Claude Code — clear, helpful, American female.
+    "Claude Code":     {"voice": "en-US-JennyNeural",       "rate": "-8%",  "pitch": "+1Hz"},
+    # OpenClaw — Irish male (distinctive, agent-OS vibe).
+    "OpenClaw":        {"voice": "en-IE-ConnorNeural",      "rate": "-6%",  "pitch": "+1Hz"},
+    # System messages — neutral, clear British female.
+    "System":          {"voice": "en-GB-MaisieNeural",      "rate": "-5%",  "pitch": "+0Hz"},
+    "User":            {"voice": "en-CA-LiamNeural",        "rate": "-8%",  "pitch": "+0Hz"},
+    # Narrator — deep British male, formal announcer, reads task context before meeting
+    "Narrator":        {"voice": "en-GB-RyanNeural",        "rate": "-20%", "pitch": "-3Hz"},
+}
+_DEFAULT_TTS = {"voice": "en-US-AndrewNeural", "rate": "-10%", "pitch": "+0Hz"}
+
+# ---------------------------------------------------------------------------
+# ElevenLabs Flash v2.5 — premium voice layer (English only). Falls back to
+# edge-tts when key is absent or language is non-English. Dan = Bill (Wise).
+# ---------------------------------------------------------------------------
+_ELEVEN_VOICES: dict[str, str] = {
+    # Primary — Dan = the boss = Brian (Deep, Resonant, Comforting) — American entrepreneur voice
+    "Dan":             "Brian",
+    "User":            "Brian",         # user messages read back in Dan's voice
+    # Core team
+    "David":           "Brian",         # deep resonant comforting — same entrepreneur voice as Dan
+    "Orchestrator":    "Brian",
+    "Dexter":          "Adam",          # dominant firm — senior dev
+    "Memo":            "Chris",         # charming down-to-earth — PM
+    "Sienna":          "Bella",         # professional bright warm — crypto analyst
+    "Nano":            "Liam",          # energetic — agent creator
+    "GSD":             "Matilda",       # knowledgable professional — strategist
+    "Hermes":          "Alice",         # clear engaging educator (British) — messenger
+    "Hermes Strategy": "Alice",
+    "Pi":              "Charlie",       # deep confident (Australian) — senior dev
+    "Pi Stability":    "Charlie",
+    # Extended
+    "Discovery":       "George",        # warm captivating storyteller (British) — researcher
+    "Autoresearch":    "Eric",          # smooth trustworthy — analytical
+    "Doctor":          "Daniel",        # steady broadcaster (British) — clinical
+    "DoctorLocal":     "Daniel",
+    "Monitor":         "Gregory",       # tech reviewer — alert SRE
+    "Growth":          "Jessica",       # playful bright warm — growth hacker
+    "Finance":         "Lily",          # velvety (British) — measured CFO
+    "N8N":             "River",         # relaxed neutral informative — automation
+    "Teacher":         "Sarah",         # mature reassuring — patient teacher
+    "Learning":        "Sarah",
+    "Codex":           "Matilda",       # knowledgable professional
+    "CodexMax":        "Matilda",
+    "Xlaude":          "Ember",         # energetic confident — premium
+    "KiloClaw":        "Callum",        # husky trickster — distinctive
+    "Claude Code":     "Jessica",       # bright helpful
+    "OpenClaw":        "Roger",         # laid-back casual resonant — agent OS
+    "System":          "Alice",         # clear neutral British
+    "Narrator":        "George",        # warm captivating storyteller — narrator
+}
+_ELEVEN_MODEL = "eleven_flash_v2_5"
+_ELEVEN_VOICE_ID_CACHE: dict[str, str] = {}
+
+
+def _load_elevenlabs_key() -> str | None:
+    """Load ELEVENLABS_API_KEY from env, /etc/openclaw-env, or ~/.openclaw/fleet.env."""
+    key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("XI_API_KEY")
+    if key:
+        return key
+    for env_file in (Path("/etc/openclaw-env"), Path.home() / ".openclaw" / "fleet.env"):
+        if not env_file.exists():
+            continue
+        try:
+            for line in env_file.read_text().splitlines():
+                line = line.strip().removeprefix("export ").strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                if k.strip() in ("ELEVENLABS_API_KEY", "XI_API_KEY"):
+                    v = v.strip().strip('"').strip("'")
+                    if v:
+                        return v
+        except PermissionError:
+            continue
+    return None
+
+
+_ELEVEN_KEY = _load_elevenlabs_key()
+
+
+async def _resolve_eleven_voice_id(client, name: str) -> str | None:
+    """Resolve a voice NAME (e.g. 'Bill') to its voice_id, cached."""
+    if name in _ELEVEN_VOICE_ID_CACHE:
+        return _ELEVEN_VOICE_ID_CACHE[name]
+    try:
+        resp = await client.get(
+            "https://api.elevenlabs.io/v1/voices",
+            headers={"xi-api-key": _ELEVEN_KEY},
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        for v in resp.json().get("voices", []):
+            full = v.get("name", "")
+            short = full.split(" -")[0].strip()
+            _ELEVEN_VOICE_ID_CACHE[short] = v.get("voice_id", "")
+            _ELEVEN_VOICE_ID_CACHE[full] = v.get("voice_id", "")
+        return _ELEVEN_VOICE_ID_CACHE.get(name)
+    except Exception as e:
+        logger.warning(f"ElevenLabs voice lookup failed: {e}")
+        return None
+
+# Gender map — used to assign voices when non-English language is selected
+_AGENT_GENDER: dict[str, str] = {
+    "David": "m", "Orchestrator": "m", "Dexter": "m", "Memo": "m",
+    "Sienna": "f", "Nano": "m", "GSD": "f", "Hermes": "f",
+    "Dan": "m", "Pi": "m", "Discovery": "m", "Autoresearch": "m",
+    "Doctor": "m", "DoctorLocal": "m", "Monitor": "f", "Growth": "m",
+    "Finance": "f", "N8N": "m", "Teacher": "f", "Learning": "f",
+    "Codex": "f", "CodexMax": "f", "Xlaude": "f", "KiloClaw": "m",
+    "Claude Code": "f", "OpenClaw": "m", "System": "f", "User": "m",
+    "Narrator": "m",
+}
+
+# Per-language voice pools (male/female). When lang != 'en', agent voices are
+# overridden by gender-matched voices from this table.
+_LANG_VOICE_MAP: dict[str, dict[str, list[str]]] = {
+    "ro": {"m": ["ro-RO-EmilNeural"],        "f": ["ro-RO-AlinaNeural"]},
+    "de": {"m": ["de-DE-KillianNeural", "de-DE-ConradNeural"], "f": ["de-DE-KatjaNeural", "de-DE-AmalaNeural"]},
+    "fr": {"m": ["fr-FR-HenriNeural"],        "f": ["fr-FR-DeniseNeural", "fr-FR-EloiseNeural"]},
+    "es": {"m": ["es-ES-AlvaroNeural"],       "f": ["es-ES-ElviraNeural"]},
+    "pt": {"m": ["pt-BR-AntonioNeural"],      "f": ["pt-BR-FranciscaNeural"]},
+    "it": {"m": ["it-IT-DiegoNeural"],        "f": ["it-IT-IsabellaNeural"]},
+}
+
+_LANG_NAMES: dict[str, str] = {
+    "en": "English", "ro": "Romanian", "de": "German",
+    "fr": "French", "es": "Spanish", "pt": "Portuguese",  "it": "Italian",
+}
+
+
+@app.get("/api/tts")
+async def api_tts(text: str, speaker: str = "", lang: str = "en"):
+    """Stream MP3 audio for a given text + speaker using edge-tts neural voices.
+
+    Returns: audio/mpeg binary — play directly with <audio> or AudioContext.
+    Cached in memory (LRU-style) to avoid repeated network calls for the same phrase.
+    """
+    import io
+    try:
+        import edge_tts
+    except ImportError:
+        return JSONResponse({"error": "edge_tts not installed"}, status_code=503)
+
+    from fastapi.responses import Response as FResponse
+
+    # ── ElevenLabs Flash v2.5 path (English only, key required) ────────────
+    if _ELEVEN_KEY and (not lang or lang == "en") and speaker in _ELEVEN_VOICES:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                voice_id = await _resolve_eleven_voice_id(client, _ELEVEN_VOICES[speaker])
+                if voice_id:
+                    resp = await client.post(
+                        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                        headers={
+                            "xi-api-key": _ELEVEN_KEY,
+                            "accept": "audio/mpeg",
+                            "content-type": "application/json",
+                        },
+                        params={"output_format": "mp3_44100_128"},
+                        json={
+                            "text": text,
+                            "model_id": _ELEVEN_MODEL,
+                            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True},
+                        },
+                    )
+                    if resp.status_code == 200 and resp.content:
+                        return FResponse(
+                            content=resp.content,
+                            media_type="audio/mpeg",
+                            headers={
+                                "Cache-Control": "public, max-age=3600",
+                                "X-Speaker": speaker,
+                                "X-Voice": _ELEVEN_VOICES[speaker],
+                                "X-TTS-Engine": "elevenlabs-flash-v2.5",
+                            },
+                        )
+                    else:
+                        logger.warning(f"ElevenLabs {resp.status_code} for {speaker}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"ElevenLabs fallback to edge-tts for {speaker}: {e}")
+
+    cfg = _AGENT_VOICES.get(speaker, _DEFAULT_TTS)
+    # Language override: swap to gender-matched native voice when non-English
+    if lang and lang != "en":
+        lang_pool = _LANG_VOICE_MAP.get(lang)
+        if lang_pool:
+            gender = _AGENT_GENDER.get(speaker, "m")
+            pool = lang_pool.get(gender, lang_pool.get("m", []))
+            if pool:
+                cfg = {**cfg, "voice": pool[hash(speaker) % len(pool)]}
+    voice = cfg["voice"]
+    rate  = cfg["rate"]
+    pitch = cfg["pitch"]
+
+    try:
+        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+        buf = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+        buf.seek(0)
+        audio_bytes = buf.read()
+        if not audio_bytes:
+            return JSONResponse({"error": "no audio generated"}, status_code=500)
+        return FResponse(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Speaker": speaker,
+                "X-Voice": voice,
+            }
+        )
+    except Exception as e:
+        logger.error(f"TTS error for speaker={speaker}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/board")

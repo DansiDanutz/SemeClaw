@@ -123,8 +123,8 @@ class ResearchTools:
     async def extract(self, urls: list[str]) -> str:
         """
         Extract content from web pages. Returns markdown text.
-        Uses curl + readability-like extraction via trafilatura if available,
-        otherwise raw HTML with a simple text extraction.
+        Uses markitdown for superior HTML→Markdown, falls back to trafilatura,
+        then to simple regex stripping.
         """
         logger.info("📄 Extracting content from %d URLs", len(urls))
         results = []
@@ -137,6 +137,24 @@ class ResearchTools:
                         headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
                     )
                     html = r.text
+
+                    # Try markitdown for clean HTML→Markdown
+                    try:
+                        from markitdown import MarkItDown
+                        import tempfile, os
+                        with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
+                            f.write(html)
+                            tmp = f.name
+                        try:
+                            md = MarkItDown()
+                            converted = md.convert(tmp)
+                            if converted.text_content and converted.text_content.strip():
+                                results.append({"url": url, "title": url, "content": converted.text_content[:5000]})
+                                continue
+                        finally:
+                            os.unlink(tmp)
+                    except ImportError:
+                        pass
 
                     # Try trafilatura for clean extraction
                     try:
@@ -171,8 +189,7 @@ class ResearchTools:
     async def browser_navigate(self, url: str) -> str:
         """
         Navigate to a URL and return the page text content.
-        Uses curl as a lightweight browser (no JS rendering, but fast).
-        For JS-heavy pages, the agent should note this limitation.
+        Uses markitdown for HTML→Markdown conversion when available.
         """
         logger.info("🌐 Navigating to: %s", url)
         try:
@@ -182,12 +199,29 @@ class ResearchTools:
                     url,
                     headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
                 )
-                import re
                 html = r.text
-                # Extract title
+                import re
                 title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.DOTALL | re.IGNORECASE)
                 title = title_match.group(1).strip() if title_match else url
-                # Strip HTML
+
+                # Try markitdown for rich HTML→Markdown
+                try:
+                    from markitdown import MarkItDown
+                    import tempfile, os
+                    with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
+                        f.write(html)
+                        tmp = f.name
+                    try:
+                        md = MarkItDown()
+                        converted = md.convert(tmp)
+                        if converted.text_content and converted.text_content.strip():
+                            return f"Title: {title}\nURL: {url}\n\n{converted.text_content[:5000]}"
+                    finally:
+                        os.unlink(tmp)
+                except ImportError:
+                    pass
+
+                # Fallback: strip HTML
                 text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
                 text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
                 text = re.sub(r'<[^>]+>', ' ', text)
@@ -195,6 +229,34 @@ class ResearchTools:
                 return f"Title: {title}\nURL: {url}\n\n{text[:5000]}"
         except Exception as e:
             return f"[Navigation failed: {e}]"
+
+    async def convert_document(self, file_path: str) -> str:
+        """
+        Convert a local file to Markdown text.
+        Supports PDF, DOCX, PPTX, XLSX, HTML, EPUB, images, and more.
+        """
+        logger.info("📎 Converting document: %s", file_path)
+        try:
+            from pathlib import Path
+            p = Path(file_path).expanduser().resolve()
+            if not p.exists():
+                return f"[File not found: {file_path}]"
+            if not p.is_file():
+                return f"[Not a file: {file_path}]"
+
+            from markitdown import MarkItDown
+            md = MarkItDown()
+            result = md.convert(str(p))
+            text = result.text_content or ""
+            if not text.strip():
+                return f"[No extractable content from {p.name}]"
+            if len(text) > 50_000:
+                text = text[:50_000] + f"\n\n... [truncated at 50,000 chars]"
+            return text
+        except ImportError:
+            return "[markitdown not installed. Run: pip install markitdown]"
+        except Exception as e:
+            return f"[Document conversion failed: {e}]"
 
     async def run_code(self, python_code: str, timeout: int = 30) -> str:
         """
@@ -261,13 +323,15 @@ You have access to the following tools to help with your research:
 
 1. **search(query)** — Search the web for information. Returns top 5 results with titles, URLs, and snippets.
 
-2. **extract(urls)** — Extract clean text content from web page URLs. Pass a list of URLs, returns the text/markdown content from each page.
+2. **extract(urls)** — Extract clean Markdown content from web page URLs using markitdown. Pass a list of URLs, returns rich text/markdown from each page.
 
-3. **browser_navigate(url)** — Navigate to a single URL and get the page text content. Good for quick page reads (no JavaScript rendering).
+3. **browser_navigate(url)** — Navigate to a single URL and get the page content as Markdown. Uses markitdown for superior HTML conversion.
 
-4. **run_code(python_code)** — Execute Python code and get the output. Useful for data analysis, calculations, JSON processing, etc.
+4. **convert_document(file_path)** — Convert any local file to Markdown text. Supports PDF, DOCX, PPTX, XLSX, HTML, EPUB, images (EXIF/OCR), and more.
 
-5. **run_shell(command)** — Execute a shell command and get the output. Useful for git operations, file inspection, system commands.
+5. **run_code(python_code)** — Execute Python code and get the output. Useful for data analysis, calculations, JSON processing, etc.
+
+6. **run_shell(command)** — Execute a shell command and get the output. Useful for git operations, file inspection, system commands.
 
 Use these tools actively during your research. Don't just rely on your training knowledge — verify claims with live data.
 """

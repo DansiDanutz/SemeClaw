@@ -4,7 +4,7 @@
     {
       "name": "war-room-dashboard",
       "runtimeExecutable": "/opt/homebrew/bin/uv",
-      "runtimeArgs": ["run", "python", "war_room/dashboard/server.py"],
+      "runtimeArgs": ["--directory", "/Users/davidai/SemeClaw", "run", "python", "war_room/dashboard/server.py"],
       "port": 8765
     }
   ]

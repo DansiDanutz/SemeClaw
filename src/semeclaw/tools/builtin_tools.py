@@ -1,5 +1,6 @@
 """Built-in tools for SemeClaw."""
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -93,3 +94,62 @@ def bash(command: str) -> str:
         return "Error: Command timed out after 30 seconds"
     except Exception as e:
         return f"Error executing command: {e}"
+
+
+@tool
+def markitdown_convert(input_path: str, output_path: str = "") -> str:
+    """Convert a local file to Markdown using MarkItDown.
+
+    Args:
+        input_path: Path to the source file to convert
+        output_path: Optional path for the generated markdown file
+
+    Returns:
+        Converted markdown or a success/error message
+    """
+    source = Path(input_path).expanduser()
+    if not source.exists():
+        return f"Error: File not found: {source}"
+    if not source.is_file():
+        return f"Error: Not a file: {source}"
+
+    markitdown_bin = shutil.which("markitdown")
+    if not markitdown_bin:
+        return "Error: markitdown is not installed or not available on PATH"
+
+    try:
+        command = [markitdown_bin, str(source)]
+
+        if output_path:
+            destination = Path(output_path).expanduser()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            command.extend(["-o", str(destination)])
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            if result.returncode != 0:
+                return (
+                    f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+                )
+            return f"Successfully converted {source} to {destination}"
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if result.returncode != 0:
+            return (
+                f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+            )
+        return result.stdout.strip() or "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: MarkItDown conversion timed out after 120 seconds"
+    except Exception as e:
+        return f"Error converting file: {e}"

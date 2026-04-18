@@ -374,6 +374,676 @@ header::before{
 .mtb-btn{background:var(--surface);border:1px solid var(--border-2);color:var(--text-3);border-radius:6px;padding:4px 9px;font-size:9px;font-family:var(--mono);cursor:pointer;transition:all .2s;letter-spacing:.3px}
 .mtb-btn:hover{border-color:var(--amber);color:var(--amber);background:var(--amber-dim)}
 .mtb-btn.active{background:var(--amber-dim);border-color:rgba(245,158,11,.35);color:var(--amber)}
+.tm-lang-bar{display:flex;gap:3px;align-items:center;margin-right:4px}
+.tm-lang-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:2px 5px;font-size:15px;cursor:pointer;transition:all .15s;line-height:1.2}
+.tm-lang-btn:hover{background:rgba(255,255,255,.14);transform:scale(1.12)}
+.tm-lang-btn.active{background:rgba(99,102,241,.3);border-color:rgba(99,102,241,.7);box-shadow:0 0 8px rgba(99,102,241,.35);transform:scale(1.08)}
+
+/* ══════════════════════════════════════════════
+   TASK MEETING ROOM v2 — Cinematic Agent Dialogue
+══════════════════════════════════════════════ */
+.tm-overlay{display:none;position:fixed;inset:0;z-index:95;background:rgba(1,3,11,.98);backdrop-filter:blur(32px);flex-direction:column;overflow:hidden;animation:fade-in .35s var(--ease-out)}
+.tm-overlay.open{display:flex}
+.tm-hdr{height:52px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(6,14,33,.9);position:relative;overflow:hidden}
+.tm-hdr::before{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--amber) 30%,var(--violet) 70%,transparent);opacity:.5}
+.tm-hdr-title{flex:1;font-size:13px;font-weight:700;letter-spacing:.4px;color:var(--text-2);text-transform:uppercase;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-hdr-badge{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);color:var(--amber);font-size:9px;font-family:var(--mono);font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0}
+.tm-hdr-badge.live{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red)}
+.tm-body{flex:1;display:flex;overflow:hidden;position:relative}
+/* Prompt Zone */
+.tm-prompt-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:22px;padding:36px 24px;position:relative}
+.tm-prompt-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 50%,rgba(245,158,11,.04) 0%,transparent 70%);pointer-events:none}
+.tm-prompt-icon{font-size:50px;filter:drop-shadow(0 0 28px rgba(245,158,11,.22));animation:float 4s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.tm-prompt-title{font-size:22px;font-weight:800;color:var(--text);text-align:center;letter-spacing:-.3px;line-height:1.2}
+.tm-prompt-sub{font-size:13px;color:var(--text-3);text-align:center;max-width:460px;line-height:1.6}
+.tm-prompt-box{width:100%;max-width:620px;display:flex;flex-direction:column;gap:10px}
+.tm-prompt-textarea{width:100%;min-height:96px;background:var(--bg-1);border:1px solid var(--border-2);border-radius:12px;color:var(--text);padding:14px 18px;font-size:14px;font-family:var(--sans);outline:none;resize:vertical;transition:border-color .2s,box-shadow .2s;line-height:1.55}
+.tm-prompt-textarea:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,158,11,.07)}
+.tm-prompt-textarea::placeholder{color:var(--text-3)}
+.tm-launch-btn{align-self:flex-end;background:linear-gradient(135deg,var(--amber),#f97316);border:none;border-radius:10px;padding:11px 28px;font-size:13px;font-weight:700;font-family:var(--mono);color:#000;cursor:pointer;letter-spacing:.3px;transition:transform .15s,box-shadow .2s;box-shadow:0 4px 20px rgba(245,158,11,.28)}
+.tm-launch-btn:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(245,158,11,.42)}
+.tm-launch-btn:active{transform:translateY(0)}
+.tm-launch-btn:disabled{opacity:.45;pointer-events:none}
+.tm-history-link{font-size:11px;color:var(--text-3);font-family:var(--mono);cursor:pointer;text-decoration:underline;text-underline-offset:3px;transition:color .2s}
+.tm-history-link:hover{color:var(--cyan)}
+/* Stage */
+.tm-stage{display:none;flex:1;flex-direction:column;overflow:hidden}
+.tm-stage.active{display:flex}
+.tm-roster{display:flex;align-items:flex-end;gap:12px;padding:13px 18px 11px;flex-wrap:wrap;border-bottom:1px solid var(--border);flex-shrink:0;background:radial-gradient(ellipse 80% 200% at 50% 100%,rgba(245,158,11,.04) 0%,transparent 65%);position:relative}
+/* "Switch to V2 Room" button in the flat V1 roster — hidden in V2 layout */
+.tm-to-v2-btn{
+  position:absolute; top:10px; right:14px; z-index:9;
+  background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(99,102,241,.18));
+  border:1px solid rgba(245,158,11,.45);
+  color:var(--amber);
+  border-radius:20px;
+  padding:6px 14px;
+  font-size:10.5px;
+  font-family:var(--mono);
+  font-weight:800;
+  letter-spacing:.8px;
+  cursor:pointer;
+  transition:all .2s;
+  display:flex; align-items:center; gap:5px;
+  box-shadow:0 2px 10px rgba(245,158,11,.12);
+}
+.tm-to-v2-btn:hover{background:var(--amber);color:#000;box-shadow:0 0 22px rgba(245,158,11,.5)}
+.tm-stage.v2-layout .tm-to-v2-btn{display:none}
+.tm-rag{display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0;transform:translateY(14px) scale(.88);transition:all .5s var(--ease-out);position:relative}
+.tm-rag.joined{opacity:.42;transform:translateY(0) scale(1)}
+.tm-rag.has-spoken{opacity:.8}
+.tm-rag.speaking{opacity:1;transform:scale(1.1) translateY(-3px)}
+.tm-rav{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;background:var(--surface);border:2px solid var(--border);transition:box-shadow .3s,border-color .3s,transform .3s}
+.tm-rag.speaking .tm-rav{box-shadow:0 0 0 2px var(--amber),0 0 32px var(--amber-glow);border-color:var(--amber);animation:av-breathe 1.8s ease-in-out infinite}
+@keyframes av-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+/* 3-ring ripple: .tm-rring is ring1, ::before is ring2, ::after is ring3 */
+.tm-rring{position:absolute;inset:-7px;border-radius:50%;border:2px solid var(--amber);opacity:0;pointer-events:none}
+.tm-rav::before,.tm-rav::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--amber);opacity:0;pointer-events:none}
+.tm-rav::before{inset:-13px}
+.tm-rav::after{inset:-20px;border-color:rgba(245,158,11,.35)}
+.tm-rag.speaking .tm-rring{opacity:1;animation:ripple1 1.8s ease-out infinite}
+.tm-rag.speaking .tm-rav::before{opacity:1;animation:ripple2 1.8s ease-out .35s infinite}
+.tm-rag.speaking .tm-rav::after{opacity:1;animation:ripple3 1.8s ease-out .7s infinite}
+@keyframes ripple1{0%{transform:scale(.9);opacity:.9}100%{transform:scale(1.25);opacity:0}}
+@keyframes ripple2{0%{transform:scale(.85);opacity:.6}100%{transform:scale(1.35);opacity:0}}
+@keyframes ripple3{0%{transform:scale(.8);opacity:.35}100%{transform:scale(1.5);opacity:0}}
+.tm-rname{font-size:8px;font-family:var(--mono);color:var(--text-3);letter-spacing:.5px;text-align:center;text-transform:uppercase;transition:color .3s}
+.tm-rag.speaking .tm-rname{color:var(--amber);font-weight:700}
+
+/* ══════════════════════════════════════════════
+   V2 LAYOUT — "The Room" (split: table left, chat right)
+   Toggled by adding .v2-layout on .tm-stage
+   ══════════════════════════════════════════════ */
+.tm-stage.v2-layout{flex-direction:row;gap:0;align-items:stretch;height:100%;min-height:0}
+.tm-stage.v2-layout .tm-wave{order:3;grid-column:2/3}
+.tm-stage.v2-layout .tm-roster{
+  flex:0 0 46%;
+  min-width:340px;
+  max-width:640px;
+  padding:0;
+  border-right:1px solid var(--border);
+  border-bottom:none;
+  /* Deep space — subtle radial glow from center, no gimmicks */
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 50%, rgba(99,102,241,.09) 0%, transparent 62%),
+    radial-gradient(ellipse 100% 90% at 50% 100%, rgba(34,211,238,.04) 0%, transparent 70%),
+    linear-gradient(180deg,#05070d 0%,#0a0f1a 50%,#05070d 100%);
+  position:relative;
+  display:block;
+  overflow:hidden;
+  box-shadow:inset 0 0 140px rgba(0,0,0,.9);
+}
+/* Concentric orbit rings — subtle backdrop, like a radar */
+.tm-stage.v2-layout .tm-roster::before{
+  content:'';
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:80%;
+  height:80%;
+  border-radius:50%;
+  background:
+    radial-gradient(circle,
+      transparent 0%, transparent 18%,
+      rgba(99,102,241,.06) 18%, rgba(99,102,241,.06) 18.5%,
+      transparent 18.5%, transparent 34%,
+      rgba(99,102,241,.05) 34%, rgba(99,102,241,.05) 34.4%,
+      transparent 34.4%, transparent 50%,
+      rgba(99,102,241,.04) 50%, rgba(99,102,241,.04) 50.3%,
+      transparent 50.3%, transparent 70%,
+      rgba(99,102,241,.03) 70%, rgba(99,102,241,.03) 70.2%,
+      transparent 70.2%);
+  pointer-events:none;
+  opacity:.9;
+  z-index:1;
+}
+/* Hidden legacy elements — no longer rendered */
+.tm-stage.v2-layout .tm-roster .tm-lamp-beam,
+.tm-stage.v2-layout .tm-roster .tm-lamp-body,
+.tm-stage.v2-layout .tm-roster .tm-hologram,
+.tm-stage.v2-layout .tm-roster .tm-table-grain{display:none !important}
+
+/* FEATURED SPEAKER — big central card showing the current speaker */
+.tm-stage.v2-layout .tm-roster .tm-feature{
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  width:170px;
+  height:170px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(245,158,11,.22) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(13,17,28,.85) 0%, rgba(5,7,13,.95) 75%);
+  border:1px solid rgba(245,158,11,.35);
+  box-shadow:
+    0 0 0 6px rgba(245,158,11,.05),
+    0 0 40px rgba(245,158,11,.25),
+    inset 0 2px 8px rgba(255,220,160,.15);
+  z-index:3;
+  pointer-events:none;
+  transition:all .5s var(--ease-out);
+}
+.tm-stage.v2-layout .tm-roster .tm-feature::before{
+  /* Pulsing ring when live */
+  content:'';
+  position:absolute;
+  inset:-14px;
+  border-radius:50%;
+  border:2px solid var(--amber);
+  opacity:0;
+}
+.tm-stage.v2-layout .tm-roster .tm-feature.active::before{
+  animation:feature-pulse 2s ease-out infinite;
+}
+@keyframes feature-pulse{
+  0%{opacity:.65; transform:scale(1)}
+  80%{opacity:0; transform:scale(1.2)}
+  100%{opacity:0; transform:scale(1.2)}
+}
+.tm-stage.v2-layout .tm-roster .tm-feature-glyph{
+  font-size:48px;
+  filter:drop-shadow(0 3px 10px rgba(0,0,0,.6));
+}
+.tm-stage.v2-layout .tm-roster .tm-feature-name{
+  font-size:11px;
+  font-family:var(--mono);
+  font-weight:800;
+  letter-spacing:1.4px;
+  color:var(--amber);
+  text-transform:uppercase;
+  text-shadow:0 0 14px rgba(245,158,11,.5);
+}
+.tm-stage.v2-layout .tm-roster .tm-feature-label{
+  font-size:8px;
+  font-family:var(--mono);
+  color:var(--text-3);
+  letter-spacing:1.8px;
+  text-transform:uppercase;
+}
+/* Room title */
+.tm-stage.v2-layout .tm-roster .tm-room-title{
+  position:absolute;top:12px;left:16px;
+  font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:1.4px;
+  color:rgba(99,102,241,.7);text-transform:uppercase;z-index:8;
+}
+.tm-stage.v2-layout .tm-roster .tm-room-title::before{content:'◉  '}
+/* "Back to V1" button — inside the room, top-right corner */
+.tm-stage.v2-layout .tm-roster .tm-v1-btn{
+  position:absolute;
+  top:10px; right:14px;
+  z-index:9;
+  background:rgba(34,211,238,.1);
+  border:1px solid rgba(34,211,238,.28);
+  color:var(--cyan);
+  border-radius:20px;
+  padding:5px 12px;
+  font-size:10px;
+  font-family:var(--mono);
+  font-weight:700;
+  letter-spacing:.7px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.tm-stage.v2-layout .tm-roster .tm-v1-btn:hover{
+  background:var(--cyan);color:#001822;box-shadow:0 0 20px rgba(34,211,238,.35);
+}
+/* Room title pushed below the button when both exist */
+.tm-stage.v2-layout .tm-roster .tm-room-title{top:38px}
+.tm-stage.v2-layout .tm-rag{
+  position:absolute;
+  transform-origin:center bottom;
+  opacity:0;
+  transform:scale(.4) translateY(40px);
+  transition:all .8s cubic-bezier(.2,1,.3,1);
+  z-index:5;
+}
+.tm-stage.v2-layout .tm-rag.joined{
+  opacity:.72;
+  transform:scale(1) translateY(0);
+}
+.tm-stage.v2-layout .tm-rag.has-spoken{opacity:.92}
+.tm-stage.v2-layout .tm-rag.speaking{
+  opacity:1;
+  transform:scale(1.18) translateY(-6px);
+  z-index:6;
+}
+.tm-stage.v2-layout .tm-rag{width:74px}
+.tm-stage.v2-layout .tm-rav{
+  width:46px;height:46px;font-size:18px;
+  z-index:3; position:relative;
+}
+.tm-stage.v2-layout .tm-rag.speaking .tm-rav{
+  box-shadow:
+    0 0 0 3px var(--amber),
+    0 0 38px rgba(245,158,11,.55),
+    0 8px 20px rgba(0,0,0,.45);
+}
+
+/* Curved leather armchair silhouette (tan/cognac leather) */
+.tm-stage.v2-layout .tm-rag .tm-chair{
+  position:absolute;
+  left:50%; top:-8px;
+  transform:translateX(-50%);
+  width:78px; height:72px;
+  pointer-events:none;
+  z-index:1;
+}
+/* Chair back — rounded curved tulip shape */
+.tm-stage.v2-layout .tm-rag .tm-chair::before{
+  content:''; position:absolute;
+  left:50%; top:4px;
+  transform:translateX(-50%);
+  width:68px; height:54px;
+  border-radius:38px 38px 18px 18px / 48px 48px 20px 20px;
+  background:
+    radial-gradient(ellipse 60% 80% at 35% 25%, rgba(255,180,100,.45) 0%, transparent 55%),
+    linear-gradient(145deg,#8c5a2e 0%,#6b4020 45%,#3f2410 100%);
+  box-shadow:
+    inset 0 -8px 14px rgba(0,0,0,.55),
+    inset 0 3px 6px rgba(255,200,130,.25),
+    0 6px 12px rgba(0,0,0,.55);
+  border:1px solid rgba(245,158,11,.2);
+}
+/* Chair seat cushion */
+.tm-stage.v2-layout .tm-rag .tm-chair::after{
+  content:''; position:absolute;
+  left:50%; bottom:2px;
+  transform:translateX(-50%);
+  width:72px; height:16px;
+  border-radius:18px 18px 8px 8px / 14px 14px 6px 6px;
+  background:linear-gradient(180deg,#a5703a 0%,#5a341a 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(255,200,130,.35),
+    inset 0 -3px 6px rgba(0,0,0,.5),
+    0 4px 8px rgba(0,0,0,.6);
+  border:1px solid rgba(245,158,11,.18);
+}
+/* Humanoid silhouette sitting in the chair */
+.tm-stage.v2-layout .tm-rag .tm-person{
+  position:absolute;
+  left:50%; top:6px;
+  transform:translateX(-50%);
+  width:44px; height:46px;
+  z-index:2;
+  pointer-events:none;
+}
+.tm-stage.v2-layout .tm-rag .tm-person::before{
+  /* head */
+  content:''; position:absolute;
+  left:50%; top:0;
+  transform:translateX(-50%);
+  width:18px; height:18px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255,255,255,.25), transparent 55%),
+    linear-gradient(160deg,var(--avatar-color,#8892a4) 10%, rgba(0,0,0,.75) 120%);
+  box-shadow:0 2px 5px rgba(0,0,0,.6);
+}
+.tm-stage.v2-layout .tm-rag .tm-person::after{
+  /* shoulders/torso */
+  content:''; position:absolute;
+  left:50%; bottom:0;
+  transform:translateX(-50%);
+  width:42px; height:26px;
+  background:
+    radial-gradient(ellipse 70% 100% at 50% 0%, rgba(255,255,255,.18), transparent 55%),
+    linear-gradient(180deg,var(--avatar-color,#8892a4) 0%, rgba(0,0,0,.65) 100%);
+  border-radius:20px 20px 4px 4px / 26px 26px 4px 4px;
+  opacity:.95;
+  box-shadow:0 3px 8px rgba(0,0,0,.55);
+}
+/* Speaking state → chair tinted amber, subtle glow under seat */
+.tm-stage.v2-layout .tm-rag.speaking .tm-chair::before{
+  box-shadow:
+    inset 0 -8px 14px rgba(0,0,0,.45),
+    inset 0 3px 6px rgba(255,220,150,.4),
+    0 6px 20px rgba(245,158,11,.4);
+  border-color:rgba(245,158,11,.55);
+}
+
+/* Name-plate on the table in front of each seat */
+.tm-stage.v2-layout .tm-rag .tm-plate{
+  position:absolute;
+  left:50%; bottom:-26px;
+  transform:translateX(-50%);
+  background:linear-gradient(180deg,#f5d28a 0%,#c29048 100%);
+  color:#1a120a;
+  font-size:8.5px;
+  font-weight:800;
+  font-family:var(--mono);
+  letter-spacing:.6px;
+  padding:3px 8px;
+  border-radius:3px;
+  border:1px solid #7a5210;
+  box-shadow:0 3px 6px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.25);
+  white-space:nowrap;
+  text-transform:uppercase;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:3px;
+}
+.tm-stage.v2-layout .tm-rag.speaking .tm-plate{
+  background:linear-gradient(180deg,var(--amber) 0%,#c9810a 100%);
+  border-color:#7a5210;
+  box-shadow:0 4px 10px rgba(245,158,11,.45), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.tm-stage.v2-layout .tm-rname{display:none} /* name now on plate */
+
+.tm-stage.v2-layout #tm-dialogue-col{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  height:100%;
+  background:rgba(3,6,15,.45);
+}
+.tm-stage.v2-layout .tm-wave{
+  order:1;
+  flex:0 0 auto;
+  border-top:none;
+  border-bottom:1px solid var(--border);
+  background:linear-gradient(90deg,rgba(245,158,11,.05),transparent);
+}
+.tm-stage.v2-layout .tm-dialogue{
+  order:2;
+  flex:1 1 auto;
+  min-height:0;
+  padding:16px 20px;
+  overflow-y:auto;
+  scroll-behavior:smooth;
+}
+.tm-stage.v2-layout .tm-comment-bar{
+  order:3;
+  flex:0 0 auto;
+  display:flex !important;
+  padding:14px 16px;
+  border-top:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(10,21,40,.75),rgba(3,6,15,.95));
+  gap:10px;
+  position:relative;
+  z-index:4;
+}
+.tm-stage.v2-layout .tm-comment-icon{
+  font-size:16px;
+  opacity:.85;
+  background:rgba(34,211,238,.08);
+  border:1px solid rgba(34,211,238,.18);
+  width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:50%;
+  flex-shrink:0;
+}
+.tm-stage.v2-layout .tm-comment-input{
+  flex:1;
+  border-radius:22px;
+  padding:10px 18px;
+  font-size:13px;
+  background:rgba(10,21,40,.9);
+  border:1px solid var(--border-2);
+  transition:all .2s;
+}
+.tm-stage.v2-layout .tm-comment-input:focus{
+  border-color:var(--cyan);
+  background:rgba(10,21,40,1);
+  box-shadow:0 0 0 3px rgba(34,211,238,.08);
+}
+.tm-stage.v2-layout .tm-comment-btn{
+  border-radius:22px;
+  padding:10px 18px;
+  font-size:12px;
+  background:linear-gradient(135deg,var(--cyan),#0ea5e9);
+  border:none;
+  color:#001822;
+  font-weight:800;
+  box-shadow:0 4px 12px rgba(34,211,238,.28);
+}
+.tm-stage.v2-layout .tm-comment-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 6px 18px rgba(34,211,238,.42);
+}
+
+/* Modern chat bubbles in v2 */
+.tm-stage.v2-layout .tm-msg{
+  padding:10px 14px;
+  border-bottom:none;
+  margin-bottom:6px;
+}
+.tm-stage.v2-layout .tm-msg .tm-msg-body{
+  background:rgba(10,21,40,.55);
+  border:1px solid var(--border);
+  border-radius:14px 14px 14px 4px;
+  padding:9px 13px;
+  max-width:88%;
+}
+.tm-stage.v2-layout .tm-msg.user-msg{flex-direction:row-reverse}
+.tm-stage.v2-layout .tm-msg.user-msg .tm-msg-body{
+  background:linear-gradient(135deg,rgba(34,211,238,.16),rgba(34,211,238,.08));
+  border-color:rgba(34,211,238,.32);
+  border-radius:14px 14px 4px 14px;
+  margin-left:auto;
+}
+.tm-stage.v2-layout .tm-msg-head{margin-bottom:3px}
+.tm-stage.v2-layout .tm-msg-text{font-size:12.5px;line-height:1.55}
+
+/* "Thinking" dots during conversational pauses */
+.tm-rag .tm-thinking{
+  position:absolute;
+  bottom:-14px;
+  left:50%;
+  transform:translateX(-50%);
+  display:none;
+  gap:3px;
+  padding:3px 6px;
+  background:rgba(34,211,238,.12);
+  border:1px solid rgba(34,211,238,.28);
+  border-radius:10px;
+}
+.tm-rag.thinking .tm-thinking{display:flex}
+.tm-rag .tm-thinking span{
+  width:3px;height:3px;border-radius:50%;background:var(--cyan);
+  animation:think-bounce 1.1s ease-in-out infinite;
+}
+.tm-rag .tm-thinking span:nth-child(2){animation-delay:.15s}
+.tm-rag .tm-thinking span:nth-child(3){animation-delay:.3s}
+@keyframes think-bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}
+
+/* Agent enters the room — walking-in feel */
+@keyframes agent-walkin{
+  0%{opacity:0;transform:scale(.3) translateY(80px) rotate(-8deg)}
+  55%{opacity:.9;transform:scale(1.08) translateY(-4px) rotate(1deg)}
+  80%{transform:scale(.98) translateY(1px) rotate(0)}
+  100%{opacity:.72;transform:scale(1) translateY(0) rotate(0)}
+}
+.tm-stage.v2-layout .tm-rag.joined{animation:agent-walkin .85s cubic-bezier(.2,1,.3,1) both}
+
+/* ── RESPONSIVE v2 ── */
+@media (max-width: 1100px){
+  .tm-stage.v2-layout .tm-roster{flex:0 0 44%;min-width:320px;padding:28px 14px}
+  .tm-stage.v2-layout .tm-rag{width:66px}
+  .tm-stage.v2-layout .tm-rav{width:42px;height:42px;font-size:16px}
+  .tm-stage.v2-layout .tm-rag .tm-plate{font-size:8px;padding:2px 6px}
+}
+@media (max-width: 900px){
+  .tm-stage.v2-layout{flex-direction:column}
+  .tm-stage.v2-layout .tm-roster{
+    flex:0 0 auto;min-width:0;width:100%;height:300px;
+    border-right:none;border-bottom:1px solid var(--border);
+    padding:22px 12px;
+  }
+  .tm-stage.v2-layout #tm-dialogue-col{flex:1;min-height:0}
+}
+@media (max-width: 640px){
+  .tm-stage.v2-layout .tm-roster{height:260px;padding:16px 6px}
+  .tm-stage.v2-layout .tm-rag{width:58px}
+  .tm-stage.v2-layout .tm-rav{width:38px;height:38px;font-size:14px}
+  .tm-stage.v2-layout .tm-rag .tm-chair{width:52px;height:50px}
+  .tm-stage.v2-layout .tm-rag .tm-person{width:34px;height:42px}
+  .tm-stage.v2-layout .tm-rag .tm-plate{font-size:7.5px;padding:2px 5px;bottom:-22px}
+  .tm-stage.v2-layout .tm-comment-bar{padding:9px 10px;gap:6px}
+  .tm-stage.v2-layout .tm-comment-input{padding:9px 14px;font-size:12.5px}
+  .tm-stage.v2-layout .tm-comment-btn{padding:9px 14px;font-size:11.5px}
+  .tm-stage.v2-layout .tm-comment-icon{width:30px;height:30px;font-size:14px}
+  .tm-stage.v2-layout .tm-msg{padding:8px 10px}
+  .tm-stage.v2-layout .tm-msg .tm-msg-body{max-width:95%;padding:8px 11px}
+  .tm-stage.v2-layout .tm-msg-text{font-size:12px}
+  .tm-hdr{padding:0 12px;height:44px}
+  .tm-hdr-title{font-size:11px}
+  .tm-hdr-badge{font-size:8px;padding:2px 6px}
+  .mtb-btn{font-size:8.5px;padding:3px 7px}
+}
+@media (max-width: 420px){
+  .tm-stage.v2-layout .tm-roster{height:220px}
+  .tm-stage.v2-layout .tm-rag{width:50px}
+  .tm-stage.v2-layout .tm-rav{width:34px;height:34px;font-size:13px}
+  .tm-stage.v2-layout .tm-rag .tm-plate{font-size:7px;padding:1px 4px}
+  .tm-stage.v2-layout .tm-rag .tm-person{width:28px;height:36px}
+  .tm-stage.v2-layout .tm-rag .tm-person::before{width:16px;height:16px}
+  .tm-stage.v2-layout .tm-rag .tm-person::after{width:34px;height:22px}
+}
+/* Touch-friendly: bigger hit targets on coarse pointers */
+@media (pointer: coarse){
+  .tm-stage.v2-layout .tm-comment-btn,
+  .tm-stage.v2-layout .tm-comment-input{min-height:42px}
+  .mtb-btn{min-height:32px;padding:6px 10px}
+}
+/* Wave */
+.tm-wave{display:none;align-items:center;gap:10px;padding:7px 18px;background:linear-gradient(90deg,rgba(245,158,11,.07),transparent);border-bottom:1px solid rgba(245,158,11,.1);flex-shrink:0}
+.tm-wave.live{display:flex}
+.tm-wave-label{font-size:10px;font-family:var(--mono);color:var(--amber);font-weight:700;min-width:80px;letter-spacing:.3px}
+.tm-waveform{display:flex;align-items:center;gap:3px;height:26px}
+.tm-wv-b{width:3px;border-radius:3px;background:linear-gradient(to top,var(--amber),var(--cyan));height:4px}
+.tm-wave.live .tm-wv-b{animation:wv var(--d,.5s) ease-in-out infinite alternate}
+.tm-wv-b:nth-child(1){--d:.38s}.tm-wv-b:nth-child(2){--d:.52s}.tm-wv-b:nth-child(3){--d:.31s}
+.tm-wv-b:nth-child(4){--d:.65s}.tm-wv-b:nth-child(5){--d:.44s}.tm-wv-b:nth-child(6){--d:.28s}
+.tm-wv-b:nth-child(7){--d:.58s}.tm-wv-b:nth-child(8){--d:.35s}.tm-wv-b:nth-child(9){--d:.72s}
+.tm-voice-btn{margin-left:auto;background:var(--bg-2);border:1px solid var(--border-2);color:var(--text-3);border-radius:6px;padding:3px 10px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .2s}
+.tm-voice-btn:hover{border-color:var(--amber);color:var(--amber)}
+.tm-voice-btn.muted{background:var(--red-dim);border-color:rgba(239,68,68,.35);color:var(--red)}
+/* Dialogue */
+.tm-dialogue{flex:1;overflow-y:auto;padding:6px 0;scrollbar-width:thin;scrollbar-color:var(--border-2) transparent}
+.tm-msg{padding:9px 18px;display:flex;gap:10px;align-items:flex-start;animation:msg-in .3s var(--ease-out) both;border-bottom:1px solid rgba(255,255,255,.02)}
+.tm-msg:last-child{border-bottom:none}
+.tm-msg-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px;background:var(--surface)}
+.tm-msg-body{flex:1;min-width:0}
+.tm-msg-head{display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap}
+.tm-msg-speaker{font-size:10px;font-weight:700;font-family:var(--mono);letter-spacing:.3px}
+.tm-msg-ts{font-size:9px;color:var(--text-3);font-family:var(--mono)}
+.tm-msg-tag{font-size:8px;padding:1px 5px;border-radius:3px;font-family:var(--mono);letter-spacing:.3px}
+.tm-msg-tag.agent{background:rgba(139,92,246,.12);color:var(--violet);border:1px solid rgba(139,92,246,.2)}
+.tm-msg-tag.user{background:rgba(34,211,238,.1);color:var(--cyan);border:1px solid rgba(34,211,238,.2)}
+.tm-msg-tag.system{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+.tm-msg-text{font-size:13px;color:var(--text-2);line-height:1.58;word-break:break-word}
+.tm-msg.streaming .tm-msg-text::after{content:'▌';display:inline;color:var(--amber);animation:cursor-blink .6s step-end infinite;margin-left:2px}
+.tm-msg.user-msg .tm-msg-text{color:var(--text)}
+.tm-msg.system-msg .tm-msg-text{color:var(--green);font-style:italic;font-size:11px}
+/* User Question */
+.tm-question{display:none;flex-direction:column;gap:10px;padding:14px 18px;border-top:2px solid rgba(34,211,238,.22);background:linear-gradient(90deg,rgba(34,211,238,.05),transparent);flex-shrink:0;animation:msg-in .3s var(--ease-out)}
+.tm-question.visible{display:flex}
+.tm-question-label{font-size:10px;font-family:var(--mono);color:var(--cyan);font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.tm-question-text{font-size:13px;color:var(--text);font-weight:600;line-height:1.45}
+.tm-question-row{display:flex;gap:8px}
+.tm-qinput{flex:1;background:var(--bg-2);border:1px solid rgba(34,211,238,.28);border-radius:8px;color:var(--text);padding:9px 13px;font-size:13px;font-family:var(--sans);outline:none;transition:border-color .2s}
+.tm-qinput:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(34,211,238,.06)}
+.tm-qinput::placeholder{color:var(--text-3)}
+.tm-qsubmit{background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.28);color:var(--cyan);border-radius:8px;padding:9px 18px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.3px;white-space:nowrap}
+.tm-qsubmit:hover{background:var(--cyan);color:#000}
+/* Summary */
+.tm-summary-panel{display:none;padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0;background:rgba(16,185,129,.035);max-height:220px;overflow-y:auto}
+.tm-summary-panel.visible{display:block}
+.tm-summary-title{font-size:10px;font-family:var(--mono);color:var(--green);font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:10px}
+.tm-assignments{display:flex;flex-wrap:wrap;gap:8px}
+.tm-assign-card{background:var(--surface);border:1px solid var(--border-2);border-radius:10px;padding:10px 13px;min-width:160px;flex:1;border-top:2px solid var(--green);animation:modal-pop .35s var(--ease-out) both}
+.tm-assign-card.d1{animation-delay:.09s}.tm-assign-card.d2{animation-delay:.18s}.tm-assign-card.d3{animation-delay:.27s}.tm-assign-card.d4{animation-delay:.36s}
+.tm-assign-agent{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.tm-assign-av{width:26px;height:26px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.tm-assign-name{font-size:11px;font-weight:700;font-family:var(--mono)}
+.tm-assign-task{font-size:11px;color:var(--text-2);line-height:1.45}
+.tm-assign-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.tm-assign-tag{font-size:8px;font-family:var(--mono);padding:2px 6px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+/* Assignment status badges */
+.tm-assign-card.status-completed{border-top-color:var(--green)}
+.tm-assign-card.status-running{border-top-color:var(--amber);animation:card-running 2.4s ease-in-out infinite}
+.tm-assign-card.status-blocked{border-top-color:var(--red);box-shadow:0 0 0 1px rgba(239,68,68,.13),0 4px 20px rgba(239,68,68,.09)}
+@keyframes card-running{0%,100%{box-shadow:0 4px 16px rgba(245,158,11,.06)}50%{box-shadow:0 4px 28px rgba(245,158,11,.22)}}
+.tm-assign-hdr{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.tm-assign-status-badge{font-size:8px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;margin-left:auto}
+.tm-assign-status-badge.completed{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.28)}
+.tm-assign-status-badge.running{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.28);animation:blink 1.9s ease-in-out infinite}
+.tm-assign-status-badge.blocked{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.28);animation:blink .9s ease-in-out infinite}
+.tm-reopen-btn{width:100%;margin-top:9px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.24);color:var(--red);border-radius:7px;padding:7px 11px;font-size:9px;font-family:var(--mono);font-weight:700;cursor:pointer;transition:all .22s;letter-spacing:.3px;text-align:left;display:flex;align-items:center;gap:6px}
+.tm-reopen-btn:hover{background:rgba(239,68,68,.17);border-color:var(--red);transform:translateY(-1px);box-shadow:0 4px 16px rgba(239,68,68,.18)}
+.tm-reopen-btn:active{transform:none}
+/* Live comment bar */
+.tm-comment-bar{display:none;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid rgba(34,211,238,.12);background:linear-gradient(90deg,rgba(34,211,238,.03),transparent);flex-shrink:0}
+.tm-stage.active .tm-comment-bar{display:flex}
+.tm-comment-icon{font-size:13px;flex-shrink:0;opacity:.6}
+.tm-comment-input{flex:1;background:rgba(10,21,40,.8);border:1px solid rgba(34,211,238,.18);border-radius:8px;color:var(--text);padding:7px 12px;font-size:12px;font-family:var(--sans);outline:none;transition:border-color .2s}
+.tm-comment-input:focus{border-color:rgba(34,211,238,.45);box-shadow:0 0 0 2px rgba(34,211,238,.05)}
+.tm-comment-input::placeholder{color:var(--text-3);font-size:11px}
+.tm-comment-btn{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.22);color:var(--cyan);border-radius:7px;padding:7px 13px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0}
+.tm-comment-btn:hover{background:var(--cyan);color:#000}
+/* Finish Meeting button — always visible in the comment bar */
+.tm-finish-btn{
+  background:rgba(239,68,68,.1);
+  border:1px solid rgba(239,68,68,.3);
+  color:var(--red);
+  border-radius:7px;
+  padding:7px 13px;
+  font-size:11px;
+  font-family:var(--mono);
+  font-weight:700;
+  cursor:pointer;
+  transition:all .2s;
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.tm-finish-btn:hover{background:var(--red);color:#fff;box-shadow:0 0 18px rgba(239,68,68,.35)}
+.tm-finish-btn:disabled{opacity:.4;cursor:not-allowed}
+.tm-stage.v2-layout .tm-finish-btn{
+  border-radius:22px;
+  padding:10px 16px;
+  font-size:12px;
+}
+/* History */
+.tm-hist-panel{display:none;flex:1;flex-direction:column;overflow:hidden;padding:14px 18px}
+.tm-hist-panel.active{display:flex}
+.tm-hist-list{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;padding-bottom:4px}
+.tm-hist-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px}
+.tm-hist-item:hover{background:var(--surface-2);border-color:var(--amber-dim)}
+.tm-hist-icon{width:38px;height:38px;border-radius:9px;background:var(--amber-dim);border:1px solid rgba(245,158,11,.18);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.tm-hist-info{flex:1;min-width:0}
+.tm-hist-task{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-hist-meta{font-size:9px;color:var(--text-3);font-family:var(--mono);margin-top:3px}
+.tm-hist-cnt{font-size:9px;font-family:var(--mono);color:var(--amber);background:var(--amber-dim);border:1px solid rgba(245,158,11,.18);padding:2px 7px;border-radius:10px;white-space:nowrap}
+.tm-transcript{display:none;flex:1;flex-direction:column;overflow:hidden}
+.tm-transcript.active{display:flex}
+.tm-transcript-hdr{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-shrink:0;margin-bottom:8px}
+.tm-back-btn{background:var(--surface);border:1px solid var(--border-2);color:var(--text-2);border-radius:6px;padding:4px 10px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .2s}
+.tm-back-btn:hover{border-color:var(--amber);color:var(--amber)}
+.tm-transcript-title{flex:1;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Mini card */
+.tm-mini{padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s;border-radius:8px}
+.tm-mini:hover{background:rgba(245,158,11,.035)}
+.tm-mini-icon{font-size:18px}
+.tm-mini-info{flex:1;min-width:0}
+.tm-mini-title{font-size:12px;font-weight:600;color:var(--text)}
+.tm-mini-sub{font-size:10px;color:var(--text-3);font-family:var(--mono);margin-top:2px}
+.tm-open-btn{background:var(--amber-dim);border:1px solid rgba(245,158,11,.22);color:var(--amber);border-radius:7px;padding:6px 12px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.3px;flex-shrink:0}
+.tm-open-btn:hover{background:var(--amber);color:#000}
+.tm-hist-mini{background:var(--surface);border:1px solid var(--border-2);color:var(--text-3);border-radius:7px;padding:6px 10px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .2s;flex-shrink:0}
+.tm-hist-mini:hover{border-color:var(--cyan);color:var(--cyan)}
+.tm-live-badge{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red);font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;animation:tm-pulse 2s ease-in-out infinite}
+@keyframes tm-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
+.tm-mini-log{max-height:110px;overflow-y:auto}
 
 /* ══ MODAL / TOAST ══ */
 .empty{padding:24px 18px;font-size:11px;font-family:var(--mono);color:var(--text-3);text-align:center}
@@ -590,43 +1260,25 @@ header::before{
       </div>
     </div>
 
-    <!-- Inline Meeting Room -->
+    <!-- Task Meeting Room -->
     <div class="card" id="meeting-card-inline">
       <div class="card-hdr">
         <span style="font-size:15px;line-height:1">🎙</span>
         <span class="card-ttl">Meeting Room</span>
         <span class="card-num" id="meeting-count">0</span>
-        <div class="meeting-toolbar">
-          <button class="mtb-btn active" id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle voice">🔊 Voice</button>
-          <button class="mtb-btn" onclick="expandMeeting()" title="Fullscreen meeting">⤢ Expand</button>
+        <div style="display:flex;gap:5px;margin-left:auto">
+          <button class="tm-hist-mini" onclick="openTM();showTMHistory()" title="Past meetings">📋</button>
+          <button class="tm-open-btn" onclick="openTM()">Open →</button>
         </div>
       </div>
-      <div class="meeting-inner" id="meeting-inner-inline">
-        <div class="meeting-table" id="meeting-table"></div>
-        <div class="waveform-row" id="waveform-row">
-          <span class="wf-label" id="wf-name">—</span>
-          <div class="waveform" id="waveform">
-            <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-            <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-            <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-          </div>
-          <button class="wf-stop" onclick="stopSpeech()">■ Stop</button>
-        </div>
-        <div class="meeting-log" id="meeting-log">
-          <div class="meeting-empty">No messages yet — start the meeting</div>
-        </div>
-        <div class="meeting-input-row">
-          <select class="speaker-sel" id="meeting-speaker">
-            <option>David</option><option>Dexter</option><option>Memo</option>
-            <option>Sienna</option><option>Nano</option><option>GSD</option>
-            <option>Hermes</option><option>Pi</option><option>Dan</option>
-          </select>
-          <input class="meeting-field" id="meeting-input" type="text" placeholder="Say something to the room…" onkeydown="if(event.key==='Enter')sendMeeting()"/>
-          <button class="mic-btn" id="mic-btn" onclick="toggleMic()" title="Voice input">🎤</button>
-          <button class="ai-respond-btn" id="ai-btn" onclick="aiRespond(false)" title="AI generates response for selected speaker">✦ AI</button>
-          <button class="meeting-send" onclick="sendMeeting()">Send</button>
+      <div class="tm-mini" onclick="openTM()">
+        <div class="tm-mini-icon" id="tm-mini-icon">🎙</div>
+        <div class="tm-mini-info">
+          <div class="tm-mini-title" id="tm-mini-title">Open a Task Meeting</div>
+          <div class="tm-mini-sub" id="tm-mini-sub">Describe a task → agents convene → live plan</div>
         </div>
       </div>
+      <div class="tm-mini-log" id="tm-mini-log"></div>
     </div>
 
     <!-- Runs -->
@@ -641,41 +1293,117 @@ header::before{
       <div id="reports-list"><div class="empty">No reports yet</div></div>
     </div>
 
+    <!-- Meeting Library -->
+    <div class="card">
+      <div class="card-hdr">
+        <span style="color:var(--amber);font-size:15px;line-height:1">🎙</span>
+        <span class="card-ttl">Meeting Library</span>
+        <span class="card-num" id="meetings-count">0</span>
+        <button class="mtb-btn" id="ml-filter-all" onclick="setMLFilter('all')" style="margin-left:6px">All</button>
+        <button class="mtb-btn active" id="ml-filter-saved" onclick="setMLFilter('saved')">📌 Saved</button>
+        <button class="mtb-btn" id="ml-filter-rolling" onclick="setMLFilter('rolling')">⏱ 48h</button>
+        <button class="mtb-btn" onclick="loadMeetings()" title="Refresh">⟳</button>
+      </div>
+      <div id="meetings-list"><div class="empty">No meetings cached yet</div></div>
+      <div style="padding:6px 14px;font-size:9px;font-family:var(--mono);color:var(--text-3);border-top:1px solid var(--border);letter-spacing:.3px">
+        // Pinned meetings are kept forever — rolling meetings auto-delete after 48 hours
+      </div>
+    </div>
+
   </main>
 </div>
 
-<!-- FULLSCREEN MEETING OVERLAY -->
-<div class="meeting-overlay" id="meeting-overlay">
-  <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid var(--border);background:rgba(1,3,11,.85);flex-shrink:0">
-    <div style="font-size:18px">🎙</div>
-    <div style="font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-2)">War Room — Meeting</div>
-    <div style="flex:1"></div>
-    <span class="card-num" id="meeting-count-full">0</span>
-    <button class="mtb-btn active" id="autoplay-btn-full" onclick="toggleAutoplay()" title="Toggle voice">🔊 Voice</button>
-    <button class="mtb-btn" onclick="collapseMeeting()">⤡ Exit</button>
-  </div>
-  <div class="meeting-inner">
-    <div class="meeting-table" id="meeting-table-full"></div>
-    <div class="waveform-row" id="waveform-row-full">
-      <span class="wf-label" id="wf-name-full">—</span>
-      <div class="waveform" id="waveform-full">
-        <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-        <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-        <div class="wv-b"></div><div class="wv-b"></div><div class="wv-b"></div>
-      </div>
-      <button class="wf-stop" onclick="stopSpeech()">■ Stop</button>
+<!-- TASK MEETING ROOM OVERLAY -->
+<div class="tm-overlay" id="tm-overlay">
+  <!-- Header -->
+  <div class="tm-hdr">
+    <div style="font-size:16px;flex-shrink:0">🎙</div>
+    <div class="tm-hdr-title" id="tm-hdr-title">War Room — Task Meeting</div>
+    <span class="tm-hdr-badge" id="tm-status-badge">IDLE</span>
+    <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+      <div class="tm-lang-bar" id="tm-lang-bar"></div>
+      <button class="mtb-btn" id="tm-voice-toggle" onclick="toggleTMVoice()">🔊 Voice</button>
+      <button class="mtb-btn" id="tm-layout-toggle" onclick="toggleTMLayout()" title="Switch layout">🎭 Room</button>
+      <button class="mtb-btn" onclick="openTM();showTMHistory()">📋 History</button>
+      <button class="mtb-btn" onclick="closeTM()">✕ Close</button>
     </div>
-    <div class="meeting-log" id="meeting-log-full" style="flex:1;max-height:none"></div>
-    <div class="meeting-input-row">
-      <select class="speaker-sel" id="meeting-speaker-full">
-        <option>David</option><option>Dexter</option><option>Memo</option>
-        <option>Sienna</option><option>Nano</option><option>GSD</option>
-        <option>Hermes</option><option>Pi</option><option>Dan</option>
-      </select>
-      <input class="meeting-field" id="meeting-input-full" type="text" placeholder="Say something to the room…" onkeydown="if(event.key==='Enter')sendMeeting(true)"/>
-      <button class="mic-btn" id="mic-btn-full" onclick="toggleMic()" title="Voice input">🎤</button>
-      <button class="ai-respond-btn" id="ai-btn-full" onclick="aiRespond(true)" title="AI generates response for selected speaker">✦ AI</button>
-      <button class="meeting-send" onclick="sendMeeting(true)">Send</button>
+  </div>
+  <!-- Body -->
+  <div class="tm-body">
+    <!-- Prompt Zone -->
+    <div class="tm-prompt-zone" id="tm-prompt-zone">
+      <div class="tm-prompt-icon">🎙</div>
+      <div class="tm-prompt-title">Convene a Task Meeting</div>
+      <div class="tm-prompt-sub">Describe your task. The Orchestrator will analyze it, assemble the right agents, and build a live plan — together.</div>
+      <div class="tm-prompt-box">
+        <textarea class="tm-prompt-textarea" id="tm-task-input"
+          placeholder="e.g. Build the NERVIX agent marketplace search with payment integration…"
+          onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey))launchTaskMeeting()"></textarea>
+        <button class="tm-launch-btn" id="tm-launch-btn" onclick="launchTaskMeeting()">⚡ Convene Meeting</button>
+      </div>
+      <span class="tm-history-link" onclick="showTMHistory()">📋 View past meeting history →</span>
+    </div>
+    <!-- Active Stage -->
+    <div class="tm-stage" id="tm-stage">
+      <div class="tm-roster" id="tm-roster">
+        <span class="tm-room-title">The Room</span>
+        <button class="tm-to-v2-btn" onclick="if(!_tmV2Enabled)toggleTMLayout()" title="Switch to cinematic v2 layout">🎭 Switch to V2 Room →</button>
+      </div>
+      <div id="tm-dialogue-col">
+        <div class="tm-wave" id="tm-wave">
+          <span class="tm-wave-label" id="tm-wave-name">—</span>
+          <div class="tm-waveform">
+            <div class="tm-wv-b"></div><div class="tm-wv-b"></div><div class="tm-wv-b"></div>
+            <div class="tm-wv-b"></div><div class="tm-wv-b"></div><div class="tm-wv-b"></div>
+            <div class="tm-wv-b"></div><div class="tm-wv-b"></div><div class="tm-wv-b"></div>
+          </div>
+          <button class="tm-voice-btn" id="tm-mute-btn" onclick="toggleTMVoice()">🔊 Voice</button>
+        </div>
+        <div class="tm-dialogue" id="tm-dialogue"></div>
+      <!-- Always-visible live comment bar — inject redirects into the conversation -->
+      <div class="tm-comment-bar" id="tm-comment-bar">
+        <span class="tm-comment-icon">💬</span>
+        <input class="tm-comment-input" id="tm-comment-input"
+          placeholder="Add a comment — redirect what agents discuss next…"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTMComment()}"/>
+        <button class="tm-comment-btn" onclick="submitTMComment()">Send ↗</button>
+        <button class="tm-finish-btn" id="tm-finish-btn" onclick="finishScriptedMeeting()" title="End the meeting and update the task">🏁 Finish</button>
+      </div>
+      <div class="tm-question" id="tm-question">
+        <div class="tm-question-label">💬 An agent is asking you a question</div>
+        <div class="tm-question-text" id="tm-question-text"></div>
+        <div class="tm-question-row">
+          <input class="tm-qinput" id="tm-qinput" type="text"
+            placeholder="Your answer…"
+            onkeydown="if(event.key==='Enter')submitTMAnswer()"/>
+          <button class="tm-qsubmit" onclick="submitTMAnswer()">Answer →</button>
+        </div>
+      </div>
+      <div class="tm-summary-panel" id="tm-summary">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div class="tm-summary-title" style="margin-bottom:0;flex:1">📋 Final Assignments</div>
+          <button class="tm-back-btn" onclick="showTMPrompt()" style="font-size:9px;padding:3px 9px">＋ New Meeting</button>
+        </div>
+        <div class="tm-assignments" id="tm-assignments"></div>
+      </div>
+      </div><!-- /tm-dialogue-col -->
+    </div>
+    <!-- History Panel -->
+    <div class="tm-hist-panel" id="tm-hist-panel">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-shrink:0">
+        <button class="tm-back-btn" onclick="showTMPrompt()">← Back</button>
+        <div style="font-size:13px;font-weight:700;color:var(--text)">Meeting History</div>
+      </div>
+      <div class="tm-hist-list" id="tm-hist-list">
+        <div style="text-align:center;padding:28px;font-size:11px;font-family:var(--mono);color:var(--text-3)">Loading…</div>
+      </div>
+      <div class="tm-transcript" id="tm-transcript">
+        <div class="tm-transcript-hdr">
+          <button class="tm-back-btn" onclick="closeTMTranscript()">← Meetings</button>
+          <div class="tm-transcript-title" id="tm-transcript-title">Transcript</div>
+        </div>
+        <div class="tm-dialogue" id="tm-transcript-body" style="flex:1;overflow-y:auto"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -720,6 +1448,7 @@ const AVATAR = {
   'Growth':'🚀','Finance':'💰','N8N':'🔄','Teacher':'📚','Learning':'🎓',
   'SSH':'🔐','Vector':'🧠','KiloClaw':'🦞','Stripe':'💳','Update':'🔁',
   'OpenClaw':'🦀','Dan':'👤','Hermes Strategy':'🗺',
+  'Orchestrator':'🎛','System':'⚙️','User':'👤',
 };
 const DESC = {
   'David':'Orchestrator AI on Mac Studio. Fleet commander, senior architect, task delegator. Primary brain of DansLab.',
@@ -752,19 +1481,21 @@ const AGENT_PERSONAS = {
 };
 
 const VOICE_CFG = {
-  'David':  {rate:.82,pitch:.88,hints:['Daniel','Google UK English Male','Alex','Arthur']},
-  'Dexter': {rate:.94,pitch:1.0, hints:['Tom','Fred','Google US English']},
-  'Memo':   {rate:1.05,pitch:1.06,hints:['Aaron','Gordon','Google US English']},
-  'Sienna': {rate:.90,pitch:1.18,hints:['Samantha','Google UK English Female','Victoria','Fiona']},
-  'Nano':   {rate:1.0, pitch:1.22,hints:['Reed','Junior','Google US English']},
-  'GSD':    {rate:.84,pitch:.92, hints:['Daniel','Alex','Arthur']},
-  'Hermes': {rate:.90,pitch:1.06,hints:['Oliver','Google UK English Male']},
-  'Pi':     {rate:.96,pitch:1.12,hints:['Eddy','Google US English']},
-  'Dan':    {rate:.98,pitch:1.0, hints:['Google US English']},
+  'David':       {rate:.82,pitch:.88,hints:['Daniel','Google UK English Male','Alex','Arthur']},
+  'Dexter':      {rate:.94,pitch:1.0, hints:['Tom','Fred','Google US English']},
+  'Memo':        {rate:1.05,pitch:1.06,hints:['Aaron','Gordon','Google US English']},
+  'Sienna':      {rate:.90,pitch:1.18,hints:['Samantha','Google UK English Female','Victoria','Fiona']},
+  'Nano':        {rate:1.0, pitch:1.22,hints:['Reed','Junior','Google US English']},
+  'GSD':         {rate:.84,pitch:.92, hints:['Daniel','Alex','Arthur']},
+  'Hermes':      {rate:.90,pitch:1.06,hints:['Oliver','Google UK English Male']},
+  'Pi':          {rate:.96,pitch:1.12,hints:['Eddy','Google US English']},
+  'Dan':         {rate:.98,pitch:1.0, hints:['Google US English']},
+  'Orchestrator':{rate:.82,pitch:.88, hints:['Daniel','Google UK English Male','Alex','Arthur']},
 };
 const SPEAKER_COLORS = {
   'David':'#f59e0b','Dexter':'#6366f1','Memo':'#10b981','Sienna':'#ec4899',
   'Nano':'#a78bfa','GSD':'#22d3ee','Hermes':'#f97316','Dan':'#ef4444','Pi':'#34d399',
+  'Orchestrator':'#f59e0b','System':'#64748b','User':'#22d3ee','Narrator':'#94a3b8',
 };
 const MEETING_PARTICIPANTS = ['David','Dexter','Memo','Sienna','Nano','GSD','Hermes','Pi','Dan'];
 const NODES = ['research','architect','strategist','coder','writer','paperclip'];
@@ -774,6 +1505,15 @@ let log=[], ws=null, allAgents=[], selectedAgent=null;
 let meetingLog=[], autoplay=true, ttsQueue=[], ttsPlaying=false;
 let micListening=false, recognition=null, meetingFull=false;
 let audioCtx=null;
+/* Task Meeting State */
+let tmOpen=false, tmMeetingId=null, tmVoiceOn=true, tmStreamEl=null;
+let tmCurrentQMeetingId=null, tmMode='prompt', tmMeetings=[];
+let tmLastAssignments=[];
+let tmCurrentAudio=null, tmAudioQueue=[], tmAudioPlaying=false;
+let tmLang='en';
+const TM_LANGUAGES=[
+  {code:'en',flag:'🇺🇸',label:'English'},
+];
 
 /* ══════ BOOT ══════ */
 function init() {
@@ -785,10 +1525,19 @@ function init() {
   updateClock(); setInterval(updateClock, 1000);  // P1: live clock
   setInterval(refresh, 30000);
   setInterval(loadAgentHealth, 60000);     // refresh dots every 60s
+  _renderTMLangBar();
   if ('speechSynthesis' in window) {
     speechSynthesis.getVoices();
     speechSynthesis.onvoiceschanged = () => {};
   }
+  // ESC closes TM overlay (or any open modal)
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (tmOpen) { closeTM(); return; }
+      const modal = document.querySelector('.modal-overlay.open');
+      if (modal) modal.classList.remove('open');
+    }
+  });
 }
 
 /* ══════ MOBILE SIDEBAR TOGGLE ══════ */
@@ -1510,6 +2259,47 @@ function connectWS() {
       addLog(`🎙 ${m.speaker}: ${m.message.substring(0,50)}`);
       if(autoplay)speak(m.speaker,m.message);
       playJoin();
+    /* ── Task Meeting Room events ── */
+    } else if(m.type==='meeting_task_start'){
+      if(!tmOpen) openTM();
+      tmMeetingId=m.meeting_id;
+      _tmEnterStage(m.task||m.title||'Task Meeting');
+      addLog(`🎙 Meeting started: ${(m.task||'').substring(0,55)}`);
+    } else if(m.type==='meeting_task_meta'){
+      const badge=document.getElementById('tm-status-badge');
+      if(badge&&m.title){badge.textContent='● LIVE';badge.className='tm-hdr-badge live';}
+      const th=document.getElementById('tm-hdr-title');
+      if(th&&m.title) th.textContent=m.title.length>62?m.title.substring(0,62)+'…':m.title;
+      (m.agents||[]).forEach(a=>tmAgentJoin(a));
+      _tmAppendMsg('System','Agents joining: '+(m.agents||[]).join(', '),'system',false);
+    } else if(m.type==='meeting_task_message'){
+      // Finish any prior streaming message
+      if(tmStreamEl) _tmStreamDone(tmStreamEl.dataset.speaker);
+      if(m.streaming){
+        // Start new streaming row (empty — chunks fill it in)
+        tmStreamEl=_tmAppendMsg(m.speaker,'','agent',true);
+        if(tmStreamEl) tmStreamEl.dataset.speaker=m.speaker;
+        _tmSetSpeaking(m.speaker);
+      } else {
+        // Non-streaming (e.g. user answer echoed back)
+        const type=m.turn_type==='user_answer'||m.turn_type==='user_comment'?'user':'agent';
+        _tmAppendMsg(m.speaker,m.text||m.message||'',type,false);
+        // TTS is handled inside _tmAppendMsg via _tmSpeakSynced for agent messages
+        _tmSetSpeaking(type==='user'?null:m.speaker);
+      }
+      addLog(`🎙 ${m.speaker}: ${(m.text||m.message||'').substring(0,50)}`);
+    } else if(m.type==='meeting_task_chunk'){
+      _tmStreamChunk(m.chunk||'');
+    } else if(m.type==='meeting_task_user_question'){
+      // Finish streaming first
+      if(tmStreamEl) _tmStreamDone(tmStreamEl.dataset.speaker);
+      _tmSetSpeaking(null);
+      _tmShowQuestion(m.question||'',m.meeting_id||tmMeetingId);
+    } else if(m.type==='meeting_task_complete'){
+      if(tmStreamEl) _tmStreamDone(tmStreamEl.dataset.speaker);
+      _tmSetSpeaking(null);
+      _tmShowSummary(m.assignments||[]);
+      addLog('✅ Task meeting complete — assignments ready');
     }
   };
 }
@@ -1548,7 +2338,9 @@ async function refresh() {
       fetch('/api/logs').then(r=>r.json()),
       fetch('/api/reports').then(r=>r.json()),
     ]);
+    window._lastReports = reports;
     renderRuns(logs);renderReports(reports);
+    loadMeetings();
     const lu=state.last_updated;
     if(lu)document.getElementById('last-updated').textContent=new Date(lu).toLocaleTimeString('en-US',{hour12:false});
   } catch(e){addLog('⚠️ '+e.message);}
@@ -1691,13 +2483,631 @@ function renderRuns(logs) {
 function renderReports(reports) {
   document.getElementById('reports-count').textContent=reports.length;
   document.getElementById('reports-list').innerHTML=reports.length
-    ?reports.map(r=>`<div class="rpt-item" onclick="showRpt('${r.name}',${JSON.stringify(r.preview).replace(/'/g,"&#39;")})">
-        <div class="rpt-icon">📄</div>
-        <div class="rpt-info">
+    ?reports.map(r=>`<div class="rpt-item">
+        <div class="rpt-icon" style="cursor:pointer" onclick="showRpt('${r.name}',${JSON.stringify(r.preview).replace(/'/g,"&#39;")})">📄</div>
+        <div class="rpt-info" style="cursor:pointer" onclick="showRpt('${r.name}',${JSON.stringify(r.preview).replace(/'/g,"&#39;")})">
           <div class="rpt-name">${r.name}</div>
           <div class="rpt-prev">${(r.preview||'').replace(/[<>&]/g,'').substring(0,90)}</div>
-        </div></div>`).join('')
+        </div>
+        <button class="rpt-play" title="Play report with agent voices" onclick="event.stopPropagation();playReport('${r.name.replace(/'/g,"\\'")}',this)" style="background:rgba(245,158,11,.13);border:1px solid rgba(245,158,11,.3);color:var(--amber);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0;transition:all .2s">🔊</button>
+        <a class="rpt-dl" title="Download meeting MP3" href="/api/meeting/audio?download=true&name=${encodeURIComponent(r.name)}" onclick="event.stopPropagation()" style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.28);color:var(--violet);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0;text-decoration:none;transition:all .2s">💾</a>
+        <button class="rpt-pin" title="Pin meeting (keep forever, bypass 48h cleanup)" onclick="event.stopPropagation();pinMeeting('${r.name.replace(/'/g,"\\'")}',this)" style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);color:var(--cyan);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0;transition:all .2s">📌</button>
+      </div>`).join('')
     :'<div class="empty">No reports yet</div>';
+}
+
+/* ══════ REPORT PLAYBACK ══════ */
+// Map section-heading keywords → speaker name in _ELEVEN_VOICES
+const REPORT_SECTION_VOICES = [
+  {match:/research\s*(agent|output)?/i, speaker:'Autoresearch'},
+  {match:/discovery/i,                   speaker:'Discovery'},
+  {match:/strategist|strategy/i,         speaker:'GSD'},
+  {match:/writer|write[r]?\s*agent/i,    speaker:'Hermes'},
+  {match:/architect/i,                   speaker:'David'},
+  {match:/coder|code[r]?\s*agent/i,      speaker:'Dexter'},
+  {match:/doctor/i,                      speaker:'Doctor'},
+  {match:/monitor/i,                     speaker:'Monitor'},
+  {match:/finance/i,                     speaker:'Finance'},
+  {match:/growth/i,                      speaker:'Growth'},
+  {match:/learning/i,                    speaker:'Learning'},
+  {match:/narrator|summary|intro/i,      speaker:'Narrator'},
+];
+let _rptPlayback = null;
+let _mlFilter = 'saved';
+let _mlItems = [];
+
+function setMLFilter(f) {
+  _mlFilter = f;
+  ['all','saved','rolling'].forEach(x => {
+    const el = document.getElementById('ml-filter-' + x);
+    if (el) el.classList.toggle('active', x === f);
+  });
+  renderMeetings(_mlItems);
+}
+
+async function loadMeetings() {
+  try {
+    const resp = await fetch('/api/meeting/list');
+    const j = await resp.json();
+    _mlItems = j.items || [];
+    renderMeetings(_mlItems);
+  } catch(e) { console.warn('[meetings]', e); }
+}
+
+function renderMeetings(items) {
+  const list = document.getElementById('meetings-list');
+  const count = document.getElementById('meetings-count');
+  if (!list) return;
+  const filtered = items.filter(i => _mlFilter === 'all' || (_mlFilter === 'saved' ? i.saved : !i.saved));
+  if (count) count.textContent = filtered.length;
+  if (!filtered.length) { list.innerHTML = '<div class="empty">No meetings in this view</div>'; return; }
+  list.innerHTML = filtered.map(m => {
+    const short = m.file.length > 58 ? m.file.substring(0, 55) + '…' : m.file;
+    const badge = m.saved
+      ? '<span style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.28);color:var(--cyan);font-size:8px;padding:2px 6px;border-radius:3px;font-family:var(--mono);letter-spacing:.3px">📌 SAVED</span>'
+      : '<span style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.22);color:var(--amber);font-size:8px;padding:2px 6px;border-radius:3px;font-family:var(--mono);letter-spacing:.3px">⏱ 48H</span>';
+    const dateStr = new Date(m.modified).toLocaleString();
+    const audioUrl = '/api/meeting/audio?name=' + encodeURIComponent(_deriveReportName(m.file));
+    return `
+      <div class="rpt-item">
+        <div class="rpt-icon">🎙</div>
+        <div class="rpt-info" style="cursor:pointer" onclick="playMeetingFile('${m.file.replace(/'/g,"\\'")}', this)">
+          <div class="rpt-name" style="display:flex;gap:8px;align-items:center">${short} ${badge}</div>
+          <div class="rpt-prev">${dateStr} · ${m.size_kb} KB</div>
+        </div>
+        <button class="rpt-play" title="Play" onclick="event.stopPropagation();playMeetingFile('${m.file.replace(/'/g,"\\'")}', this)" style="background:rgba(245,158,11,.13);border:1px solid rgba(245,158,11,.3);color:var(--amber);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0">🔊</button>
+        <a class="rpt-dl" title="Download" href="${audioUrl}&download=true" onclick="event.stopPropagation()" style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.28);color:var(--violet);border-radius:6px;padding:5px 9px;font-size:11px;text-decoration:none;flex-shrink:0">💾</a>
+        ${m.saved
+          ? `<button title="Unpin (move back to 48h rolling)" onclick="event.stopPropagation();unpinMeeting('${m.file.replace(/'/g,"\\'")}', this)" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0">📌✕</button>`
+          : `<button title="Pin (save forever)" onclick="event.stopPropagation();pinMeetingFile('${m.file.replace(/'/g,"\\'")}', this)" style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);color:var(--cyan);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;flex-shrink:0">📌</button>`
+        }
+      </div>`;
+  }).join('');
+}
+
+function _deriveReportName(mp3File) {
+  // meeting file is "{id}_{slug}.mp3" — we need the original .md name
+  // Look it up from the reports list
+  try {
+    const slug = mp3File.replace(/\.mp3$/, '').replace(/^[a-f0-9]{6,10}_/, '');
+    const match = (window._lastReports || []).find(r => r.name.replace(/[^a-zA-Z0-9]/g, '_').includes(slug.substring(0, 20)));
+    if (match) return match.name;
+  } catch(e) {}
+  // Fallback: reconstruct best guess
+  return mp3File.replace(/\.mp3$/, '.md').replace(/^[a-f0-9]{6,10}_/, '').replace(/_/g, '-');
+}
+
+async function playMeetingFile(file, btn) {
+  if (_rptPlayback) {
+    _rptPlayback.stopped = true;
+    if (_rptPlayback.audio) _rptPlayback.audio.pause();
+    _rptPlayback = null;
+    document.querySelectorAll('.rpt-play.playing-ml').forEach(b => { b.classList.remove('playing-ml'); b.textContent='🔊'; b.style.background='rgba(245,158,11,.13)'; });
+    return;
+  }
+  if (btn) { btn.classList.add('playing-ml'); btn.textContent='⏹'; btn.style.background='rgba(239,68,68,.18)'; }
+  try {
+    const url = '/api/meeting/audio?name=' + encodeURIComponent(_deriveReportName(file));
+    const audio = new Audio(url);
+    _rptPlayback = {stopped:false, audio};
+    await new Promise(res => {
+      audio.onended = audio.onerror = () => { res(); };
+      audio.play().catch(res);
+    });
+  } finally {
+    if (btn) { btn.classList.remove('playing-ml'); btn.textContent='🔊'; btn.style.background='rgba(245,158,11,.13)'; }
+    _rptPlayback = null;
+  }
+}
+
+async function pinMeetingFile(file, btn) {
+  if (btn) btn.disabled = true;
+  const resp = await fetch('/api/meeting/pin?name=' + encodeURIComponent(_deriveReportName(file)), {method:'POST'});
+  if (resp.ok) { toast('📌 Saved forever'); loadMeetings(); }
+  else toast('Pin failed');
+  if (btn) btn.disabled = false;
+}
+
+async function unpinMeeting(file, btn) {
+  if (btn) btn.disabled = true;
+  const resp = await fetch('/api/meeting/unpin?file=' + encodeURIComponent(file) + '&name=' + encodeURIComponent(_deriveReportName(file)), {method:'POST'});
+  if (resp.ok) { toast('📌 Unpinned — 48h rolling'); loadMeetings(); }
+  else toast('Unpin failed');
+  if (btn) btn.disabled = false;
+}
+
+/* ══════ Scripted Meeting → Task Meeting Room v2 stage ══════ */
+let _scriptedMeetingReport = null;
+let _scriptedMeetingCancel = false;
+let _scriptedMeetingQueue = [];           // remaining segments (mutable)
+let _scriptedMeetingContext = null;       // {meeting_id, subject, attendees}
+let _scriptedMeetingQA = [];              // [{question, responder, response}]
+
+async function startScriptedMeeting(reportName) {
+  // Remember current report so flag changes can re-trigger
+  _scriptedMeetingReport = reportName;
+  _scriptedMeetingCancel = false;
+  _scriptedMeetingQA = [];
+
+  // 1. Fetch the meeting script from the skill (in the active language)
+  let script;
+  try {
+    // English only — multilingual was disabled after voice sync issues
+    tmLang = 'en';
+    const resp = await fetch('/api/meeting/script?name=' + encodeURIComponent(reportName) + '&lang=en');
+    if (!resp.ok) throw new Error('script fetch ' + resp.status);
+    script = await resp.json();
+  } catch(e) {
+    toast('Could not load meeting script: ' + e.message);
+    return;
+  }
+
+  // 2. Close any open modal, open the TM overlay, switch to stage
+  try { closeModalDirect(); } catch(e) {}
+  openTM();
+  _tmShowZone('stage');
+
+  // 3. Header
+  const title = document.getElementById('tm-hdr-title');
+  const badge = document.getElementById('tm-status-badge');
+  if (title) title.textContent = `Meeting ${script.meeting_id} — ${script.subject}`;
+  if (badge) { badge.textContent = 'LIVE'; badge.className = 'tm-hdr-badge live'; }
+
+  // 4. Reset roster + dialogue
+  const roster = document.getElementById('tm-roster');
+  const dial   = document.getElementById('tm-dialogue');
+  if (roster) {
+    roster.innerHTML = '';
+    // Re-inject static chrome: room title + "Switch to V2" button (for V1 mode)
+    const title = document.createElement('span');
+    title.className = 'tm-room-title';
+    title.textContent = 'The Room';
+    roster.appendChild(title);
+    const toV2 = document.createElement('button');
+    toV2.className = 'tm-to-v2-btn';
+    toV2.type = 'button';
+    toV2.innerHTML = '🎭 Switch to V2 Room →';
+    toV2.title = 'Switch to cinematic v2 layout';
+    toV2.onclick = () => { if (!_tmV2Enabled) toggleTMLayout(); };
+    roster.appendChild(toV2);
+  }
+  if (dial) dial.innerHTML = '';
+
+  // 5. Ensure voice is on so _tmAppendMsg drives TTS
+  if (typeof tmVoiceOn !== 'undefined' && !tmVoiceOn) {
+    tmVoiceOn = true;
+    const btn = document.getElementById('tm-voice-toggle');
+    if (btn) btn.classList.add('active');
+  }
+
+  // 6. Join attendees with staggered animation
+  for (const name of script.attendees) {
+    tmAgentJoin(name);
+    await new Promise(r => setTimeout(r, 280));
+  }
+  await new Promise(r => setTimeout(r, 400));
+
+  // 7. Initialize mutable segment queue + question budget
+  _scriptedMeetingQueue = [...script.segments];
+  _scriptedMeetingContext = {
+    meeting_id: script.meeting_id,
+    subject: script.subject,
+    attendees: script.attendees || [],
+  };
+  _scriptedMeetingQuestionsLeft = 2;
+  _updateSendButton();
+
+  // Drain the queue — items can be replaced mid-meeting by submitTMComment
+  while (_scriptedMeetingQueue.length > 0) {
+    if (_scriptedMeetingCancel) { _tmSetSpeaking(null); return; }
+    const seg = _scriptedMeetingQueue.shift();
+    tmAgentJoin(seg.speaker);
+
+    _setThinking(seg.speaker, true);
+    await new Promise(r => setTimeout(r, _tmV2Enabled ? 650 : 150));
+    if (_scriptedMeetingCancel) { _tmSetSpeaking(null); _setThinking(null); return; }
+    _setThinking(null);
+
+    _tmSetSpeaking(seg.speaker);
+    _tmAppendMsg(seg.speaker, seg.text, 'agent', false);
+    await _waitForCurrentAudio();
+    _tmSetSpeaking(null);
+    if (_scriptedMeetingCancel) return;
+
+    const basePause = Math.max(0, Math.min(1500, seg.pause_ms_after || 200));
+    const pause = _tmV2Enabled ? Math.max(basePause, 650) : basePause;
+    if (pause) await new Promise(r => setTimeout(r, pause));
+  }
+
+  // 8. Done
+  if (badge) { badge.textContent = 'DONE'; badge.className = 'tm-hdr-badge'; }
+  // Run task re-analysis if any Q&A was captured
+  if (_scriptedMeetingQA.length > 0) { _finalizeScriptedMeeting().catch(e => console.warn('[finalize]', e)); }
+}
+
+/* Update the Send button text + state based on remaining question budget */
+function _updateSendButton() {
+  const btn = document.querySelector('.tm-comment-btn');
+  const input = document.getElementById('tm-comment-input');
+  if (!btn) return;
+  const n = _scriptedMeetingQuestionsLeft;
+  if (!_scriptedMeetingReport) {
+    // Not a scripted meeting — leave default
+    btn.textContent = 'Send ↗'; btn.disabled = false;
+    if (input) { input.disabled = false; input.placeholder = 'Add a comment — redirect what agents discuss next…'; }
+    return;
+  }
+  if (n > 0) {
+    btn.textContent = `Send (${n}) ↗`;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    if (input) {
+      input.disabled = false;
+      input.placeholder = n === 2
+        ? 'Ask up to 2 questions — the team will recalibrate…'
+        : '1 question remaining — after this, meeting will wrap up';
+    }
+  } else {
+    btn.textContent = '🔒 No more questions';
+    btn.disabled = true;
+    btn.style.opacity = '0.45';
+    btn.style.cursor = 'not-allowed';
+    if (input) {
+      input.disabled = true;
+      input.placeholder = 'Meeting is wrapping up — the orchestrator is finalizing the plan';
+      input.value = '';
+    }
+    toast('🔒 Question limit reached — meeting will wrap up shortly');
+  }
+}
+
+/* Finalize: append Q&A + re-analyze the source task */
+async function _finalizeScriptedMeeting() {
+  if (!_scriptedMeetingReport) return {ok:false};
+  try {
+    const transcript = [...document.querySelectorAll('.tm-msg')].map(m => ({
+      speaker: m.querySelector('.tm-msg-speaker')?.textContent?.trim() || '?',
+      text:    m.querySelector('.tm-msg-text')?.textContent?.trim() || '',
+      type:    m.classList.contains('user-msg') ? 'user' : 'agent',
+    }));
+    const resp = await fetch('/api/meeting/finalize', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: _scriptedMeetingReport,
+        transcript,
+        qa_pairs: _scriptedMeetingQA,
+      }),
+    });
+    const j = await resp.json();
+    if (j?.ok && j?.updated) {
+      toast('✅ Task updated with meeting findings');
+      addLog(`📋 Task recalibrated — ${j.verdict_line || 'verified'}`);
+    }
+    return j || {ok:false};
+  } catch(e) { console.warn('[finalize]', e); return {ok:false}; }
+}
+
+/* Finish Meeting — user-triggered early close + task update */
+async function finishScriptedMeeting() {
+  if (!_scriptedMeetingReport) { closeTM(); return; }
+  const btn = document.getElementById('tm-finish-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '🏁 Finishing…'; }
+
+  // 1. Cancel playback and drain the queue
+  _scriptedMeetingCancel = true;
+  _scriptedMeetingQueue = [];
+  try { if (tmCurrentAudio) { tmCurrentAudio.pause(); tmCurrentAudio = null; } } catch(e) {}
+  try { tmAudioQueue = []; tmAudioPlaying = false; } catch(e) {}
+  _tmSetSpeaking(null);
+  _setThinking(null);
+
+  // 2. Orchestrator (or Dan) delivers a brief closer
+  const closerSpeaker = 'Dan';
+  const closerText = _scriptedMeetingQA.length > 0
+    ? 'Thanks team. We have what we need — meeting adjourned and the task is updated.'
+    : 'Thanks team. Meeting adjourned.';
+  // Clear cancel flag temporarily so the closer can play
+  _scriptedMeetingCancel = false;
+  try {
+    tmAgentJoin(closerSpeaker);
+    _tmSetSpeaking(closerSpeaker);
+    _tmAppendMsg(closerSpeaker, closerText, 'agent', false);
+    await _waitForCurrentAudio();
+    _tmSetSpeaking(null);
+  } catch(e) {}
+  _scriptedMeetingCancel = true;
+
+  // 3. Finalize task (append Q&A + re-analysis)
+  const result = await _finalizeScriptedMeeting();
+
+  // 4. Update header + show confirmation
+  const badge = document.getElementById('tm-status-badge');
+  if (badge) { badge.textContent = 'DONE'; badge.className = 'tm-hdr-badge'; }
+  const input = document.getElementById('tm-comment-input');
+  if (input) { input.disabled = true; input.value = ''; input.placeholder = 'Meeting closed'; }
+  const sendBtn = document.querySelector('.tm-comment-btn');
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '🔒 Closed'; sendBtn.style.opacity = '0.45'; }
+  if (btn) { btn.textContent = '✓ Finished'; btn.style.background = 'rgba(16,185,129,.15)'; btn.style.borderColor = 'rgba(16,185,129,.35)'; btn.style.color = '#10b981'; }
+
+  if (result?.updated) {
+    toast('✅ Task re-analyzed — ' + (result.verdict_line || 'updated'));
+  } else {
+    toast('📋 Meeting closed' + (_scriptedMeetingQA.length === 0 ? ' (no Q&A to record)' : ''));
+  }
+
+  // 5. Clear session state so the next meeting starts clean
+  _scriptedMeetingReport = null;
+  _scriptedMeetingQueue = [];
+  _scriptedMeetingContext = null;
+  // Refresh the Meeting Library sidebar if it's loaded
+  try { if (typeof loadMeetings === 'function') loadMeetings(); } catch(e) {}
+}
+
+function _cancelScriptedMeeting() {
+  _scriptedMeetingCancel = true;
+  try { if (tmCurrentAudio) { tmCurrentAudio.pause(); tmCurrentAudio = null; } } catch(e) {}
+  try { tmAudioQueue = []; tmAudioPlaying = false; } catch(e) {}
+}
+
+/* ══════ V2 LAYOUT TOGGLE ══════ */
+let _tmV2Enabled = false;
+
+function toggleTMLayout() {
+  _tmV2Enabled = !_tmV2Enabled;
+  const stage = document.getElementById('tm-stage');
+  const btn = document.getElementById('tm-layout-toggle');
+  if (!stage) return;
+  stage.classList.toggle('v2-layout', _tmV2Enabled);
+  if (btn) btn.textContent = _tmV2Enabled ? '🎭 v2 Room' : '🎭 Room';
+  toast(_tmV2Enabled ? '🎭 v2 Layout — cinematic room' : 'Flat layout');
+  if (_tmV2Enabled) _positionAgentsOnTable();
+}
+
+/* Inject the orbital room decor (center feature card + title + v1 button) once */
+function _ensureRoomDecor(roster) {
+  if (!roster.querySelector('.tm-feature')) {
+    const f = document.createElement('div');
+    f.className = 'tm-feature';
+    f.innerHTML = `
+      <div class="tm-feature-label">Live Speaker</div>
+      <div class="tm-feature-glyph">◉</div>
+      <div class="tm-feature-name">Waiting…</div>
+    `;
+    roster.appendChild(f);
+  }
+  if (!roster.querySelector('.tm-room-title')) {
+    const rt = document.createElement('span');
+    rt.className = 'tm-room-title';
+    rt.textContent = 'The Room';
+    roster.appendChild(rt);
+  }
+  if (!roster.querySelector('.tm-v1-btn')) {
+    const btn = document.createElement('button');
+    btn.className = 'tm-v1-btn';
+    btn.type = 'button';
+    btn.textContent = '← Back to V1';
+    btn.title = 'Switch back to flat layout';
+    btn.onclick = () => { if (_tmV2Enabled) toggleTMLayout(); };
+    roster.appendChild(btn);
+  }
+}
+
+/* Position agents in a FULL RING around the center. Orbital layout. */
+function _positionAgentsOnTable() {
+  if (!_tmV2Enabled) return;
+  const roster = document.getElementById('tm-roster');
+  if (!roster) return;
+
+  _ensureRoomDecor(roster);
+
+  const agents = [...roster.querySelectorAll('.tm-rag')];
+  const n = agents.length;
+  if (!n) return;
+
+  // Full 360° ring. Start from top (-90°) and go clockwise.
+  // Radius scales slightly with count so 6+ agents still fit.
+  const cx = 50, cy = 50;
+  const base = Math.max(36, 42 - Math.max(0, n - 6) * 1.5);
+  const rx = base;
+  const ry = base * 0.92;
+
+  agents.forEach((el, i) => {
+    const angleDeg = -90 + (360 / n) * i;
+    const rad = angleDeg * Math.PI / 180;
+    const x = cx + Math.cos(rad) * rx;
+    const y = cy + Math.sin(rad) * ry;
+    el.style.left = `calc(${x}% - 39px)`;
+    el.style.top  = `calc(${y}% - 34px)`;
+    el.style.zIndex = 10 + Math.round(y);
+
+    // Inject chair, person, plate, thinking dots once
+    if (!el.querySelector('.tm-chair')) {
+      const chair = document.createElement('div'); chair.className = 'tm-chair';
+      el.insertBefore(chair, el.firstChild);
+    }
+    if (!el.querySelector('.tm-person')) {
+      const person = document.createElement('div'); person.className = 'tm-person';
+      const color = _speakerColor(el.dataset.agent);
+      if (color) person.style.setProperty('--avatar-color', color);
+      const rav = el.querySelector('.tm-rav');
+      if (rav) el.insertBefore(person, rav);
+      else el.appendChild(person);
+    }
+    if (!el.querySelector('.tm-plate')) {
+      const plate = document.createElement('div'); plate.className = 'tm-plate';
+      const icon = (typeof AVATAR !== 'undefined' && AVATAR[el.dataset.agent]) || '•';
+      plate.innerHTML = `<span>${icon}</span><span>${el.dataset.agent}</span>`;
+      el.appendChild(plate);
+    }
+    if (!el.querySelector('.tm-thinking')) {
+      const td = document.createElement('div');
+      td.className = 'tm-thinking';
+      td.innerHTML = '<span></span><span></span><span></span>';
+      el.appendChild(td);
+    }
+  });
+}
+
+/* Update the central FEATURE card to reflect the current speaker */
+function _updateHologram(name) {
+  const roster = document.getElementById('tm-roster');
+  if (!roster) return;
+  const f = roster.querySelector('.tm-feature');
+  if (!f) return;
+  if (!name) {
+    f.classList.remove('active');
+    const g = f.querySelector('.tm-feature-glyph'); if (g) g.textContent = '◉';
+    const nm = f.querySelector('.tm-feature-name'); if (nm) nm.textContent = 'Waiting…';
+    return;
+  }
+  f.classList.add('active');
+  const color = _speakerColor(name);
+  f.style.borderColor = color;
+  f.style.boxShadow = `0 0 0 6px ${color}11, 0 0 44px ${color}55, inset 0 2px 8px rgba(255,255,255,.08)`;
+  const glyph = f.querySelector('.tm-feature-glyph');
+  const nameEl = f.querySelector('.tm-feature-name');
+  if (glyph) glyph.textContent = (typeof AVATAR !== 'undefined' && AVATAR[name]) || '◉';
+  if (nameEl) { nameEl.textContent = name; nameEl.style.color = color; nameEl.style.textShadow = `0 0 14px ${color}88`; }
+}
+
+function _speakerColor(name) {
+  if (typeof SPEAKER_COLORS === 'object' && SPEAKER_COLORS[name]) return SPEAKER_COLORS[name];
+  return '#8892a4';
+}
+
+function _setThinking(name, on) {
+  const roster = document.getElementById('tm-roster');
+  if (!roster) return;
+  roster.querySelectorAll('.tm-rag').forEach(el => {
+    if (el.dataset.agent === name) el.classList.toggle('thinking', !!on);
+    else el.classList.remove('thinking');
+  });
+}
+
+/* Re-position whenever an agent joins */
+const _origTmAgentJoin = typeof tmAgentJoin === 'function' ? tmAgentJoin : null;
+if (_origTmAgentJoin) {
+  window.tmAgentJoin = function(name) {
+    _origTmAgentJoin(name);
+    _positionAgentsOnTable();
+  };
+}
+
+function _waitForCurrentAudio() {
+  // Poll the tmCurrentAudio element (managed by _tmSpeakSynced) and resolve when it ends
+  return new Promise(resolve => {
+    const started = Date.now();
+    const check = () => {
+      const a = typeof tmCurrentAudio !== 'undefined' ? tmCurrentAudio : null;
+      if (!a) {
+        // No audio started yet — wait up to 3s for it to start, else resolve
+        if (Date.now() - started > 3000) return resolve();
+        return setTimeout(check, 80);
+      }
+      if (a.ended || a.paused) return resolve();
+      a.addEventListener('ended', () => resolve(), {once:true});
+      a.addEventListener('error', () => resolve(), {once:true});
+    };
+    check();
+  });
+}
+
+async function pinMeeting(name, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/api/meeting/pin?name=' + encodeURIComponent(name), {method:'POST'});
+    const j = await resp.json();
+    if (resp.ok && j.ok) {
+      toast('📌 Meeting saved — survives 48h cleanup');
+      if (btn) { btn.style.background='rgba(34,211,238,.3)'; btn.style.borderColor='var(--cyan)'; btn.textContent='📌 Saved'; }
+    } else {
+      toast('Pin failed: ' + (j.error || 'unknown'));
+    }
+  } catch(e) { toast('Pin error: ' + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+function _parseReport(text) {
+  // Split by "## Heading" sections. Return array of {speaker, text}.
+  const lines = text.split('\n');
+  const out = [];
+  let currentSpeaker = 'Dan';
+  let buf = [];
+  const flush = () => {
+    const content = buf.join(' ').replace(/[#*_`>]/g,'').replace(/\s+/g,' ').trim();
+    if (content.length >= 15) out.push({speaker: currentSpeaker, text: content.substring(0, 600)});
+    buf = [];
+  };
+  for (const line of lines) {
+    const h = line.match(/^\s*#{1,3}\s+(.+)$/);
+    if (h) {
+      flush();
+      const heading = h[1];
+      const match = REPORT_SECTION_VOICES.find(s => s.match.test(heading));
+      currentSpeaker = match ? match.speaker : 'Narrator';
+    } else if (line.trim() && !line.startsWith('**Task:') && !line.startsWith('**Date:') && !line.startsWith('**Agents:') && !line.startsWith('---')) {
+      buf.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+async function playReport(name, btn) {
+  if (_rptPlayback) {
+    _rptPlayback.stopped = true;
+    if (_rptPlayback.audio) { _rptPlayback.audio.pause(); }
+    _rptPlayback = null;
+    document.querySelectorAll('.rpt-play.playing').forEach(b => { b.classList.remove('playing'); b.textContent='🔊'; b.style.background='rgba(245,158,11,.13)'; });
+    if (btn && btn.classList.contains('was-playing')) { btn.classList.remove('was-playing'); return; }
+  }
+  // Mark this button
+  if (btn) {
+    btn.classList.add('playing','was-playing');
+    btn.textContent='⏹';
+    btn.style.background='rgba(239,68,68,.18)';
+  }
+  try {
+    // Use the Meeting Skill — returns announcer + orchestrator + agents + Dan with natural transitions
+    const resp = await fetch('/api/meeting/script?name=' + encodeURIComponent(name));
+    let segments = [];
+    if (resp.ok) {
+      const script = await resp.json();
+      segments = script.segments || [];
+      if (script.subject) toast(`📋 Meeting ${script.meeting_id}: ${script.subject}`);
+    }
+    if (!segments.length) {
+      // Fallback: dumb parse of raw content
+      const fb = await fetch('/api/reports/content?name=' + encodeURIComponent(name));
+      const body = fb.ok ? (await fb.json()).content : '';
+      segments = _parseReport(body);
+      if (!segments.length) { toast('No playable content in report'); return; }
+    }
+
+    _rptPlayback = {stopped:false, audio:null};
+    for (const seg of segments) {
+      if (_rptPlayback.stopped) break;
+      const url = '/api/tts?' + new URLSearchParams({text: seg.text, speaker: seg.speaker, lang:'en'});
+      try {
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        const blob = await r.blob();
+        const audio = new Audio(URL.createObjectURL(blob));
+        _rptPlayback.audio = audio;
+        await new Promise(res => {
+          audio.onended = audio.onerror = () => { URL.revokeObjectURL(audio.src); res(); };
+          audio.play().catch(res);
+        });
+        // Honour pause_ms_after from the skill
+        const pause = Math.max(0, Math.min(1500, seg.pause_ms_after || 0));
+        if (pause) await new Promise(res => setTimeout(res, pause));
+      } catch(e) { console.warn('[report]', e); }
+    }
+  } finally {
+    if (btn) { btn.classList.remove('playing','was-playing'); btn.textContent='🔊'; btn.style.background='rgba(245,158,11,.13)'; }
+    _rptPlayback = null;
+  }
 }
 
 /* ══════ PIPELINE ══════ */
@@ -1741,7 +3151,112 @@ async function runTask() {
 }
 
 /* ══════ MODAL / TOAST ══════ */
-function showRun(r){openModal(r.task||'Run',JSON.stringify(r,null,2))}
+function showRun(r){
+  try {
+    const started = r.started ? new Date(r.started) : null;
+    const completed = r.completed ? new Date(r.completed) : null;
+    const durationSec = (started && completed) ? Math.round((completed-started)/1000) : null;
+    const agents = Array.isArray(r.agents) ? r.agents : [];
+    // Find the ACTUAL report filename from the loaded reports list (matches server-side casing + punctuation)
+    const reports = window._lastReports || [];
+    const taskLower = (r.task||'').toLowerCase();
+    const datePart = started ? started.toISOString().substring(0,10) : '';
+    const taskSlug = taskLower.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').substring(0,60);
+    let reportName = null;
+    // Strategy 1: match by task text in preview
+    const byPreview = reports.find(rep => (rep.preview||'').toLowerCase().includes(taskLower));
+    if (byPreview) reportName = byPreview.name;
+    // Strategy 2: match by filename slug
+    if (!reportName) {
+      const byFilename = reports.find(rep => rep.name.toLowerCase().includes(taskSlug.substring(0,30)));
+      if (byFilename) reportName = byFilename.name;
+    }
+    // Strategy 3: fallback to slug reconstruction
+    if (!reportName) reportName = `${taskSlug}-${datePart}.md`;
+    const short = (r.run_id||'').substring(0,8) || 'run';
+    const statusBadge = completed
+      ? `<span style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#10b981;font-size:9px;padding:3px 8px;border-radius:3px;font-family:var(--mono);letter-spacing:.3px">✓ COMPLETED</span>`
+      : `<span style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--amber);font-size:9px;padding:3px 8px;border-radius:3px;font-family:var(--mono);letter-spacing:.3px">⧖ RUNNING</span>`;
+    const agentChips = agents.map(a =>
+      `<span style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.28);color:var(--violet);font-size:10px;padding:3px 9px;border-radius:11px;font-family:var(--mono);letter-spacing:.3px">${a}</span>`
+    ).join(' ');
+
+    const modal = document.getElementById('modal-overlay');
+    const body = modal.querySelector('.modal-body');
+    document.getElementById('modal-title').textContent = r.task || 'Run ' + short;
+
+    // Build the "why" description — agents + task + status + duration
+    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    const humanAgents = agents.map(cap);
+    const agentList = humanAgents.length === 0 ? 'A single agent'
+      : humanAgents.length === 1 ? humanAgents[0]
+      : humanAgents.length === 2 ? humanAgents.join(' and ')
+      : humanAgents.slice(0,-1).join(', ') + ', and ' + humanAgents.slice(-1)[0];
+    const agentWord = humanAgents.length === 1 ? 'agent' : 'agents';
+    const verb = completed ? 'convened to investigate' : 'are currently investigating';
+    const closer = completed && durationSec !== null
+      ? ` The session completed in ${durationSec} seconds.`
+      : ' The session is still in progress.';
+    const whyLine = `${humanAgents.length} ${agentWord}${humanAgents.length ? ' — ' + agentList + ' —' : ''} ${verb}: "${r.task || 'an unspecified task'}".${closer}`;
+
+    body.innerHTML = `
+      <div style="padding:4px 2px 6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        ${statusBadge}
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">Run ${short}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">·</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${r.issue_id||'—'}</span>
+      </div>
+      <div style="margin:12px 0 6px;padding:12px 14px;background:rgba(245,158,11,.04);border-left:2px solid var(--amber);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.6;color:var(--text-2)">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--amber);letter-spacing:.4px;margin-bottom:5px">MEETING BRIEF</div>
+        ${whyLine}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:6px 0 14px">
+        <div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:.4px;margin-bottom:3px">STARTED</div>
+          <div style="font-size:12px;color:var(--text-2)">${started ? started.toLocaleString() : '—'}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:.4px;margin-bottom:3px">COMPLETED</div>
+          <div style="font-size:12px;color:var(--text-2)">${completed ? completed.toLocaleString() : '—'}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:.4px;margin-bottom:3px">DURATION</div>
+          <div style="font-size:12px;color:var(--text-2)">${durationSec !== null ? durationSec + 's' : '—'}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:.4px;margin-bottom:6px">AGENTS</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${agentChips || '<em style="color:var(--text-3);font-size:11px">none listed</em>'}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
+        <button onclick="startScriptedMeeting('${reportName.replace(/'/g,"\\'")}')" style="background:linear-gradient(135deg,var(--amber),#f97316);border:none;color:#000;border-radius:7px;padding:9px 16px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 4px 14px rgba(245,158,11,.25)">🎙 Open Meeting Room</button>
+        <a href="/api/meeting/audio?download=true&name=${encodeURIComponent(reportName)}" style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.35);color:var(--violet);border-radius:7px;padding:8px 14px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;letter-spacing:.3px;text-decoration:none">💾 Download</a>
+        <button onclick="pinMeeting('${reportName.replace(/'/g,"\\'")}', this)" style="background:rgba(34,211,238,.13);border:1px solid rgba(34,211,238,.32);color:var(--cyan);border-radius:7px;padding:8px 14px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;letter-spacing:.3px">📌 Pin</button>
+        <button onclick="_viewReportMd('${reportName.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.04);border:1px solid var(--border-2);color:var(--text-2);border-radius:7px;padding:8px 14px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;letter-spacing:.3px">📄 View Report</button>
+      </div>
+      <div id="run-report-preview" style="margin-top:14px"></div>
+    `;
+    modal.classList.add('open');
+  } catch(e) {
+    openModal('Run error', 'Failed to render run: ' + e.message + '\n\n' + JSON.stringify(r, null, 2));
+  }
+}
+
+async function _viewReportMd(name) {
+  const container = document.getElementById('run-report-preview');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--text-3);font-size:11px;padding:10px">Loading...</div>';
+  try {
+    const resp = await fetch('/api/reports/content?name=' + encodeURIComponent(name));
+    if (!resp.ok) { container.innerHTML = `<div style="color:var(--red);font-size:11px;padding:10px">Report not found: ${name}</div>`; return; }
+    const j = await resp.json();
+    container.innerHTML = `
+      <div style="font-size:9px;font-family:var(--mono);color:var(--text-3);letter-spacing:.4px;margin-bottom:6px">REPORT CONTENT ${j.saved ? '(📌 saved)' : ''}</div>
+      <pre style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.5;color:var(--text-2);max-height:300px;overflow-y:auto;white-space:pre-wrap">${j.content.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</pre>`;
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--red);font-size:11px;padding:10px">Error: ${e.message}</div>`;
+  }
+}
 function showRpt(name,prev){openModal(name,prev+'\n\n[…open file for full content…]')}
 function openModal(title,content){
   document.getElementById('modal-title').textContent=title;
@@ -1756,6 +3271,614 @@ function toast(msg){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),4500);
 }
+
+/* ══════ TASK MEETING ROOM v2 ══════ */
+/* ── Neural TTS via edge-tts backend (/api/tts) ──────────────────────────
+   Queue model: one audio plays at a time. Streaming messages call tmSpeak()
+   after the full text is assembled. Non-streaming agent messages use
+   _tmSpeakSynced() which prefetches audio and starts typewriter + playback
+   in lock-step (typewriter speed = audio duration / char count).
+   ──────────────────────────────────────────────────────────────────────── */
+
+function tmSpeak(speaker, text) {
+  if (!tmVoiceOn || !text || !text.trim()) return;
+  tmAudioQueue.push({speaker, text: text.substring(0, 700)});
+  if (!tmAudioPlaying) _tmDrainAudio();
+}
+
+async function _tmDrainAudio() {
+  if (!tmAudioQueue.length) { tmAudioPlaying = false; return; }
+  tmAudioPlaying = true;
+  const {speaker, text} = tmAudioQueue.shift();
+  try {
+    const url = '/api/tts?' + new URLSearchParams({text, speaker, lang:tmLang});
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('TTS ' + resp.status);
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const audio = new Audio(blobUrl);
+    tmCurrentAudio = audio;
+    await new Promise(res => {
+      audio.onended = audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl); tmCurrentAudio = null; res();
+      };
+      audio.play().catch(res);
+    });
+  } catch(e) {
+    console.warn('[TM TTS]', e.message);
+  }
+  _tmDrainAudio();
+}
+
+/* Prefetch TTS, start typewriter + audio simultaneously — text and voice sync */
+async function _tmSpeakSynced(speaker, text, textEl) {
+  if (!textEl) { tmSpeak(speaker, text); return; }
+  // Typewriter shows text character by character
+  // TTS audio starts at the same time — speed calibrated to audio duration
+  const cleanText = text.substring(0, 700);
+  if (!tmVoiceOn) {
+    _tmTypewriter(textEl, text, 22);
+    return;
+  }
+  try {
+    const url = '/api/tts?' + new URLSearchParams({text: cleanText, speaker, lang:tmLang});
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('TTS ' + resp.status);
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const audio = new Audio(blobUrl);
+    tmCurrentAudio = audio;
+    audio.onloadedmetadata = () => {
+      // Calibrate typewriter speed to audio duration
+      const duration = audio.duration || 3;
+      const msPerChar = Math.max(14, Math.min(55, (duration * 1000) / text.length));
+      // Start both simultaneously
+      audio.play().catch(() => {});
+      _tmTypewriter(textEl, text, msPerChar);
+    };
+    audio.onended = audio.onerror = () => {
+      URL.revokeObjectURL(blobUrl); tmCurrentAudio = null;
+    };
+    audio.load();
+  } catch(e) {
+    console.warn('[TM TTS sync]', e.message);
+    _tmTypewriter(textEl, text, 22);
+  }
+}
+
+function _tmTypewriter(textEl, text, msPerChar) {
+  if (!textEl) return;
+  const chars = [...text]; // handles emoji/unicode
+  let i = 0;
+  const dial = document.getElementById('tm-dialogue');
+  const step = () => {
+    if (i < chars.length) {
+      textEl.textContent += chars[i++];
+      if (dial) dial.scrollTop = dial.scrollHeight;
+      setTimeout(step, msPerChar || 22);
+    }
+  };
+  step();
+}
+
+function openTM() {
+  document.getElementById('tm-overlay').classList.add('open');
+  tmOpen=true;
+  if(tmMode==='prompt') { /* already correct */ }
+  if(!tmMeetings.length) _tmLoadHistory();
+}
+function closeTM() {
+  // 1. Stop scripted meeting queue + cancel further segments
+  try { _scriptedMeetingCancel = true; } catch(e) {}
+  try { _scriptedMeetingQueue = []; } catch(e) {}
+
+  // 2. Stop ALL audio immediately — neural TTS + browser SpeechSynthesis + queued audio
+  try {
+    if (typeof tmCurrentAudio !== 'undefined' && tmCurrentAudio) {
+      tmCurrentAudio.pause();
+      tmCurrentAudio.src = '';
+      tmCurrentAudio = null;
+    }
+  } catch(e) {}
+  try { tmAudioQueue = []; tmAudioPlaying = false; } catch(e) {}
+  try { if (typeof ttsQueue !== 'undefined') { ttsQueue = []; ttsPlaying = false; } } catch(e) {}
+  try {
+    if (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) speechSynthesis.cancel();
+  } catch(e) {}
+  // Pause any <audio> element still playing in the page (edge case)
+  try { document.querySelectorAll('audio').forEach(a => { try { a.pause(); a.src=''; } catch(e) {} }); } catch(e) {}
+
+  // 3. Clear speaking / thinking UI state
+  try { _tmSetSpeaking(null); } catch(e) {}
+  try { _setThinking(null); } catch(e) {}
+
+  // 4. Hide the overlay
+  document.getElementById('tm-overlay').classList.remove('open');
+  tmOpen = false;
+
+  // 5. Clear scripted meeting session state (the next Play opens fresh)
+  try {
+    _scriptedMeetingReport = null;
+    _scriptedMeetingContext = null;
+    _scriptedMeetingQA = [];
+    _scriptedMeetingQuestionsLeft = 2;
+  } catch(e) {}
+}
+
+function _tmShowZone(zone) {
+  const pz=document.getElementById('tm-prompt-zone');
+  const st=document.getElementById('tm-stage');
+  const hp=document.getElementById('tm-hist-panel');
+  const hl=document.getElementById('tm-hist-list');
+  const tr=document.getElementById('tm-transcript');
+  if(pz) pz.style.display = zone==='prompt'?'flex':'none';
+  if(st) { st.style.display = zone==='stage'?'flex':'none'; if(zone==='stage') st.classList.add('active'); else st.classList.remove('active'); }
+  if(hp) { hp.style.display = (zone==='history'||zone==='transcript')?'flex':'none'; if(zone==='history'||zone==='transcript') hp.classList.add('active'); else hp.classList.remove('active'); }
+  if(hl) hl.style.display = zone==='history'?'flex':'none';
+  if(tr) { tr.style.display = zone==='transcript'?'flex':'none'; if(zone==='transcript') tr.classList.add('active'); else tr.classList.remove('active'); }
+  tmMode=zone;
+}
+
+function showTMHistory() {
+  _tmShowZone('history');
+  _tmLoadHistory();
+}
+function _renderTMLangBar() {
+  const el=document.getElementById('tm-lang-bar');
+  if(!el) return;
+  el.innerHTML=TM_LANGUAGES.map(l=>
+    `<button class="tm-lang-btn${tmLang===l.code?' active':''}" data-lang="${l.code}"
+      onclick="setTMLang('${l.code}')" title="${l.label}">${l.flag}</button>`
+  ).join('');
+}
+
+function setTMLang(code) {
+  if(tmLang===code) return;
+  const lang=TM_LANGUAGES.find(l=>l.code===code);
+  if(!lang) return;
+  // If a scripted meeting is playing, cancel it and relaunch in the new language
+  if (_scriptedMeetingReport) {
+    _cancelScriptedMeeting();
+    tmLang=code;
+    _renderTMLangBar();
+    toast('🌐 '+lang.flag+' '+lang.label+' — re-running meeting');
+    // Relaunch after a tick so the cancel settles
+    setTimeout(() => startScriptedMeeting(_scriptedMeetingReport), 300);
+    return;
+  }
+  if(tmMeetingId) {
+    if(!confirm(`Switch to ${lang.label}? This will reset the current meeting.`)) return;
+    if(tmCurrentAudio){tmCurrentAudio.pause();tmCurrentAudio=null;}
+    tmAudioQueue=[];tmAudioPlaying=false;
+    showTMPrompt();
+  }
+  tmLang=code;
+  _renderTMLangBar();
+  toast('🌐 '+lang.flag+' '+lang.label);
+}
+
+function showTMPrompt() {
+  _tmShowZone('prompt');
+  // Reset header back to idle
+  const title=document.getElementById('tm-hdr-title');
+  const badge=document.getElementById('tm-status-badge');
+  if(title) title.textContent='War Room — Task Meeting';
+  if(badge){badge.textContent='IDLE';badge.className='tm-hdr-badge';}
+  // Clear textarea so user starts fresh
+  const ta=document.getElementById('tm-task-input');
+  if(ta){ta.value='';setTimeout(()=>ta.focus(),80);}
+  // Reset IDs so a stale meeting doesn't pollute next launch
+  tmMeetingId=null; tmStreamEl=null; tmCurrentQMeetingId=null;
+}
+
+async function launchTaskMeeting() {
+  const ta=document.getElementById('tm-task-input');
+  const task=(ta?ta.value:'').trim();
+  if(!task){if(ta)ta.focus();return;}
+  const btn=document.getElementById('tm-launch-btn');
+  btn.disabled=true; btn.textContent='⏳ Convening…';
+  try {
+    const r=await fetch('/api/meeting/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task,lang:tmLang})});
+    const d=await r.json();
+    if(d.meeting_id){
+      tmMeetingId=d.meeting_id;
+      _tmEnterStage(task);
+      addLog('🎙 Meeting launched: '+task.substring(0,55));
+    } else { _toast('⚠️ '+(d.error||'Could not start meeting'),false); }
+  } catch(e){ _toast('❌ '+e.message,false); }
+  finally { btn.disabled=false; btn.textContent='⚡ Convene Meeting'; }
+}
+
+function _tmEnterStage(task) {
+  const title=document.getElementById('tm-hdr-title');
+  const badge=document.getElementById('tm-status-badge');
+  if(title) title.textContent=(task.length>62?task.substring(0,62)+'…':task);
+  if(badge){badge.textContent='● LIVE';badge.className='tm-hdr-badge live';}
+  const roster=document.getElementById('tm-roster');
+  const dial=document.getElementById('tm-dialogue');
+  if(roster) roster.innerHTML='';
+  if(dial) dial.innerHTML='';
+  const q=document.getElementById('tm-question'); if(q) q.classList.remove('visible');
+  const s=document.getElementById('tm-summary');   if(s) s.classList.remove('visible');
+  _tmShowZone('stage');
+  /* Update mini card */
+  const icon=document.getElementById('tm-mini-icon'); if(icon) icon.textContent='🔴';
+  const mt=document.getElementById('tm-mini-title'); if(mt) mt.textContent='🔴 Meeting in progress';
+  const ms=document.getElementById('tm-mini-sub');   if(ms) ms.textContent=(task.length>55?task.substring(0,55)+'…':task);
+}
+
+function tmAgentJoin(name) {
+  const roster=document.getElementById('tm-roster'); if(!roster) return;
+  if(roster.querySelector(`[data-agent="${CSS.escape(name)}"]`)) return;
+  const color=SPEAKER_COLORS[name]||'#8892a4';
+  const div=document.createElement('div');
+  div.className='tm-rag'; div.dataset.agent=name;
+  div.innerHTML=`<div class="tm-rav" style="background:${color}20;color:${color}">${AVATAR[name]||'🤖'}<div class="tm-rring"></div></div><div class="tm-rname">${name}</div>`;
+  roster.appendChild(div);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>div.classList.add('joined')));
+  playJoin();
+}
+
+function _tmSetSpeaking(name) {
+  const roster=document.getElementById('tm-roster'); if(!roster) return;
+  roster.querySelectorAll('.tm-rag').forEach(el=>{
+    const isSpeaking=el.dataset.agent===name&&!!name;
+    el.classList.toggle('speaking',isSpeaking);
+    if(isSpeaking) el.classList.add('has-spoken');
+  });
+  const wave=document.getElementById('tm-wave');
+  const wn=document.getElementById('tm-wave-name');
+  if(wave) wave.classList.toggle('live',!!name);
+  if(wn)   wn.textContent=name?name+' ▸':'—';
+  // Mirror current speaker into the V2 hologram
+  if (typeof _updateHologram === 'function') _updateHologram(name);
+}
+
+function _tmAppendMsg(speaker,text,type,isStreaming) {
+  const dial=document.getElementById('tm-dialogue'); if(!dial) return null;
+  const color=SPEAKER_COLORS[speaker]||'#8892a4';
+  const ts=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+  const tag=type==='user'?'<span class="tm-msg-tag user">YOU</span>':type==='system'?'<span class="tm-msg-tag system">SYS</span>':'<span class="tm-msg-tag agent">AGENT</span>';
+  const div=document.createElement('div');
+  div.className='tm-msg'+(type==='user'?' user-msg':type==='system'?' system-msg':'')+(isStreaming?' streaming':'');
+  div.dataset.speaker=speaker;
+  const useTypewriter = !isStreaming && type==='agent' && !!text;
+  div.innerHTML=`<div class="tm-msg-av" style="background:${color}20;color:${color}">${AVATAR[speaker]||'💬'}</div><div class="tm-msg-body"><div class="tm-msg-head"><span class="tm-msg-speaker" style="color:${color}">${speaker}</span>${tag}<span class="tm-msg-ts">${ts}</span></div><div class="tm-msg-text">${(isStreaming||useTypewriter)?'':esc(text)}</div></div>`;
+  dial.appendChild(div);
+  dial.scrollTop=dial.scrollHeight;
+  // Synced typewriter + neural TTS for agent messages
+  if(useTypewriter) {
+    const textEl=div.querySelector('.tm-msg-text');
+    _tmSpeakSynced(speaker, text, textEl);
+  }
+  _tmMiniLog(speaker,text||'…',color);
+  counter(document.getElementById('meeting-count'),(parseInt(document.getElementById('meeting-count').textContent)||0)+1);
+  return div;
+}
+
+function _tmMiniLog(speaker,text,color) {
+  const mini=document.getElementById('tm-mini-log'); if(!mini) return;
+  const div=document.createElement('div');
+  div.style.cssText='padding:4px 12px;font-size:10px;font-family:var(--mono);border-bottom:1px solid rgba(255,255,255,.04);display:flex;gap:6px;align-items:baseline;animation:log-in .2s ease both';
+  div.innerHTML=`<span style="color:${color||'var(--amber)'};font-weight:700;flex-shrink:0">${speaker}</span><span style="color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${esc((text||'').substring(0,80))}</span>`;
+  mini.prepend(div);
+  while(mini.children.length>5) mini.lastChild.remove();
+}
+
+function _tmStreamChunk(chunk) {
+  if(!tmStreamEl) return;
+  const t=tmStreamEl.querySelector('.tm-msg-text'); if(t) t.textContent+=chunk;
+  const dial=document.getElementById('tm-dialogue'); if(dial) dial.scrollTop=dial.scrollHeight;
+}
+function _tmStreamDone(speakerName) {
+  if(tmStreamEl){
+    tmStreamEl.classList.remove('streaming');
+    if(speakerName){
+      const t=tmStreamEl.querySelector('.tm-msg-text');
+      if(t) tmSpeak(speakerName,t.textContent);
+    }
+    tmStreamEl=null;
+  }
+}
+
+function _tmShowQuestion(question,meetingId) {
+  tmCurrentQMeetingId=meetingId||tmMeetingId;
+  const qt=document.getElementById('tm-question-text'); if(qt) qt.textContent=question;
+  const qi=document.getElementById('tm-qinput'); if(qi){qi.value='';qi.focus();}
+  const qp=document.getElementById('tm-question'); if(qp) qp.classList.add('visible');
+  tmSpeak('David',question);
+  addLog('❓ Question: '+question.substring(0,60));
+}
+
+async function submitTMAnswer() {
+  const qi=document.getElementById('tm-qinput');
+  const answer=(qi?qi.value:'').trim(); if(!answer) return;
+  const qp=document.getElementById('tm-question'); if(qp) qp.classList.remove('visible');
+  if(qi) qi.value='';
+  _tmAppendMsg('Dan',answer,'user',false);
+  if(!tmCurrentQMeetingId) return;
+  try {
+    await fetch(`/api/meeting/task/${tmCurrentQMeetingId}/answer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer})});
+  } catch(e){ addLog('⚠️ Answer failed: '+e.message); }
+}
+
+function _tmStatusMeta(s) {
+  const v=(s||'idle').toLowerCase();
+  if(v==='completed'||v==='done')                      return {cls:'completed', label:'✓ DONE',     color:'var(--green)'};
+  if(v==='running'||v==='active'||v==='in_progress')   return {cls:'running',   label:'● RUNNING',  color:'var(--amber)'};
+  return                                                       {cls:'blocked',   label:'⚠ BLOCKED',  color:'var(--red)'};
+}
+
+function _tmShowSummary(assignments) {
+  tmLastAssignments = assignments||[];
+  const con=document.getElementById('tm-assignments');
+  const panel=document.getElementById('tm-summary');
+  if(!con||!panel) return;
+  const delays=['','d1','d2','d3','d4'];
+  con.innerHTML=tmLastAssignments.map((a,i)=>{
+    const color=SPEAKER_COLORS[a.agent]||'#8892a4';
+    const dl=i<delays.length?delays[i]:'d4';
+    const sm=_tmStatusMeta(a.status);
+    const isBlocked=sm.cls==='blocked';
+    const tasks=(a.tasks||[]).map(t=>`<div class="tm-assign-task">• ${esc(t)}</div>`).join('');
+    const tasksJson=esc(JSON.stringify(a.tasks||[]));
+    const reopenBtn=isBlocked
+      ? `<button class="tm-reopen-btn" onclick="reopenBlockerMeeting('${esc(a.agent)}','${tasksJson}','${sm.label}')">🚨 Re-open Meeting — resolve this blocker</button>`
+      : '';
+    return `<div class="tm-assign-card ${dl} status-${sm.cls}">
+      <div class="tm-assign-hdr">
+        <div class="tm-assign-av" style="background:${color}20;color:${color}">${AVATAR[a.agent]||'🤖'}</div>
+        <div class="tm-assign-name" style="color:${color}">${esc(a.agent)}</div>
+        <span class="tm-assign-status-badge ${sm.cls}" style="color:${sm.color}">${sm.label}</span>
+      </div>
+      ${tasks||`<div class="tm-assign-task">${esc(a.description||'—')}</div>`}
+      ${reopenBtn}
+    </div>`;
+  }).join('');
+  panel.classList.add('visible');
+  requestAnimationFrame(()=>panel.scrollIntoView({behavior:'smooth',block:'end'}));
+  const badge=document.getElementById('tm-status-badge');
+  if(badge){badge.textContent='✓ DONE';badge.className='tm-hdr-badge';}
+  const icon=document.getElementById('tm-mini-icon'); if(icon) icon.textContent='✅';
+  const mt=document.getElementById('tm-mini-title'); if(mt) mt.textContent='✅ Meeting complete';
+  [660,880,1100,1320].forEach((f,i)=>setTimeout(()=>playTone(f,.18,.06),i*90));
+}
+
+function reopenBlockerMeeting(agentName, tasksJson, statusLabel) {
+  let tasks=[];
+  try { tasks=JSON.parse(tasksJson); } catch(_){}
+
+  // Build agents list: the blocked agent + Hermes (always) + any others from last meeting
+  const otherAgents=(tmLastAssignments||[])
+    .map(a=>a.agent)
+    .filter(n=>n!==agentName&&n!=='Hermes')
+    .slice(0,3);
+  const allInvolved=[agentName,'Hermes',...otherAgents].join(', ');
+
+  const taskList=tasks.map(t=>`  • ${t}`).join('\n')||'  (no tasks listed)';
+  const blockerPrompt=
+`🚨 BLOCKER REVIEW — ${agentName} [${statusLabel}]
+
+Agent "${agentName}" has a blocked/failed assignment. This is an emergency meeting.
+
+BLOCKED TASKS:
+${taskList}
+
+REQUIRED OUTCOMES:
+1. ${agentName} must explain the ROOT CAUSE of the block
+2. Hermes must document the situation clearly and draft a resolution brief
+3. Every agent must propose at least one concrete additional task to unblock ${agentName}
+4. All blockers must have a solution before this meeting ends
+5. The meeting must conclude with updated task assignments that resolve the block
+
+Agents involved: ${allInvolved}`;
+
+  // Reset to prompt zone and pre-fill
+  showTMPrompt();
+  setTimeout(()=>{
+    const ta=document.getElementById('tm-task-input');
+    if(ta){ ta.value=blockerPrompt; ta.style.borderColor='var(--red)'; ta.focus(); }
+    // Mark header as blocker mode
+    const title=document.getElementById('tm-hdr-title');
+    if(title) title.textContent=`🚨 BLOCKER — ${agentName}`;
+    const badge=document.getElementById('tm-status-badge');
+    if(badge){ badge.textContent='⚠ BLOCKED'; badge.className='tm-hdr-badge live'; }
+    toast(`🚨 Blocker meeting ready — ${agentName} + Hermes summoned`);
+    // Play alert tone
+    [330,220].forEach((f,i)=>setTimeout(()=>playTone(f,.22,.09,'sawtooth'),i*140));
+  }, 130);
+}
+
+async function submitTMComment() {
+  const inp=document.getElementById('tm-comment-input');
+  const comment=(inp?inp.value:'').trim(); if(!comment) return;
+
+  // === Scripted meeting: question-budgeted interjection + recalibration ===
+  if (_scriptedMeetingReport) {
+    if (_scriptedMeetingQuestionsLeft <= 0) {
+      toast('🔒 Question limit reached — meeting is wrapping up');
+      return;
+    }
+    inp.value = '';
+    _scriptedMeetingQuestionsLeft--;
+    _updateSendButton();
+
+    _tmAppendMsg('Dan', comment, 'user', false);
+
+    const subject = _scriptedMeetingContext?.subject ||
+      (document.getElementById('tm-hdr-title')?.textContent || '').split('—').slice(1).join('—').trim();
+    const attendees = _scriptedMeetingContext?.attendees ||
+      [...document.querySelectorAll('.tm-rag')].map(r => r.dataset.agent);
+
+    // Snapshot the remaining queue BEFORE we mutate it
+    const remainingBefore = [..._scriptedMeetingQueue];
+
+    try {
+      // 1. Pick best responder + get immediate answer
+      const msgs = [...document.querySelectorAll('.tm-msg')].slice(-10).map(m => ({
+        speaker: m.querySelector('.tm-msg-speaker')?.textContent?.trim() || '?',
+        text:    m.querySelector('.tm-msg-text')?.textContent?.trim() || '',
+      }));
+      const guess = attendees.find(a => a && a !== 'Dan' && a !== 'Narrator') || 'David';
+      _setThinking(guess, true);
+
+      const resp = await fetch('/api/meeting/redirect', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ question: comment, attendees, history: msgs, subject }),
+      });
+      const data = await resp.json();
+      _setThinking(null);
+
+      if (!data?.responder || !data?.response) {
+        addLog('⚠️ No responder returned'); return;
+      }
+
+      // Record the Q&A for finalization
+      _scriptedMeetingQA.push({
+        question: comment,
+        responder: data.responder,
+        response: data.response,
+      });
+
+      // 2. Play the agent's answer
+      await new Promise(r => setTimeout(r, 350));
+      tmAgentJoin(data.responder);
+      _tmSetSpeaking(data.responder);
+      _tmAppendMsg(data.responder, data.response, 'agent', false);
+      await _waitForCurrentAudio();
+      _tmSetSpeaking(null);
+
+      // 3. Orchestrator / Hermes acknowledges recalibration
+      const recalSpeaker = attendees.includes('Hermes') ? 'Hermes' : 'David';
+      const recalLine = `Got it. Recalibrating the plan based on Dan's input.`;
+      await new Promise(r => setTimeout(r, 400));
+      _tmSetSpeaking(recalSpeaker);
+      _tmAppendMsg(recalSpeaker, recalLine, 'agent', false);
+      await _waitForCurrentAudio();
+      _tmSetSpeaking(null);
+
+      // 4. Call /api/meeting/replan to get updated remaining segments
+      if (remainingBefore.length > 0) {
+        try {
+          const rp = await fetch('/api/meeting/replan', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              remaining: remainingBefore,
+              question: comment,
+              answer: data.response,
+              answerer: data.responder,
+              subject,
+              attendees,
+            }),
+          });
+          const rpData = await rp.json();
+          if (rpData?.segments && Array.isArray(rpData.segments)) {
+            // Replace whatever was queued (we consumed the original snapshot already)
+            _scriptedMeetingQueue = rpData.segments;
+            if (rpData.changed) addLog('🔁 Meeting plan recalibrated');
+          }
+        } catch(e) { console.warn('[replan]', e); }
+      }
+    } catch(e) {
+      _setThinking(null);
+      addLog('⚠️ Redirect failed: '+e.message);
+    }
+    return;
+  }
+
+  // Non-scripted path: just append comment
+  inp.value = '';
+  _tmAppendMsg('Dan', comment, 'user', false);
+
+  // Legacy path: live LLM meeting
+  const mid=tmMeetingId;
+  if(!mid) return;
+  try {
+    await fetch(`/api/meeting/task/${mid}/comment`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({comment})
+    });
+    addLog(`💬 Dan: ${comment.substring(0,55)}`);
+  } catch(e){ addLog('⚠️ Comment failed: '+e.message); }
+}
+
+function toggleTMVoice() {
+  tmVoiceOn=!tmVoiceOn;
+  if(!tmVoiceOn) {
+    // Stop neural audio immediately
+    if(tmCurrentAudio){ tmCurrentAudio.pause(); tmCurrentAudio=null; }
+    tmAudioQueue=[]; tmAudioPlaying=false;
+    if('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+  ['tm-voice-toggle','tm-mute-btn'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=tmVoiceOn?'🔊 Voice':'🔇 Muted';
+    el.classList.toggle('muted',!tmVoiceOn);
+    el.classList.toggle('active',tmVoiceOn);
+  });
+  toast(tmVoiceOn?'🔊 Meeting voice on':'🔇 Meeting voice muted');
+}
+
+async function _tmLoadHistory() {
+  const list=document.getElementById('tm-hist-list'); if(!list) return;
+  list.innerHTML='<div style="text-align:center;padding:28px;font-size:11px;font-family:var(--mono);color:var(--text-3)">Loading…</div>';
+  try {
+    const d=await fetch('/api/meeting/history').then(r=>r.json());
+    tmMeetings=Array.isArray(d)?d:[];
+    if(!tmMeetings.length){
+      list.innerHTML='<div style="padding:24px;font-size:11px;font-family:var(--mono);color:var(--text-3);text-align:center">No meeting history yet — start your first meeting!</div>';
+      return;
+    }
+    list.innerHTML=tmMeetings.map(m=>{
+      const mid=m.meeting_id||m.id||'?';
+      const dt=m.created_at?new Date(m.created_at).toLocaleString():'?';
+      const turns=m.turns||m.message_count||0;
+      const agents=(m.agents||[]).slice(0,4).join(', ')+(m.agents&&m.agents.length>4?' +more':'');
+      const statusDot=m.status==='complete'?'✅':m.status==='running'?'🔴':'🕐';
+      return `<div class="tm-hist-item" onclick="openTMTranscript('${esc(mid)}','${esc(m.title||m.task||'?')}')">
+        <div class="tm-hist-icon">${statusDot}</div>
+        <div class="tm-hist-info">
+          <div class="tm-hist-task">${esc(m.title||m.task||'Untitled meeting')}</div>
+          <div class="tm-hist-meta">${dt}${agents?' · '+agents:''}</div>
+        </div>
+        <span class="tm-hist-cnt">${turns} turns</span>
+      </div>`;
+    }).join('');
+  } catch(e){
+    list.innerHTML=`<div style="padding:18px;font-size:11px;font-family:var(--mono);color:var(--red)">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function openTMTranscript(meetingId,title) {
+  document.getElementById('tm-transcript-title').textContent=title||meetingId;
+  const body=document.getElementById('tm-transcript-body');
+  body.innerHTML='<div style="text-align:center;padding:28px;font-size:11px;font-family:var(--mono);color:var(--text-3)">Loading transcript…</div>';
+  _tmShowZone('transcript');
+  try {
+    const d=await fetch(`/api/meeting/history/${encodeURIComponent(meetingId)}`).then(r=>r.json());
+    const msgs=Array.isArray(d)?d:(d.turns||d.messages||[]);
+    if(!msgs.length){
+      body.innerHTML='<div style="padding:18px;font-size:11px;font-family:var(--mono);color:var(--text-3)">No messages in this meeting.</div>';
+      return;
+    }
+    body.innerHTML='';
+    msgs.forEach(m=>{
+      const color=SPEAKER_COLORS[m.speaker]||'#8892a4';
+      const ts=m.ts?new Date(m.ts).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'}):'';
+      const type=m.type==='user_answer'?'user':m.type==='system'?'system':'agent';
+      const tag=type==='user'?'<span class="tm-msg-tag user">YOU</span>':type==='system'?'<span class="tm-msg-tag system">SYS</span>':'<span class="tm-msg-tag agent">AGENT</span>';
+      const el=document.createElement('div');
+      el.className='tm-msg'+(type==='user'?' user-msg':type==='system'?' system-msg':'');
+      el.innerHTML=`<div class="tm-msg-av" style="background:${color}20;color:${color}">${AVATAR[m.speaker||'?']||'💬'}</div><div class="tm-msg-body"><div class="tm-msg-head"><span class="tm-msg-speaker" style="color:${color}">${m.speaker||'?'}</span>${tag}<span class="tm-msg-ts">${ts}</span></div><div class="tm-msg-text">${esc(m.text||m.message||'')}</div></div>`;
+      body.appendChild(el);
+    });
+    body.scrollTop=0;
+  } catch(e){
+    body.innerHTML=`<div style="padding:18px;font-size:11px;font-family:var(--mono);color:var(--red)">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function closeTMTranscript() { _tmShowZone('history'); }
 
 init();
 </script>

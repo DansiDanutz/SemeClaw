@@ -57,11 +57,13 @@ class ToolRegistry:
         Returns:
             ToolRegistry with built-in tools registered
         """
-        from semeclaw.tools.builtin_tools import read_file, write_file, edit_file, bash
+        from semeclaw.tools.builtin_tools import bash, edit_file, read_file, write_file
+        from semeclaw.tools.markitdown_tool import create_markitdown_tool
 
         registry = cls()
         registry.register(read_file)
         registry.register(write_file)
         registry.register(edit_file)
         registry.register(bash)
+        registry.register(create_markitdown_tool())
         return registry
