@@ -1,0 +1,126 @@
+name: 'SemeClaw War Room'
+description: 'Convene an AI war-room meeting on a PR diff or issue, post the verdict back as a comment.'
+author: 'Dan @ DansiDanutz'
+branding:
+  icon: 'message-square'
+  color: 'orange'
+
+inputs:
+  semeclaw-url:
+    description: 'Base URL of your SemeClaw deployment'
+    required: true
+  semeclaw-api-key:
+    description: 'Bearer token for SemeClaw write endpoints'
+    required: true
+  task-title:
+    description: 'Override the task title (default: PR title or issue title)'
+    required: false
+  context:
+    description: 'Extra markdown context appended to the report'
+    required: false
+    default: ''
+  comment-on-pr:
+    description: 'Post the verdict as a PR comment when the meeting finalizes'
+    required: false
+    default: 'true'
+
+outputs:
+  report-name:
+    description: 'The SemeClaw report filename'
+    value: ${{ steps.convene.outputs.report_name }}
+  embed-url:
+    description: 'Iframe embed URL for the meeting'
+    value: ${{ steps.convene.outputs.embed_url }}
+  share-url:
+    description: 'Public share URL (30d TTL)'
+    value: ${{ steps.convene.outputs.share_url }}
+  verdict-line:
+    description: 'VERDICT: line from the task re-analysis (populated after finalize)'
+    value: ${{ steps.convene.outputs.verdict_line }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Assemble task markdown
+      id: assemble
+      shell: bash
+      run: |
+        set -euo pipefail
+        TITLE="${{ inputs.task-title }}"
+        if [ -z "$TITLE" ]; then
+          TITLE="${{ github.event.pull_request.title || github.event.issue.title || github.event.head_commit.message || github.ref }}"
+        fi
+        BODY="${{ github.event.pull_request.body || github.event.issue.body || '' }}"
+        CONTEXT="${{ inputs.context }}"
+
+        cat > /tmp/semeclaw-task.md <<EOF
+        # ${TITLE}
+
+        **Task:** ${TITLE}
+        **Repo:** ${{ github.repository }}
+        **Event:** ${{ github.event_name }}
+        **Triggered by:** @${{ github.actor }}
+
+        ## Research Agent
+
+        ${BODY:-No description provided.}
+
+        ${CONTEXT}
+
+        ## Strategist Agent
+
+        Based on the research, identify 3 risks and 3 strategic levers. Call out anything that would block landing this work.
+
+        ## Writer Agent
+
+        Draft the 2-sentence public summary + a 3-bullet action list.
+        EOF
+
+        echo "title<<EOF"  >> $GITHUB_OUTPUT
+        echo "$TITLE"      >> $GITHUB_OUTPUT
+        echo "EOF"         >> $GITHUB_OUTPUT
+
+    - name: Convene meeting
+      id: convene
+      shell: bash
+      env:
+        SEMECLAW_URL: ${{ inputs.semeclaw-url }}
+        SEMECLAW_API_KEY: ${{ inputs.semeclaw-api-key }}
+      run: |
+        set -euo pipefail
+        RESP=$(curl -fsS -X POST \
+          -H "Authorization: Bearer $SEMECLAW_API_KEY" \
+          -H "Content-Type: application/json" \
+          -H "X-Tenant-Id: gh-${{ github.repository_owner }}" \
+          -d "$(jq -n --arg t "${{ steps.assemble.outputs.title }}" --arg c "$(cat /tmp/semeclaw-task.md)" \
+              '{task:$t, content:$c, auto_audio:true}')" \
+          "$SEMECLAW_URL/api/reports")
+
+        NAME=$(echo "$RESP" | jq -r .name)
+        echo "report_name=$NAME" >> $GITHUB_OUTPUT
+
+        SHARE=$(curl -fsS -X POST \
+          -H "Authorization: Bearer $SEMECLAW_API_KEY" \
+          "$SEMECLAW_URL/api/meetings/$NAME/share")
+        echo "share_url=$(echo "$SHARE" | jq -r .url)"   >> $GITHUB_OUTPUT
+        echo "embed_url=$SEMECLAW_URL/embed?meeting=$NAME&v=2" >> $GITHUB_OUTPUT
+        echo "verdict_line=(pending — meeting not yet finalized)"  >> $GITHUB_OUTPUT
+
+    - name: Comment on PR
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh pr comment ${{ github.event.pull_request.number }} --body "$(cat <<MD
+        ## 🎭 SemeClaw War Room convened
+
+        A multi-agent meeting is being convened on this PR. Listen or read along:
+
+        - 🔊 **[Listen to meeting](${{ steps.convene.outputs.share_url }})**
+        - 📄 **[Full transcript](${{ inputs.semeclaw-url }}/api/meetings/${{ steps.convene.outputs.report_name }}/transcript.html)**
+        - 🎛 **[Embed UI](${{ steps.convene.outputs.embed_url }})**
+
+        _Verdict line will be appended when the meeting finalizes._
+        MD
+        )"

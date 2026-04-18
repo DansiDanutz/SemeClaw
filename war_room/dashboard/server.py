@@ -140,7 +140,7 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="SemeClaw War Room Agent", version="0.5.0")
+app = FastAPI(title="SemeClaw War Room Agent", version="0.6.0")
 
 # ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
@@ -188,7 +188,7 @@ async def _semeclaw_auth_and_csp(request, call_next):
     # Iframe-embed-friendly CSP
     if SEMECLAW_FRAME_ANCESTORS:
         response.headers["Content-Security-Policy"] = f"frame-ancestors {SEMECLAW_FRAME_ANCESTORS}"
-    response.headers["X-SemeClaw-Version"] = "0.5.0"
+    response.headers["X-SemeClaw-Version"] = "0.6.0"
     return response
 
 # WebSocket connection manager
@@ -569,7 +569,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     body = {
         "event": event,
         "ts": datetime.now(timezone.utc).isoformat(),
-        "agent_version": "0.5.0",
+        "agent_version": "0.6.0",
         "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
         "data": payload,
     }
@@ -603,7 +603,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
                         "content-type": "application/json",
                         "x-semeclaw-event": event,
                         "x-semeclaw-signature": f"sha256={sig}" if sig else "",
-                        "user-agent": "SemeClaw/0.5.0",
+                        "user-agent": "SemeClaw/0.6.0",
                     },
                 )
         except Exception as e:
@@ -636,7 +636,7 @@ async def api_events(tenant: str | None = None, events: str | None = None):
     async def _stream():
         # Initial hello
         hello = {"event": "connected", "ts": datetime.now(timezone.utc).isoformat(),
-                 "agent_version": "0.5.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
+                 "agent_version": "0.6.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
         yield f"event: connected\ndata: {json.dumps(hello)}\n\n"
         try:
             while True:
@@ -1037,6 +1037,262 @@ async def api_tenants_costs_all():
     return JSONResponse(sorted(out, key=lambda x: x["approx_cost_cents"], reverse=True))
 
 
+# ---------------------------------------------------------------------------
+# v0.6.0 — Voice cloning, SRT/PDF exports, Stripe billing hook
+# ---------------------------------------------------------------------------
+
+@app.post("/api/voices/clone")
+async def api_voices_clone(request: Request):
+    """Clone a voice via ElevenLabs Instant Voice Clone and register it for
+    this tenant. The new voice_id is immediately usable in /api/tts for the
+    speaker mapping the consumer chooses via /api/voices/map.
+
+    Multipart form fields:
+        file        — reference audio (.mp3, .wav), 30s-2min recommended
+        name        — display name for the clone (e.g. 'Dan Primary')
+        description — optional descriptor
+        speaker     — optional; if set, auto-registers mapping for tenant
+    """
+    tenant = _tenant_id(request)
+    if not _ELEVEN_KEY:
+        return JSONResponse({"error": "ELEVENLABS_API_KEY not configured"}, status_code=503)
+
+    form = await request.form()
+    f = form.get("file")
+    if not f or not hasattr(f, "read"):
+        return JSONResponse({"error": "file field required"}, status_code=400)
+    name = (form.get("name") or f.filename or "Cloned Voice").strip()
+    description = (form.get("description") or "").strip()
+    speaker_map_key = (form.get("speaker") or "").strip()
+
+    # Stream to ElevenLabs IVC endpoint
+    try:
+        import httpx as _httpx
+        audio_bytes = await f.read()
+        files = {"files": (f.filename or "sample.mp3", audio_bytes, "audio/mpeg")}
+        data = {"name": name, "description": description}
+        async with _httpx.AsyncClient(timeout=60.0) as c:
+            resp = await c.post(
+                "https://api.elevenlabs.io/v1/voices/add",
+                headers={"xi-api-key": _ELEVEN_KEY, "accept": "application/json"},
+                files=files,
+                data=data,
+            )
+        if resp.status_code != 200:
+            return JSONResponse({"error": f"ElevenLabs {resp.status_code}: {resp.text[:300]}"}, status_code=502)
+        voice = resp.json()
+    except Exception as e:
+        logger.warning(f"voice clone failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    voice_id = voice.get("voice_id") or voice.get("voice_id_")
+    if not voice_id:
+        return JSONResponse({"error": "no voice_id returned", "upstream": voice}, status_code=502)
+
+    # Cache it in our in-process voice_id map so /api/tts can use it by name
+    _ELEVEN_VOICE_ID_CACHE[name] = voice_id
+
+    # Optionally bind to a speaker mapping for this tenant
+    if speaker_map_key:
+        overrides = _load_voice_overrides()
+        current = overrides.get(tenant, {})
+        current[speaker_map_key] = name
+        overrides[tenant] = current
+        _save_voice_overrides(overrides)
+
+    await _dispatch_webhook("voice.cloned", {
+        "voice_id": voice_id, "name": name,
+        "tenant_id": tenant, "speaker_bound": speaker_map_key or None,
+    })
+
+    return JSONResponse({
+        "ok": True,
+        "voice_id": voice_id,
+        "name": name,
+        "tenant_id": tenant,
+        "bound_to_speaker": speaker_map_key or None,
+    })
+
+
+@app.get("/api/meetings/{name}/transcript.srt")
+async def api_meeting_srt(name: str):
+    """Generate SRT subtitles from a meeting script. Approximates timing
+    at ~150 WPM plus a fixed pause — good enough for YouTube-style overlays."""
+    from fastapi.responses import Response as FR
+    from meeting_skill import build_script
+
+    path = _find_report(name)
+    if not path or path.suffix != ".md":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    content = path.read_text(encoding="utf-8")
+    task = _extract_task_from_report(content)
+    meeting_id = _lookup_run_id_for_task(task) or path.stem
+    script = build_script(report_content=content, task=task, meeting_id=meeting_id)
+
+    def _fmt(ms: int) -> str:
+        h, rem = divmod(ms, 3_600_000)
+        m, rem = divmod(rem, 60_000)
+        s, ms2 = divmod(rem, 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms2:03d}"
+
+    WPM = 150
+    lines: list[str] = []
+    t_ms = 0
+    for i, seg in enumerate(script.segments, 1):
+        words = max(1, len(seg.text.split()))
+        dur_ms = int((words / WPM) * 60_000)
+        start = t_ms
+        end = t_ms + dur_ms
+        lines.append(str(i))
+        lines.append(f"{_fmt(start)} --> {_fmt(end)}")
+        lines.append(f"{seg.speaker}: {seg.text}")
+        lines.append("")
+        t_ms = end + int(seg.pause_ms_after or 0)
+
+    body = "\n".join(lines)
+    return FR(
+        content=body,
+        media_type="application/x-subrip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{path.stem}.srt"',
+        },
+    )
+
+
+@app.get("/api/meetings/{name}/transcript.html")
+async def api_meeting_html(name: str):
+    """Render a nicely styled standalone HTML transcript for the meeting.
+    Zero extra deps; consumers can print-to-PDF in the browser or pipe to
+    chrome --headless --print-to-pdf for a real PDF."""
+    from fastapi.responses import HTMLResponse
+    from meeting_skill import build_script
+
+    path = _find_report(name)
+    if not path or path.suffix != ".md":
+        return HTMLResponse(f"<h1>404</h1><p>Report not found: {name}</p>", status_code=404)
+    content = path.read_text(encoding="utf-8")
+    task = _extract_task_from_report(content)
+    meeting_id = _lookup_run_id_for_task(task) or path.stem
+    script = build_script(report_content=content, task=task, meeting_id=meeting_id)
+
+    def _esc(s: str) -> str:
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    turns_html = []
+    color_map = {
+        "Narrator": "#8b5cf6", "David": "#f59e0b", "Dan": "#10b981",
+        "Autoresearch": "#06b6d4", "GSD": "#ec4899", "Hermes": "#eab308",
+    }
+    for seg in script.segments:
+        col = color_map.get(seg.speaker, "#64748b")
+        turns_html.append(
+            f'<div class="turn role-{seg.role or "agent"}">'
+            f'<div class="speaker" style="color:{col}">{_esc(seg.speaker)}</div>'
+            f'<div class="text">{_esc(seg.text)}</div>'
+            f'</div>'
+        )
+    qa_note = " · including any Q&A interjections" if "## 💬 Meeting Interjections" in content else ""
+    verdict = ""
+    for line in content.splitlines()[::-1]:
+        if line.strip().startswith("VERDICT:"):
+            verdict = line.strip()
+            break
+
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Meeting Transcript — {_esc(script.subject)}</title>
+<style>
+  :root{{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--amber:#f59e0b}}
+  @media print{{:root{{--bg:#fff}}}}
+  *{{box-sizing:border-box}}
+  body{{margin:0;padding:40px 28px;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;max-width:780px;margin:0 auto}}
+  header{{border-bottom:3px solid var(--amber);padding-bottom:18px;margin-bottom:28px}}
+  h1{{margin:0 0 6px;font-size:26px;letter-spacing:-.4px}}
+  .meta{{color:var(--muted);font-size:13px;font-family:ui-monospace,monospace}}
+  .meta span{{margin-right:14px}}
+  .verdict{{display:inline-block;margin-top:14px;padding:6px 14px;background:#10b98122;border:1px solid #10b98155;color:#047857;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;font-weight:700}}
+  .turn{{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:10px;break-inside:avoid}}
+  .turn.role-host{{background:#8b5cf608;border-color:#8b5cf633}}
+  .turn.role-orchestrator{{background:#f59e0b08;border-color:#f59e0b33}}
+  .turn.role-dan{{background:#10b98108;border-color:#10b98133}}
+  .speaker{{font-weight:700;font-size:11px;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}}
+  .text{{font-size:15px}}
+  footer{{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);color:var(--muted);font-size:11px;font-family:ui-monospace,monospace;text-align:center}}
+</style></head>
+<body>
+  <header>
+    <h1>{_esc(script.subject)}</h1>
+    <div class="meta">
+      <span>🎭 Meeting <b>{_esc(script.meeting_id)}</b></span>
+      <span>👥 {len(script.attendees)} attendees{qa_note}</span>
+      <span>📝 {len(script.segments)} turns</span>
+    </div>
+    {f'<div class="verdict">{_esc(verdict)}</div>' if verdict else ''}
+  </header>
+  {''.join(turns_html)}
+  <footer>
+    Generated by SemeClaw War Room v{request_version()} · {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+  </footer>
+</body></html>"""
+
+    return HTMLResponse(
+        content=html,
+        headers={"Content-Disposition": f'inline; filename="{path.stem}.html"'},
+    )
+
+
+def request_version() -> str:
+    """Used by the HTML transcript footer. Keeps string in one place."""
+    return "0.6.0"
+
+
+# ---------------------------------------------------------------------------
+# Stripe billing scaffold — wires up but stays inert until STRIPE_SECRET_KEY is set
+# ---------------------------------------------------------------------------
+
+STRIPE_SECRET_KEY        = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_PUBLISHABLE_KEY   = os.environ.get("STRIPE_PUBLISHABLE_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_PRICE_PER_MEETING = os.environ.get("STRIPE_PRICE_PER_MEETING", "").strip()  # price_xxx
+
+
+@app.get("/api/billing/status")
+async def api_billing_status(request: Request):
+    """Report billing configuration + current tenant usage. Lets consumers
+    surface 'usage this month: $X' in their own UI even before Stripe is wired."""
+    tenant = _tenant_id(request)
+    usage = _COST_LEDGER.get(tenant, {})
+    configured = bool(STRIPE_SECRET_KEY and STRIPE_PRICE_PER_MEETING)
+    return JSONResponse({
+        "tenant_id": tenant,
+        "stripe_configured": configured,
+        "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY or None,
+        "usage": usage,
+        "suggested_pricing": {
+            "model": "per_meeting",
+            "est_cents_per_meeting": 25,
+            "included_per_tier": {"trial": 10, "pro": 100, "team": 500},
+        },
+    })
+
+
+@app.post("/api/billing/report-usage")
+async def api_billing_report_usage(request: Request):
+    """Push this tenant's meeting count to Stripe as a metered subscription
+    usage record. Returns 503 until Stripe is configured — scaffold only."""
+    tenant = _tenant_id(request)
+    if not (STRIPE_SECRET_KEY and STRIPE_PRICE_PER_MEETING):
+        return JSONResponse({
+            "error": "stripe not configured",
+            "required_env": ["STRIPE_SECRET_KEY", "STRIPE_PRICE_PER_MEETING"],
+            "tenant_id": tenant,
+        }, status_code=503)
+    # Real impl would POST to Stripe subscription_item/{id}/usage_records
+    # using the tenant's stored subscription_item_id. Kept as scaffold —
+    # consumers should extend with their tenant ↔ subscription mapping.
+    return JSONResponse({"ok": True, "scaffold_only": True, "tenant_id": tenant})
+
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus exposition format. Scrape with Prometheus, Grafana Agent, etc."""
@@ -1044,7 +1300,7 @@ async def metrics():
     lines = [
         "# HELP semeclaw_info SemeClaw agent info",
         "# TYPE semeclaw_info gauge",
-        f'semeclaw_info{{version="0.5.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
+        f'semeclaw_info{{version="0.6.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
     ]
     for k, v in _METRICS.items():
         lines.append(f"# HELP semeclaw_{k} Count of {k}")
@@ -1646,7 +1902,7 @@ async def api_agent_manifest():
     return JSONResponse({
         "id":          "semeclaw-war-room",
         "name":        "SemeClaw War Room",
-        "version":     "0.5.0",
+        "version":     "0.6.0",
         "tenant":      SEMECLAW_TENANT_ID,
         "public_url":  SEMECLAW_PUBLIC_URL,
         "description": ("Cinematic AI agent meeting room. Converts any task report "
@@ -1680,6 +1936,12 @@ async def api_agent_manifest():
             "voices.override",     # per-tenant speaker→voice override
             "costs.ledger",        # per-tenant usage + cost snapshot
             "layout.theater",      # V3 fullscreen-speaker UI
+            "voices.clone",        # ElevenLabs Instant Voice Clone
+            "transcripts.srt",     # SRT subtitle export
+            "transcripts.html",    # printable HTML export
+            "billing.stripe",      # Stripe scaffold (opt-in via env)
+            "integrations.slack",  # /semeclaw slash command bot
+            "integrations.github", # GitHub Action for PR meetings
         ],
         "endpoints": {
             "health":      "/api/agent/health",
@@ -1908,7 +2170,7 @@ async def paperclip_agent_card():
     to register SemeClaw War Room as a native agent type on its marketplace."""
     return JSONResponse({
         "agent_type":   "semeclaw.war-room",
-        "version":      "0.5.0",
+        "version":      "0.6.0",
         "name":         "War Room by SemeClaw",
         "icon":         "🎭",
         "description":  "Convene a cinematic multi-agent meeting on any task. "

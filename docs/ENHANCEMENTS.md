@@ -6,6 +6,16 @@ Legend: 🔴 Critical · 🟡 High-value · 🟢 Nice-to-have · 🔵 Experiment
 
 ---
 
+## ✅ Delivered in v0.6.0 (2026-04-18 late-night)
+
+- ✅ **Voice cloning** — `POST /api/voices/clone` multipart upload → ElevenLabs Instant Voice Clone → auto-cached voice_id, optionally bound to a speaker for the tenant
+- ✅ **SRT subtitle export** — `GET /api/meetings/{name}/transcript.srt` — 150-WPM approximated timing, good enough for YouTube overlays
+- ✅ **HTML transcript export** — `GET /api/meetings/{name}/transcript.html` — zero-dep printable page, auto-extracts VERDICT line, browser-print for PDF
+- ✅ **Stripe billing scaffold** — `GET /api/billing/status` + `POST /api/billing/report-usage` — inert until `STRIPE_SECRET_KEY` configured; consumers can extend with their tenant↔subscription mapping
+- ✅ **Slack bot** — `integrations/slack/bot.py` + README — `/semeclaw <subject>` + `/semeclaw-thread` slash commands, HMAC-verified webhook receiver posts verdict to thread
+- ✅ **GitHub Action** — `integrations/github/action.yml` + README — composite action convening a PR meeting automatically + commenting with audio/transcript/embed URLs
+- ✅ Manifest now 32 capabilities
+
 ## ✅ Delivered in v0.5.0 (2026-04-18 night)
 
 - ✅ **pytest suite** — 23 tests covering `meeting_skill` parser + builder (sections, attendees, handoffs, segment counts, determinism, edge cases). Run with `uv run pytest tests/`.
