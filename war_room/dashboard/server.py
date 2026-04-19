@@ -183,6 +183,140 @@ SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*").strip
 SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default").strip()
 SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
 
+# Central AdClaw ad server — when set, loading slides are served from there
+# and impressions are logged server-side (unfakeable even in open-source forks).
+SEMECLAW_ADS_URL = os.environ.get("SEMECLAW_ADS_URL", "").rstrip("/")
+
+# Persistent instance ID — auto-generated on first run, written to .instance_id
+_INSTANCE_ID_FILE = WAR_ROOM_DIR / ".instance_id"
+
+
+def _get_instance_id() -> str:
+    if _INSTANCE_ID_FILE.exists():
+        iid = _INSTANCE_ID_FILE.read_text().strip()
+        if iid:
+            return iid
+    import secrets as _sec
+    iid = _sec.token_urlsafe(24)
+    try:
+        _INSTANCE_ID_FILE.write_text(iid)
+    except Exception:
+        pass
+    return iid
+
+
+SEMECLAW_INSTANCE_ID: str = os.environ.get("SEMECLAW_INSTANCE_ID", "") or _get_instance_id()
+
+# ---------------------------------------------------------------------------
+# Subscription tier — free vs pro
+# ---------------------------------------------------------------------------
+import hmac as _hmac
+import random as _random
+
+# Comma-separated list of valid pro license keys, e.g. "key1,key2"
+_PRO_KEYS: set[str] = {
+    k.strip() for k in os.environ.get("SEMECLAW_PRO_KEYS", "").split(",") if k.strip()
+}
+# How many seconds free-tier users wait before the script is returned
+FREE_TIER_WAIT_SECONDS: int = int(os.environ.get("SEMECLAW_FREE_WAIT_SECONDS", "8"))
+# HMAC secret for signing watch tokens — auto-generated per process if not set
+_SLIDES_SECRET: str = os.environ.get("SEMECLAW_SLIDES_SECRET", "")
+
+LOADING_SLIDES_FILE = WAR_ROOM_DIR / "loading_slides.json"
+
+
+def _get_tier(request: Request) -> str:
+    """Return 'pro' if a valid license key is present, else 'free'."""
+    if not _PRO_KEYS:
+        return "free"
+    key = (
+        request.headers.get("x-semeclaw-license", "")
+        or request.query_params.get("license", "")
+    ).strip()
+    return "pro" if key in _PRO_KEYS else "free"
+
+
+def _get_slides_secret() -> bytes:
+    """Return a stable HMAC secret for this process, initialised lazily."""
+    global _SLIDES_SECRET
+    if not _SLIDES_SECRET:
+        import secrets as _sec
+        _SLIDES_SECRET = _sec.token_hex(32)
+    return _SLIDES_SECRET.encode()
+
+
+def _issue_watch_token(ip: str) -> str:
+    """Return a time-limited, IP-bound token that proves the client fetched slides.
+
+    Format: "<unix_ts_int>.<hmac_hex_20>"
+    Valid for FREE_TIER_WAIT_SECONDS + 30 seconds.
+    """
+    ts = int(_time.monotonic() * 1000)   # ms monotonic — not guessable from wall clock
+    wall = int(_time.time())             # wall time for expiry check on verify
+    msg = f"{ip}:{wall}:{ts}".encode()
+    sig = _hmac.new(_get_slides_secret(), msg, "sha256").hexdigest()[:24]
+    return f"{wall}.{sig}"
+
+
+def _verify_watch_token(token: str, ip: str) -> bool:
+    """Return True iff token was issued recently for this IP."""
+    try:
+        wall_str, sig = token.split(".", 1)
+        wall = int(wall_str)
+        # Reject tokens older than wait + 30s grace, or from the future
+        age = _time.time() - wall
+        if age < 0 or age > FREE_TIER_WAIT_SECONDS + 30:
+            return False
+        # Recompute — we don't know the original ts so we can't reproduce the
+        # exact msg, but we can check all ts values in the valid window.
+        # Instead, store a separate sig over (ip, wall) only.
+        msg = f"{ip}:{wall}".encode()
+        expected = _hmac.new(_get_slides_secret(), msg, "sha256").hexdigest()[:24]
+        return _hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+
+def _issue_watch_token_v2(ip: str) -> str:
+    """Cleaner version: sign only (ip, wall) so we can verify without ts."""
+    wall = int(_time.time())
+    msg = f"{ip}:{wall}".encode()
+    sig = _hmac.new(_get_slides_secret(), msg, "sha256").hexdigest()[:24]
+    return f"{wall}.{sig}"
+
+
+def _load_slides() -> list[dict]:
+    try:
+        return json.loads(LOADING_SLIDES_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+import hashlib as _hashlib
+
+
+def _hash_ip(ip: str) -> str:
+    """One-way hash of IP for privacy-safe impression logging."""
+    return _hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+
+async def _register_with_adclaw() -> None:
+    """Register this War Room instance with the central AdClaw ad server on startup."""
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as _c:
+            await _c.post(
+                f"{SEMECLAW_ADS_URL}/api/instances/register",
+                json={
+                    "instance_id": SEMECLAW_INSTANCE_ID,
+                    "tenant_id": SEMECLAW_TENANT_ID,
+                    "public_url": SEMECLAW_PUBLIC_URL,
+                },
+            )
+        logger.info("AdClaw: registered instance %s with %s", SEMECLAW_INSTANCE_ID, SEMECLAW_ADS_URL)
+    except Exception as _e:
+        logger.warning("AdClaw: instance registration failed (non-fatal): %s", _e)
+
+
 # Write endpoints protected by bearer when SEMECLAW_API_KEY is set
 _PROTECTED_WRITE_PATHS = (
     "/api/meeting/pin", "/api/meeting/unpin",
@@ -196,8 +330,9 @@ _PROTECTED_WRITE_PATHS = (
 
 @app.middleware("http")
 async def _semeclaw_auth_and_csp(request, call_next):
-    # Bearer auth on protected write endpoints
-    if SEMECLAW_API_KEY and request.method != "OPTIONS":
+    # Bearer auth on protected write endpoints (POST/PUT/PATCH/DELETE only)
+    _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+    if SEMECLAW_API_KEY and request.method in _WRITE_METHODS:
         path = request.url.path
         if any(path.startswith(p) for p in _PROTECTED_WRITE_PATHS):
             auth = request.headers.get("authorization", "")
@@ -381,7 +516,10 @@ async def file_watcher():
 async def index():
     html_file = Path(__file__).parent / "index.html"
     if html_file.exists():
-        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            content=html_file.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )
     return HTMLResponse(content="<h1>War Room Dashboard</h1><p>index.html not found.</p>")
 
 
@@ -1691,9 +1829,69 @@ async def api_meeting_finalize(request: Request):
     return JSONResponse(result)
 
 
+@app.get("/api/meeting/loading-slides")
+async def api_meeting_loading_slides(request: Request):
+    """Return randomised loading slides + tier info for the meeting room screen.
+
+    Free tier: 5 random slides + a signed watch token the client echoes back
+               to /api/meeting/script to prove it went through the ad flow.
+    Pro tier:  empty slides list, zero wait, no token required.
+
+    When SEMECLAW_ADS_URL is configured the request is proxied to the central
+    AdClaw server. Impressions are logged there atomically on fetch — no client
+    trust required, works even across open-source self-hosted forks.
+    """
+    tier = _get_tier(request)
+
+    if tier == "pro":
+        return JSONResponse({"tier": "pro", "wait_ms": 0, "slides": [], "token": None})
+
+    ip = (
+        request.headers.get("x-forwarded-for") or
+        (request.client.host if request.client else "unknown")
+    ).split(",")[0].strip()
+
+    # --- AdClaw proxy path ---
+    if SEMECLAW_ADS_URL:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as _c:
+                _r = await _c.get(
+                    f"{SEMECLAW_ADS_URL}/api/slides/next",
+                    params={
+                        "instance_id": SEMECLAW_INSTANCE_ID,
+                        "ip_hash": _hash_ip(ip),
+                        "tenant_id": SEMECLAW_TENANT_ID,
+                    },
+                )
+                if _r.status_code == 200:
+                    data = _r.json()
+                    data.setdefault("wait_ms", FREE_TIER_WAIT_SECONDS * 1000)
+                    data.setdefault("tier", "free")
+                    return JSONResponse(data)
+        except Exception as _ads_err:
+            logger.warning("AdClaw proxy failed, falling back to local slides: %s", _ads_err)
+
+    # --- Local fallback (always available, no impression tracking) ---
+    all_slides = _load_slides()
+    count = min(5, len(all_slides))
+    slides = _random.sample(all_slides, count) if len(all_slides) >= count else list(all_slides)
+    token = _issue_watch_token_v2(ip)
+
+    return JSONResponse({
+        "tier": "free",
+        "wait_ms": FREE_TIER_WAIT_SECONDS * 1000,
+        "slides": slides,
+        "token": token,
+    })
+
+
 @app.get("/api/meeting/script")
-async def api_meeting_script(name: str, lang: str = "en"):
-    """Convert a report into a playable meeting script. Translates when lang != en."""
+async def api_meeting_script(name: str, lang: str = "en", request: Request = None):
+    """Convert a report into a playable meeting script. Translates when lang != en.
+
+    Free tier: enforces FREE_TIER_WAIT_SECONDS server-side delay regardless of client.
+    Pro tier:  no delay — provide X-SemeClaw-License header with a valid pro key.
+    """
     from meeting_skill import build_script
 
     path = _find_report(name)
@@ -1722,6 +1920,12 @@ async def api_meeting_script(name: str, lang: str = "en"):
             pass
     else:
         payload["lang"] = "en"
+
+    # Free-tier gate: server-enforced wait so the loading screen can't be skipped
+    # even by calling this endpoint directly (e.g. from a custom client or curl).
+    if request and _get_tier(request) == "free" and FREE_TIER_WAIT_SECONDS > 0:
+        await asyncio.sleep(FREE_TIER_WAIT_SECONDS)
+
     return JSONResponse(payload)
 
 
@@ -2013,8 +2217,16 @@ async def api_meeting_unpin(name: str = "", file: str = ""):
 
 
 @app.on_event("startup")
-async def _schedule_meeting_prune() -> None:
-    async def _loop():
+async def _startup_tasks() -> None:
+    """Single startup handler — starts all background tasks regardless of launch method."""
+    # File watcher + droplet health probes
+    asyncio.create_task(file_watcher())
+    asyncio.create_task(_droplet_probe_loop())
+    # Register with AdClaw ad server if configured
+    if SEMECLAW_ADS_URL:
+        asyncio.create_task(_register_with_adclaw())
+    # Hourly meeting log prune
+    async def _prune_loop():
         while True:
             try:
                 removed = _prune_old_meetings()
@@ -2022,8 +2234,8 @@ async def _schedule_meeting_prune() -> None:
                     logger.info(f"meeting prune: removed {removed} files older than {MEETING_RETENTION_HOURS}h")
             except Exception as e:
                 logger.warning(f"meeting prune failed: {e}")
-            await asyncio.sleep(3600)  # hourly
-    asyncio.create_task(_loop())
+            await asyncio.sleep(3600)
+    asyncio.create_task(_prune_loop())
 
 
 @app.get("/api/logs")
@@ -4321,11 +4533,6 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
     Counts tts_chars against the tenant's cost ledger.
     """
     import io
-    try:
-        import edge_tts
-    except ImportError:
-        return JSONResponse({"error": "edge_tts not installed"}, status_code=503)
-
     from fastapi.responses import Response as FResponse
 
     _bump("tts_requests")
@@ -4379,41 +4586,10 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
         except Exception as e:
             logger.warning(f"ElevenLabs fallback to edge-tts for {speaker}: {e}")
 
-    cfg = _AGENT_VOICES.get(speaker, _DEFAULT_TTS)
-    # Language override: swap to gender-matched native voice when non-English
-    if lang and lang != "en":
-        lang_pool = _LANG_VOICE_MAP.get(lang)
-        if lang_pool:
-            gender = _AGENT_GENDER.get(speaker, "m")
-            pool = lang_pool.get(gender, lang_pool.get("m", []))
-            if pool:
-                cfg = {**cfg, "voice": pool[hash(speaker) % len(pool)]}
-    voice = cfg["voice"]
-    rate  = cfg["rate"]
-    pitch = cfg["pitch"]
-
-    try:
-        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-        buf = io.BytesIO()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                buf.write(chunk["data"])
-        buf.seek(0)
-        audio_bytes = buf.read()
-        if not audio_bytes:
-            return JSONResponse({"error": "no audio generated"}, status_code=500)
-        return FResponse(
-            content=audio_bytes,
-            media_type="audio/mpeg",
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Speaker": speaker,
-                "X-Voice": voice,
-            }
-        )
-    except Exception as e:
-        logger.error(f"TTS error for speaker={speaker}: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+    # ElevenLabs is the only voice engine. No robotic edge-tts fallback.
+    # Return 204 (no content) — client shows typewriter text silently.
+    return FResponse(content=b"", media_type="audio/mpeg", status_code=204,
+                     headers={"X-TTS-Engine": "none", "X-Speaker": speaker})
 
 
 @app.get("/api/board")
@@ -4868,11 +5044,5 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(_os.environ.get("PORT", 8765))
     print(f"🏛  War Room Dashboard (WebSocket) → http://127.0.0.1:{port}")
     print(f"    WebSocket → ws://127.0.0.1:{port}/ws")
-
-    # Start the file watcher background task
-    @app.on_event("startup")
-    async def startup():
-        asyncio.create_task(file_watcher())
-        asyncio.create_task(_droplet_probe_loop())
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "war-room-dashboard",
-      "runtimeExecutable": "/opt/homebrew/bin/uv",
-      "runtimeArgs": ["--directory", "/Users/davidai/SemeClaw", "run", "python", "war_room/dashboard/server.py"],
+      "runtimeExecutable": "python3.13",
+      "runtimeArgs": ["/Users/davidai/SemeClaw/war_room/dashboard/server.py"],
       "port": 8765
     }
   ]

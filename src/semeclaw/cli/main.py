@@ -22,9 +22,11 @@ app = typer.Typer(
 
 console = Console()
 
+# Commands that do NOT require a pre-loaded config
+_NO_CONFIG_COMMANDS = {"init"}
+
 
 def workspace_callback(ctx: typer.Context, workspace: str) -> Path:
-    """Store workspace path in context for later use."""
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = Path(workspace)
     return Path(workspace)
@@ -42,18 +44,52 @@ def main(
     ),
 ) -> None:
     """Configuration is loaded from workspace/config.user.yaml by default."""
+    # Let init run without a config
+    if ctx.invoked_subcommand in _NO_CONFIG_COMMANDS:
+        return
+
     workspace_path = ctx.obj["workspace"]
     config_file = workspace_path / "config.user.yaml"
 
     if not config_file.exists():
-        console.print(f"[yellow]No configuration found at {config_file}[/yellow]")
+        console.print(
+            f"\n[yellow]No config found at [bold]{config_file}[/bold][/yellow]\n"
+            "Run [bold cyan]semeclaw init[/bold cyan] to set up SemeClaw.\n"
+        )
         raise typer.Exit(1)
 
     try:
         cfg = Config.load(workspace_path)
         ctx.obj["config"] = cfg
     except Exception as e:
-        console.print(f"[red]Error loading config: {e}[/red]")
+        console.print(f"[red]Error loading config:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command("init")
+def init(
+    ctx: typer.Context,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Overwrite existing config without prompting"),
+    ] = False,
+) -> None:
+    """Set up SemeClaw: auto-detect providers and create config.user.yaml.
+
+    Scans your environment for API keys, probes local services (Ollama),
+    walks you through choosing a provider and model, validates the connection,
+    and writes a ready-to-use config.
+
+    Examples:
+        semeclaw init
+        semeclaw init --workspace ./my-workspace
+        semeclaw init --force
+    """
+    from semeclaw.cli.onboard import run_onboard
+
+    workspace_path = ctx.obj["workspace"]
+    success = run_onboard(workspace_path, force=force)
+    if not success:
         raise typer.Exit(1)
 
 
@@ -62,14 +98,10 @@ def chat(
     ctx: typer.Context,
     agent: Annotated[
         str | None,
-        typer.Option(
-            "--agent",
-            "-a",
-            help="Agent ID to use (overrides default_agent from config)",
-        ),
+        typer.Option("--agent", "-a", help="Agent ID (overrides default_agent from config)"),
     ] = None,
 ) -> None:
-    """Start interactive chat session with SemeClaw."""
+    """Start an interactive chat session with SemeClaw."""
     chat_command(ctx, agent_id=agent)
 
 
@@ -78,32 +110,18 @@ def server(
     ctx: typer.Context,
     host: Annotated[
         str,
-        typer.Option(
-            "--host",
-            "-h",
-            help="Host to bind to",
-        ),
+        typer.Option("--host", "-h", help="Host to bind to"),
     ] = "0.0.0.0",
     port: Annotated[
         int,
-        typer.Option(
-            "--port",
-            "-p",
-            help="Port to bind to",
-        ),
+        typer.Option("--port", "-p", help="Port to bind to"),
     ] = 8000,
     log_level: Annotated[
         str,
-        typer.Option(
-            "--log-level",
-            "-l",
-            help="Logging level",
-        ),
+        typer.Option("--log-level", "-l", help="Logging level"),
     ] = "INFO",
 ) -> None:
     """Start the SemeClaw event-driven server.
-
-    Starts the server with all workers and the FastAPI application.
 
     Example:
         semeclaw server --host 0.0.0.0 --port 8080
@@ -124,7 +142,6 @@ def server(
         from semeclaw.channel.base import Channel
         from semeclaw.server.server import Server
 
-        # Initialize components
         agent_loader = AgentLoader(config)
         logger.info("Agent loader initialized")
 
@@ -138,7 +155,6 @@ def server(
 
         pending_dir = workspace_dir / ".pending"
 
-        # Create and run server
         srv = Server(
             config=config,
             agent_loader=agent_loader,
@@ -151,7 +167,7 @@ def server(
         asyncio.run(srv.run(host=host, port=port))
 
     except Exception as e:
-        console.print(f"[red]Error starting server: {e}[/red]")
+        console.print(f"[red]Error starting server:[/red] {e}")
         raise typer.Exit(1)
 
 

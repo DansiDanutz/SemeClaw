@@ -1218,6 +1218,188 @@ header::before{
 
 @media(min-width:1400px){.layout{grid-template-columns:300px 1fr}}
 </style>
+<style id="war-room-ultra-v4">
+/* WAR ROOM ULTRA v4 — Claude Code Design */
+:root{--bg:#01020a;--bg-1:#050d1e;--bg-2:#080f1f;--surface:#0a1428;--r:14px;}
+header::before{height:2px!important;background:linear-gradient(90deg,transparent,rgba(245,158,11,.95) 12%,rgba(34,211,238,.9) 40%,rgba(139,92,246,.85) 65%,transparent)!important;background-size:200% 100%!important;animation:rainbow-scan 4s linear infinite!important;}
+@keyframes rainbow-scan{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.metric{background:linear-gradient(145deg,rgba(10,20,40,.97),rgba(8,15,32,.95))!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:13px!important;transition:all .32s cubic-bezier(0.16,1,0.3,1)!important;}
+.metric-val{font-size:2rem!important;background:linear-gradient(135deg,#fbbf24,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.agent{background:linear-gradient(145deg,rgba(10,20,40,.9),rgba(8,15,32,.85))!important;border:1px solid rgba(255,255,255,.065)!important;border-radius:13px!important;transition:all .28s cubic-bezier(0.16,1,0.3,1)!important;}
+.card{background:linear-gradient(168deg,rgba(5,13,30,.98),rgba(4,10,24,.96))!important;border:1px solid rgba(255,255,255,.065)!important;border-radius:16px!important;}
+.run-btn{background:linear-gradient(135deg,#f59e0b,#e58a00,#d97706)!important;border-radius:11px!important;}
+</style>
+<style id="war-room-meeting-ultra-v1">
+/* WAR ROOM Meeting Ultra v1 — V1 Prompt Zone + V1 Active Stage */
+
+/* ── V1 Idle / Prompt Zone ── */
+.tm-prompt-icon{font-size:64px!important;filter:drop-shadow(0 0 18px rgba(245,158,11,.55));animation:mic-float 3s ease-in-out infinite!important;}
+@keyframes mic-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}}
+
+.tm-prompt-title{background:linear-gradient(135deg,#fff 0%,#fbbf24 50%,#22d3ee 100%)!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important;font-size:1.6rem!important;letter-spacing:.3px!important;}
+
+.tm-prompt-box{background:rgba(5,13,30,.85)!important;border:1px solid rgba(245,158,11,.12)!important;border-radius:12px!important;backdrop-filter:blur(20px)!important;transition:border-color .3s,box-shadow .3s!important;}
+.tm-prompt-box:focus-within{border-color:rgba(245,158,11,.45)!important;box-shadow:0 0 30px rgba(245,158,11,.08),0 0 60px rgba(245,158,11,.04)!important;}
+
+.tm-prompt-textarea{background:rgba(10,20,40,.6)!important;border:1px solid rgba(255,255,255,.06)!important;color:#e2e8f0!important;border-radius:10px!important;}
+.tm-prompt-textarea:focus{border-color:rgba(245,158,11,.35)!important;box-shadow:0 0 0 3px rgba(245,158,11,.08)!important;}
+
+.tm-launch-btn{background:linear-gradient(135deg,#f59e0b,#e58a00,#d97706)!important;border:none!important;border-radius:11px!important;color:#000!important;font-weight:700!important;letter-spacing:.5px!important;transition:transform .2s,box-shadow .2s!important;position:relative!important;overflow:hidden!important;}
+.tm-launch-btn:hover{transform:translateY(-2px)!important;box-shadow:0 6px 24px rgba(245,158,11,.3)!important;}
+.tm-launch-btn::after{content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);transition:left .5s!important;}
+.tm-launch-btn:hover::after{left:120%!important;}
+
+.tm-history-link{background:rgba(34,211,238,.06)!important;border:1px solid rgba(34,211,238,.15)!important;border-radius:20px!important;padding:6px 16px!important;color:rgba(34,211,238,.7)!important;transition:all .25s!important;cursor:pointer!important;}
+.tm-history-link:hover{background:rgba(34,211,238,.12)!important;color:#22d3ee!important;border-color:rgba(34,211,238,.35)!important;}
+
+.tm-prompt-sub{opacity:.55!important;}
+
+/* ── V1 Active Stage ── */
+.tm-overlay{animation:tm-fade-in .4s ease-out!important;}
+@keyframes tm-fade-in{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+.tm-hdr{background:linear-gradient(180deg,rgba(5,13,30,.97),rgba(5,13,30,.88))!important;border-bottom:1px solid rgba(245,158,11,.1)!important;backdrop-filter:blur(40px) saturate(2)!important;}
+.tm-hdr::after{height:2px!important;background:linear-gradient(90deg,transparent,rgba(245,158,11,.95) 12%,rgba(34,211,238,.9) 40%,rgba(139,92,246,.85) 65%,transparent)!important;background-size:200% 100%!important;animation:rainbow-scan 4s linear infinite!important;}
+
+.tm-roster{background:linear-gradient(180deg,rgba(10,20,40,.92),rgba(8,15,32,.88))!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;backdrop-filter:blur(20px)!important;}
+.tm-roster::before{background:linear-gradient(180deg,rgba(245,158,11,.06),transparent)!important;}
+
+/* Agent cards in roster */
+.tm-rag{background:rgba(10,20,40,.7)!important;border:1px solid rgba(255,255,255,.04)!important;border-radius:10px!important;transition:all .28s cubic-bezier(.16,1,.3,1)!important;border-left:3px solid transparent!important;}
+.tm-rag.speaking{border-left-color:#f59e0b!important;transform:translateX(6px)!important;box-shadow:0 0 20px rgba(245,158,11,.1)!important;}
+.tm-rag.joined{animation:agent-slide-in .6s cubic-bezier(.16,1,.3,1) both!important;}
+@keyframes agent-slide-in{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+
+/* Waveform */
+.tm-waveform .tm-wv-b{background:linear-gradient(180deg,#fbbf24,#f59e0b)!important;border-radius:2px!important;box-shadow:0 0 8px rgba(245,158,11,.25)!important;animation:wave-dance 1.2s ease-in-out infinite!important;}
+.tm-waveform .tm-wv-b:nth-child(1){animation-delay:0s!important}
+.tm-waveform .tm-wv-b:nth-child(2){animation-delay:.08s!important}
+.tm-waveform .tm-wv-b:nth-child(3){animation-delay:.16s!important}
+.tm-waveform .tm-wv-b:nth-child(4){animation-delay:.24s!important}
+.tm-waveform .tm-wv-b:nth-child(5){animation-delay:.32s!important}
+.tm-waveform .tm-wv-b:nth-child(6){animation-delay:.4s!important}
+.tm-waveform .tm-wv-b:nth-child(7){animation-delay:.48s!important}
+.tm-waveform .tm-wv-b:nth-child(8){animation-delay:.56s!important}
+.tm-waveform .tm-wv-b:nth-child(9){animation-delay:.64s!important}
+@keyframes wave-dance{0%,100%{height:4px;opacity:.5}50%{height:22px;opacity:1}}
+
+.tm-wave-name{color:#f59e0b!important;text-shadow:0 0 12px rgba(245,158,11,.25)!important;font-weight:600!important;}
+
+/* V2 switch button */
+.tm-to-v2-btn{background:rgba(139,92,246,.08)!important;border:1px solid rgba(139,92,246,.2)!important;color:rgba(139,92,246,.75)!important;border-radius:8px!important;transition:all .25s!important;}
+.tm-to-v2-btn:hover{background:rgba(139,92,246,.15)!important;color:#8b5cf6!important;border-color:rgba(139,92,246,.4)!important;box-shadow:0 0 16px rgba(139,92,246,.12)!important;}
+
+/* Dialogue feed */
+.tm-dialogue .tm-msg{animation:dialogue-in .35s ease-out both!important;border-left:3px solid rgba(255,255,255,.06)!important;background:rgba(10,20,40,.5)!important;border-radius:0 10px 10px 0!important;transition:border-color .3s!important;}
+.tm-dialogue .tm-msg:nth-child(odd){border-left-color:rgba(245,158,11,.25)!important}
+.tm-dialogue .tm-msg:nth-child(even){border-left-color:rgba(34,211,238,.25)!important}
+.tm-dialogue .tm-msg:nth-child(3n){border-left-color:rgba(139,92,246,.25)!important}
+.tm-dialogue .tm-msg:nth-child(4n){border-left-color:rgba(34,197,94,.25)!important}
+@keyframes dialogue-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* Comment bar */
+.tm-comment-bar{background:rgba(10,20,40,.8)!important;backdrop-filter:blur(16px)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:12px!important;}
+.tm-comment-input{background:rgba(5,13,30,.6)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:8px!important;color:#e2e8f0!important;}
+.tm-comment-input:focus{border-color:rgba(245,158,11,.4)!important;box-shadow:0 0 0 3px rgba(245,158,11,.08)!important;outline:none!important;}
+.tm-comment-btn{background:rgba(245,158,11,.1)!important;border:1px solid rgba(245,158,11,.2)!important;color:#f59e0b!important;border-radius:8px!important;transition:all .2s!important;}
+.tm-comment-btn:hover{background:rgba(245,158,11,.2)!important;border-color:rgba(245,158,11,.4)!important;}
+
+/* Finish button */
+.tm-finish-btn{background:rgba(34,197,94,.08)!important;border:1px solid rgba(34,197,94,.2)!important;color:#22c55e!important;border-radius:8px!important;backdrop-filter:blur(10px)!important;transition:all .2s!important;}
+.tm-finish-btn:hover{background:rgba(34,197,94,.15)!important;border-color:rgba(34,197,94,.4)!important;box-shadow:0 0 16px rgba(34,197,94,.1)!important;}
+
+/* Question zone */
+.tm-question{background:rgba(139,92,246,.06)!important;border:1px solid rgba(139,92,246,.15)!important;border-radius:12px!important;backdrop-filter:blur(16px)!important;}
+</style>
+<style id="war-room-meeting-ultra-v2">
+/* WAR ROOM Meeting Ultra v1 — V2 Cinematic Theater Layout */
+
+/* ── V2 Live Speaker Feature Widget ── */
+.tm-stage.v2-layout .tm-feature{background:linear-gradient(145deg,rgba(10,20,40,.95),rgba(5,13,30,.9))!important;border:1px solid rgba(245,158,11,.12)!important;border-radius:16px!important;padding:20px!important;position:relative!important;overflow:hidden!important;}
+.tm-stage.v2-layout .tm-feature::before{background:none!important;border:none!important;animation:feature-glow 3s ease-in-out infinite!important;}
+.tm-stage.v2-layout .tm-feature.active{border-color:rgba(245,158,11,.3)!important;box-shadow:0 0 40px rgba(245,158,11,.08)!important;}
+@keyframes feature-glow{0%,100%{box-shadow:inset 0 0 30px rgba(245,158,11,.02)}50%{box-shadow:inset 0 0 30px rgba(245,158,11,.06)}}
+
+.tm-feature-glyph{font-size:44px!important;color:#f59e0b!important;filter:drop-shadow(0 0 12px rgba(245,158,11,.4))!important;animation:glyph-pulse 2.5s ease-in-out infinite!important;}
+@keyframes glyph-pulse{0%,100%{transform:scale(1);opacity:.8}50%{transform:scale(1.08);opacity:1}}
+
+/* Orbital ring around glyph */
+.tm-stage.v2-layout .tm-feature.active::after{content:''!important;position:absolute!important;top:50%!important;left:50%!important;width:80px!important;height:80px!important;margin:-40px 0 0 -40px!important;border:2px solid rgba(245,158,11,.15)!important;border-radius:50%!important;animation:orbital-ring 4s linear infinite!important;pointer-events:none!important;}
+@keyframes orbital-ring{0%{transform:scale(.9);opacity:.3;border-color:rgba(245,158,11,.15)}50%{transform:scale(1.3);opacity:.08;border-color:rgba(245,158,11,.05)}100%{transform:scale(.9);opacity:.3;border-color:rgba(245,158,11,.15)}}
+
+.tm-feature-label{font-family:ui-monospace,monospace!important;font-size:10px!important;letter-spacing:2px!important;text-transform:uppercase!important;color:rgba(245,158,11,.6)!important;}
+.tm-feature-name{color:#fbbf24!important;text-shadow:0 0 10px rgba(245,158,11,.2)!important;font-weight:600!important;}
+
+/* ── V2 Roster Agents ── */
+.tm-stage.v2-layout .tm-rag{transition:all .25s cubic-bezier(.16,1,.3,1)!important;border:1px solid rgba(255,255,255,.04)!important;border-radius:8px!important;}
+.tm-stage.v2-layout .tm-rag.speaking{border-color:rgba(245,158,11,.35)!important;box-shadow:0 0 20px rgba(245,158,11,.1)!important;transform:translateX(4px)!important;}
+.tm-stage.v2-layout .tm-rav{box-shadow:0 0 8px rgba(0,0,0,.3)!important;}
+
+/* ── V2 Back to V1 button ── */
+.tm-stage.v2-layout .tm-v1-btn{background:transparent!important;border:1px solid rgba(245,158,11,.15)!important;color:rgba(245,158,11,.5)!important;border-radius:8px!important;transition:all .2s!important;}
+.tm-stage.v2-layout .tm-v1-btn:hover{background:rgba(245,158,11,.06)!important;color:#f59e0b!important;border-color:rgba(245,158,11,.3)!important;}
+
+/* ── V2 History Panel ── */
+.tm-hist-panel{background:rgba(5,13,30,.92)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;backdrop-filter:blur(20px)!important;}
+.tm-hist-list .empty{border:2px dashed rgba(255,255,255,.08)!important;border-radius:10px!important;padding:30px!important;color:rgba(255,255,255,.2)!important;}
+
+/* ── Meeting Room Loading Screen — Laptop Device Mockup ── */
+.tm-generating{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 38%,#0c1020 0%,#010308 68%);animation:fade-in .3s ease;}
+.tm-generating.hiding{animation:gen-fade-out .22s ease forwards;}
+@keyframes gen-fade-out{to{opacity:0;transform:scale(.98)}}
+/* Laptop outer shell */
+.tm-device{position:relative;z-index:1;width:min(480px,84vw);filter:drop-shadow(0 20px 50px rgba(0,0,0,.85)) drop-shadow(0 0 70px rgba(245,158,11,.05));}
+.tm-device-lid{background:linear-gradient(155deg,#1e2134 0%,#0c0e1b 100%);border-radius:13px 13px 4px 4px;border:1.5px solid rgba(255,255,255,.1);padding:8px 8px 5px;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.055);}
+.tm-device-lid::before{content:'';position:absolute;top:7px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.09);box-shadow:0 0 4px rgba(255,255,255,.06);}
+/* The screen */
+.tm-device-screen{background:#050810;border-radius:5px;overflow:hidden;aspect-ratio:16/10;position:relative;border:1px solid rgba(255,255,255,.06);}
+.tm-device-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(245,158,11,.08) 0%,transparent 55%);pointer-events:none;z-index:0;}
+.tm-device-screen::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0px,transparent 2px,rgba(0,0,0,.045) 2px,rgba(0,0,0,.045) 3px);pointer-events:none;z-index:4;}
+/* Browser chrome bar at top of screen */
+.tm-device-urlbar{position:absolute;top:0;left:0;right:0;z-index:2;height:17px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;padding:0 7px;gap:4px;}
+.tm-device-dot{width:4px;height:4px;border-radius:50%;}
+.tm-device-urlfield{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.07);margin:0 6px;display:flex;align-items:center;padding:0 5px;overflow:hidden;}
+.tm-device-urltext{font-size:6px;font-family:var(--mono);color:rgba(255,255,255,.3);letter-spacing:.3px;white-space:nowrap;}
+/* Laptop hinge + base */
+.tm-device-base{height:8px;background:linear-gradient(180deg,#171928 0%,#0d0f1a 100%);border:1.5px solid rgba(255,255,255,.08);border-top:none;border-radius:0 0 3px 3px;position:relative;}
+.tm-device-hinge{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 10%,rgba(255,255,255,.05) 50%,transparent 90%);}
+.tm-device-keyboard{background:linear-gradient(180deg,#12141f 0%,#0b0d18 100%);border:1.5px solid rgba(255,255,255,.06);border-top:none;border-radius:0 0 10px 10px;height:19px;display:flex;align-items:center;justify-content:center;}
+.tm-device-trackpad{width:48px;height:9px;border-radius:3px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);}
+.tm-device-shadow{height:6px;background:radial-gradient(ellipse at center,rgba(0,0,0,.5) 0%,transparent 70%);margin:0 24px;border-radius:50%;}
+/* Slide content inside the screen */
+.tm-gen-slide-area{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:20px 16px 10px;text-align:center;transition:opacity .4s ease;}
+.tm-slide-badge{display:inline-block;font-size:7.5px;font-family:var(--mono);letter-spacing:2px;text-transform:uppercase;padding:2px 8px;border:1px solid;border-radius:20px;font-weight:700;margin-bottom:1px;}
+.tm-slide-headline{font-size:clamp(11px,1.7vw,15px);font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.1px;}
+.tm-slide-body{font-size:clamp(9px,1.05vw,11px);color:rgba(255,255,255,.4);line-height:1.55;max-width:320px;}
+.tm-slide-cta{font-size:8.5px;font-family:var(--mono);font-weight:700;letter-spacing:.4px;text-decoration:none;padding:3px 10px;border:1px solid;border-radius:20px;transition:opacity .2s;margin-top:3px;display:inline-block;}
+.tm-slide-cta:hover{opacity:.7}
+.tm-slide-dots{display:flex;gap:4px;margin-top:3px;}
+.tm-slide-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.15);transition:background .3s,transform .3s;}
+.tm-slide-dot.active{transform:scale(1.35);}
+/* Status row: orbs + bar + label */
+.tm-gen-status{display:flex;align-items:center;gap:10px;position:relative;z-index:1;}
+.tm-gen-orbs{display:flex;gap:7px;align-items:center;}
+.tm-gen-orb{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;position:relative;animation:orb-breathe 1.9s ease-in-out infinite;}
+.tm-gen-orb::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid currentColor;opacity:.13;animation:orb-ring 2s ease-in-out infinite;}
+.tm-gen-orb:nth-child(1){animation-delay:0s}.tm-gen-orb:nth-child(2){animation-delay:.22s}.tm-gen-orb:nth-child(3){animation-delay:.44s}.tm-gen-orb:nth-child(4){animation-delay:.66s}.tm-gen-orb:nth-child(5){animation-delay:.88s}
+@keyframes orb-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1);filter:brightness(1.3)}}
+@keyframes orb-ring{0%,100%{transform:scale(1);opacity:.1}50%{transform:scale(1.8);opacity:0}}
+.tm-gen-bar{width:100px;height:1.5px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+.tm-gen-bar-fill{height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--amber),rgba(245,158,11,.4),transparent);animation:gen-scan 1.9s ease-in-out infinite;}
+@keyframes gen-scan{0%{transform:translateX(-200%)}100%{transform:translateX(400%)}}
+.tm-gen-dots{display:flex;gap:4px;}
+.tm-gen-dot{width:3px;height:3px;border-radius:50%;background:rgba(245,158,11,.5);animation:gen-dot-pulse 1.2s ease-in-out infinite;}
+.tm-gen-dot:nth-child(2){animation-delay:.2s}.tm-gen-dot:nth-child(3){animation-delay:.4s}
+@keyframes gen-dot-pulse{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(1.8);opacity:1}}
+.tm-gen-label{font-size:8.5px;font-family:var(--mono);letter-spacing:2px;color:rgba(255,255,255,.22);text-transform:uppercase;}
+/* Upgrade bar pinned to bottom */
+.tm-gen-upgrade{position:absolute;bottom:10px;left:0;right:0;z-index:2;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;padding:4px 16px;}
+.tm-gen-upgrade-text{font-size:9.5px;color:rgba(255,255,255,.2);font-family:var(--mono);}
+.tm-gen-upgrade-btn{background:none;border:1px solid rgba(34,211,238,.28);color:#22d3ee;font-size:9.5px;font-family:var(--mono);padding:2px 8px;border-radius:12px;cursor:pointer;transition:all .2s;}
+.tm-gen-upgrade-btn:hover{background:rgba(34,211,238,.08);}
+.tm-gen-upgrade-link{color:rgba(245,158,11,.55);font-size:9.5px;font-family:var(--mono);text-decoration:none;}
+.tm-gen-upgrade-link:hover{color:var(--amber);}
+</style>
 </head>
 <body>
 
@@ -1676,7 +1858,8 @@ function playJoin()  { [440,550,660].forEach((f,i)=>setTimeout(()=>playTone(f,.1
 /* ══════ TTS — ElevenLabs neural via /api/tts (same engine as Task Meeting Room) ══════ */
 let _meetingAudioEl = null;  // currently playing Audio element
 function speak(speaker, text) {
-  if (!autoplay) return;
+  // Task Meeting Room uses its own tmSpeak queue — never overlap with regular meeting audio
+  if (!autoplay || (typeof tmOpen !== 'undefined' && tmOpen)) return;
   ttsQueue.push({speaker, text: text.substring(0, 500)});
   if (!ttsPlaying) drainTTS();
 }
@@ -1688,6 +1871,7 @@ async function drainTTS() {
   try {
     const url='/api/tts?'+new URLSearchParams({text, speaker, lang:'en'});
     const resp=await fetch(url);
+    if (resp.status === 204) { setSpeakingState(null); drainTTS(); return; }
     if (!resp.ok) throw new Error('tts '+resp.status);
     const blob=await resp.blob();
     const blobUrl=URL.createObjectURL(blob);
@@ -2796,21 +2980,30 @@ async function startScriptedMeeting(reportName) {
   _scriptedMeetingCancel = false;
   _scriptedMeetingQA = [];
 
-  // 1. Fetch the meeting script from the skill (in the active language)
+  // 1. Open overlay immediately + show loading animation (no empty black wait)
+  try { closeModalDirect(); } catch(e) {}
+  openTM();
+  _tmShowZone('stage');
+  _tmShowLoading();
+
+  // 2. Fetch the meeting script from the skill (license + watch token forwarded)
   let script;
   try {
-    // English only — multilingual was disabled after voice sync issues
     tmLang = 'en';
-    const resp = await fetch('/api/meeting/script?name=' + encodeURIComponent(reportName) + '&lang=en');
+    const _sfHeaders = {};
+    const _sfKey = _scGetLicense(); if (_sfKey) _sfHeaders['X-SemeClaw-License'] = _sfKey;
+    if (_tmSlideWatchToken) _sfHeaders['X-SemeClaw-Watch-Token'] = _tmSlideWatchToken;
+    const resp = await fetch('/api/meeting/script?name=' + encodeURIComponent(reportName) + '&lang=en', {headers: _sfHeaders});
     if (!resp.ok) throw new Error('script fetch ' + resp.status);
     script = await resp.json();
   } catch(e) {
+    _tmHideLoading();
     toast('Could not load meeting script: ' + e.message);
     return;
   }
+  _tmHideLoading();
 
-  // 2. Close any open modal, open the TM overlay, switch to stage
-  try { closeModalDirect(); } catch(e) {}
+  // 3. Close any open modal, open the TM overlay, switch to stage (already done above)
   openTM();
   _tmShowZone('stage');
 
@@ -3303,6 +3496,10 @@ async function startScriptedMeetingFromSegments(segments, reportName, task) {
   if (title) title.textContent = `Meeting — ${_currentMeetingTask.substring(0, 60)}`;
   if (badge) { badge.textContent = 'LIVE'; badge.className = 'tm-hdr-badge live'; }
 
+  // Show loading screen while we populate roster
+  const speakers = [...new Set(segments.map(s => s.speaker))];
+  _tmShowLoading(speakers);
+
   const roster = document.getElementById('tm-roster');
   const dial   = document.getElementById('tm-dialogue');
   if (roster) {
@@ -3320,13 +3517,13 @@ async function startScriptedMeetingFromSegments(segments, reportName, task) {
     if (btn) btn.classList.add('active');
   }
 
-  // Join unique speakers
-  const speakers = [...new Set(segments.map(s => s.speaker))];
+  // Join unique speakers behind the loading screen, then reveal
   for (const name of speakers) {
     tmAgentJoin(name);
     await new Promise(r => setTimeout(r, 220));
   }
   await new Promise(r => setTimeout(r, 300));
+  _tmHideLoading();
 
   _scriptedMeetingQueue = [...segments];
   _scriptedMeetingContext = { meeting_id: 'replay', subject: _currentMeetingTask, attendees: speakers };
@@ -3541,21 +3738,24 @@ if (_origTmAgentJoin) {
 }
 
 function _waitForCurrentAudio() {
-  // Poll the tmCurrentAudio element (managed by _tmSpeakSynced) and resolve when it ends
+  // Wait until the audio queue is fully drained (tmAudioPlaying=false AND queue empty).
+  // Never times out — this prevents the race where ElevenLabs fetch takes >3s and
+  // the meeting loop starts the next segment while the previous one is still fetching,
+  // causing multiple voices to play simultaneously.
   return new Promise(resolve => {
-    const started = Date.now();
     const check = () => {
+      const playing  = typeof tmAudioPlaying !== 'undefined' ? tmAudioPlaying  : false;
+      const queueLen = typeof tmAudioQueue   !== 'undefined' ? tmAudioQueue.length : 0;
+      if (!playing && !queueLen) return resolve();
       const a = typeof tmCurrentAudio !== 'undefined' ? tmCurrentAudio : null;
-      if (!a) {
-        // No audio started yet — wait up to 3s for it to start, else resolve
-        if (Date.now() - started > 3000) return resolve();
-        return setTimeout(check, 80);
+      if (a && !a.ended && !a.paused) {
+        a.addEventListener('ended', () => setTimeout(check, 30), {once:true});
+        a.addEventListener('error', () => setTimeout(check, 30), {once:true});
+        return;
       }
-      if (a.ended || a.paused) return resolve();
-      a.addEventListener('ended', () => resolve(), {once:true});
-      a.addEventListener('error', () => resolve(), {once:true});
+      setTimeout(check, 80);
     };
-    check();
+    setTimeout(check, 20);
   });
 }
 
@@ -3832,77 +4032,77 @@ function toast(msg){
 }
 
 /* ══════ TASK MEETING ROOM v2 ══════ */
-/* ── Neural TTS via edge-tts backend (/api/tts) ──────────────────────────
-   Queue model: one audio plays at a time. Streaming messages call tmSpeak()
-   after the full text is assembled. Non-streaming agent messages use
-   _tmSpeakSynced() which prefetches audio and starts typewriter + playback
-   in lock-step (typewriter speed = audio duration / char count).
+/* ── Neural TTS — single serialised queue ────────────────────────────────
+   ALL audio (streaming + synced typewriter) goes through tmAudioQueue.
+   _tmDrainAudio processes one item at a time so agents never overlap.
+   Voice-off path: typewriter runs immediately (no queue), no audio.
    ──────────────────────────────────────────────────────────────────────── */
 
-function tmSpeak(speaker, text) {
-  if (!tmVoiceOn || !text || !text.trim()) return;
-  tmAudioQueue.push({speaker, text: text.substring(0, 700)});
+/* Enqueue a speak request. textEl = DOM node to typewrite into (optional). */
+function tmSpeak(speaker, text, textEl) {
+  if (!text || !text.trim()) return;
+  if (!tmVoiceOn) {
+    // Voice off: typewrite immediately, skip queue entirely
+    if (textEl) _tmTypewriter(textEl, text, 22);
+    return;
+  }
+  tmAudioQueue.push({speaker, text: text.substring(0, 700), textEl: textEl || null});
   if (!tmAudioPlaying) _tmDrainAudio();
 }
 
+/* Process queue one item at a time — guarantees only one voice at once. */
 async function _tmDrainAudio() {
-  if (!tmAudioQueue.length) { tmAudioPlaying = false; return; }
+  if (!tmAudioQueue.length) { tmAudioPlaying = false; _tmSetSpeaking(null); return; }
   tmAudioPlaying = true;
-  const {speaker, text} = tmAudioQueue.shift();
+  const {speaker, text, textEl} = tmAudioQueue.shift();
+
+  // Stop any leftover audio from a previous item
+  if (tmCurrentAudio) {
+    try { tmCurrentAudio.pause(); tmCurrentAudio.src = ''; } catch(_) {}
+    tmCurrentAudio = null;
+  }
+  _tmSetSpeaking(speaker);
+
   try {
-    const url = '/api/tts?' + new URLSearchParams({text, speaker, lang:tmLang});
+    const url = '/api/tts?' + new URLSearchParams({text, speaker, lang: tmLang});
     const resp = await fetch(url);
+    if (resp.status === 204) {
+      // ElevenLabs unavailable — silent typewriter, no audio
+      if (textEl) _tmTypewriter(textEl, text, 22);
+      _tmSetSpeaking(null);
+      _tmDrainAudio();
+      return;
+    }
     if (!resp.ok) throw new Error('TTS ' + resp.status);
     const blob = await resp.blob();
     const blobUrl = URL.createObjectURL(blob);
     const audio = new Audio(blobUrl);
     tmCurrentAudio = audio;
     await new Promise(res => {
-      audio.onended = audio.onerror = () => {
-        URL.revokeObjectURL(blobUrl); tmCurrentAudio = null; res();
+      audio.onloadedmetadata = () => {
+        if (textEl) {
+          const ms = Math.max(14, Math.min(55, ((audio.duration || 3) * 1000) / text.length));
+          _tmTypewriter(textEl, text, ms);
+        }
+        audio.play().catch(res);
       };
-      audio.play().catch(res);
+      audio.onended = audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl); tmCurrentAudio = null;
+        _tmSetSpeaking(null); res();
+      };
+      audio.load();
     });
   } catch(e) {
     console.warn('[TM TTS]', e.message);
+    if (textEl) _tmTypewriter(textEl, text, 22);
+    _tmSetSpeaking(null);
   }
   _tmDrainAudio();
 }
 
-/* Prefetch TTS, start typewriter + audio simultaneously — text and voice sync */
-async function _tmSpeakSynced(speaker, text, textEl) {
-  if (!textEl) { tmSpeak(speaker, text); return; }
-  // Typewriter shows text character by character
-  // TTS audio starts at the same time — speed calibrated to audio duration
-  const cleanText = text.substring(0, 700);
-  if (!tmVoiceOn) {
-    _tmTypewriter(textEl, text, 22);
-    return;
-  }
-  try {
-    const url = '/api/tts?' + new URLSearchParams({text: cleanText, speaker, lang:tmLang});
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('TTS ' + resp.status);
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const audio = new Audio(blobUrl);
-    tmCurrentAudio = audio;
-    audio.onloadedmetadata = () => {
-      // Calibrate typewriter speed to audio duration
-      const duration = audio.duration || 3;
-      const msPerChar = Math.max(14, Math.min(55, (duration * 1000) / text.length));
-      // Start both simultaneously
-      audio.play().catch(() => {});
-      _tmTypewriter(textEl, text, msPerChar);
-    };
-    audio.onended = audio.onerror = () => {
-      URL.revokeObjectURL(blobUrl); tmCurrentAudio = null;
-    };
-    audio.load();
-  } catch(e) {
-    console.warn('[TM TTS sync]', e.message);
-    _tmTypewriter(textEl, text, 22);
-  }
+/* Backward-compat alias — now just routes through the unified queue. */
+function _tmSpeakSynced(speaker, text, textEl) {
+  tmSpeak(speaker, text, textEl);
 }
 
 function _tmTypewriter(textEl, text, msPerChar) {
@@ -3986,7 +4186,9 @@ function clearMeetingReady() {
 function openTM() {
   document.getElementById('tm-overlay').classList.add('open');
   tmOpen=true;
-  if(tmMode==='prompt') { /* already correct */ }
+  if (tmMode !== 'prompt' && !tmMeetingId && !_scriptedMeetingReport && !_scriptedMeetingQueue.length && !_scriptedMeetingContext) {
+    showTMPrompt();
+  }
   if(!tmMeetings.length) _tmLoadHistory();
 }
 function closeTM() {
@@ -4030,6 +4232,8 @@ function closeTM() {
   // Hide human bar and finalize panel
   try { _showHumanBar(false); } catch(e) {}
   try { closeTMFinalizePanel(); } catch(e) {}
+  try { _tmHideLoading(); } catch(e) {}
+  try { showTMPrompt(); } catch(e) {}
   // Stop voice recognition if active
   try { if (_tmVoiceRecog) { _tmVoiceRecog.stop(); _tmVoiceRecog = null; } } catch(e) {}
 }
@@ -4106,15 +4310,18 @@ async function launchTaskMeeting() {
   if(!task){if(ta)ta.focus();return;}
   const btn=document.getElementById('tm-launch-btn');
   btn.disabled=true; btn.textContent='⏳ Convening…';
+  // Show stage + loading immediately — no black-screen wait
+  _tmEnterStage(task);
+  _tmShowLoading();
   try {
-    const r=await fetch('/api/meeting/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task,lang:tmLang})});
+    const r=await fetch('/api/meeting/task',{method:'POST',headers:_scHeaders(),body:JSON.stringify({task,lang:tmLang})});
     const d=await r.json();
     if(d.meeting_id){
       tmMeetingId=d.meeting_id;
-      _tmEnterStage(task);
+      _tmHideLoading();
       addLog('🎙 Meeting launched: '+task.substring(0,55));
-    } else { _toast('⚠️ '+(d.error||'Could not start meeting'),false); }
-  } catch(e){ _toast('❌ '+e.message,false); }
+    } else { _tmHideLoading(); _toast('⚠️ '+(d.error||'Could not start meeting'),false); }
+  } catch(e){ _tmHideLoading(); _toast('❌ '+e.message,false); }
   finally { btn.disabled=false; btn.textContent='⚡ Convene Meeting'; }
 }
 
@@ -4135,6 +4342,151 @@ function _tmEnterStage(task) {
   const mt=document.getElementById('tm-mini-title'); if(mt) mt.textContent='🔴 Meeting in progress';
   const ms=document.getElementById('tm-mini-sub');   if(ms) ms.textContent=(task.length>55?task.substring(0,55)+'…':task);
 }
+
+/* ── Meeting Room Loading Screen ─────────────────────────────────────────── */
+/* ── License key (stored in localStorage, sent as X-SemeClaw-License header) ── */
+const _SC_LICENSE_KEY = 'semeclaw_license_key';
+function _scGetLicense() { try { return localStorage.getItem(_SC_LICENSE_KEY) || ''; } catch { return ''; } }
+function _scSetLicense(k) { try { localStorage.setItem(_SC_LICENSE_KEY, k.trim()); } catch {} }
+function _scHeaders(base) {
+  const h = Object.assign({'Content-Type':'application/json'}, base||{});
+  const k = _scGetLicense();
+  if (k) h['X-SemeClaw-License'] = k;
+  return h;
+}
+
+/* ── Loading-screen state ─────────────────────────────────────────────────── */
+let _tmGenSlideTimer = null;
+let _tmSlideWatchToken = null;
+
+const _ACCENT_COLORS = {
+  feature: '#f59e0b', upgrade: '#22d3ee', tip: '#22d3ee',
+  insight: '#8b5cf6', project: '#10b981',
+};
+
+function _tmBuildLoadingShell(agents) {
+  const FALLBACK = ['🧠','🔍','⚙️','💡','🤖'];
+  const orbs = (agents && agents.length ? agents.slice(0,5) : FALLBACK).map((name, i) => {
+    const color = (typeof SPEAKER_COLORS!=='undefined' && SPEAKER_COLORS[name]) || '#8892a4';
+    const av    = (typeof AVATAR!=='undefined' && AVATAR[name]) || FALLBACK[i] || '🤖';
+    return `<div class="tm-gen-orb" style="background:${color}14;color:${color};box-shadow:0 0 10px ${color}18">${av}</div>`;
+  }).join('');
+
+  const el = document.createElement('div');
+  el.className = 'tm-generating'; el.id = 'tm-generating';
+  el.innerHTML =
+    /* Laptop device frame */
+    `<div class="tm-device">`+
+      `<div class="tm-device-lid">`+
+        `<div class="tm-device-screen">`+
+          /* Browser chrome bar */
+          `<div class="tm-device-urlbar">`+
+            `<div class="tm-device-dot" style="background:#ff5f57"></div>`+
+            `<div class="tm-device-dot" style="background:#febc2e"></div>`+
+            `<div class="tm-device-dot" style="background:#28c840"></div>`+
+            `<div class="tm-device-urlfield"><span class="tm-device-urltext">nervix.ai — The AI Agent Marketplace</span></div>`+
+          `</div>`+
+          /* Ad slide fills screen */
+          `<div class="tm-gen-slide-area" id="tm-gen-slide-area">`+
+            `<div class="tm-slide-badge" style="color:#f59e0b;border-color:#f59e0b30;background:#f59e0b0e">NERVIX</div>`+
+            `<div class="tm-slide-headline">Assembling your agents…</div>`+
+            `<div style="display:flex;gap:5px;margin-top:8px">`+
+              `<div class="tm-gen-dot"></div><div class="tm-gen-dot"></div><div class="tm-gen-dot"></div>`+
+            `</div>`+
+          `</div>`+
+        `</div>`+
+      `</div>`+
+      `<div class="tm-device-base"><div class="tm-device-hinge"></div></div>`+
+      `<div class="tm-device-keyboard"><div class="tm-device-trackpad"></div></div>`+
+    `</div>`+
+    `<div class="tm-device-shadow"></div>`+
+    /* Agent orbs + scan bar */
+    `<div class="tm-gen-status">`+
+      `<div class="tm-gen-orbs">${orbs}</div>`+
+      `<div class="tm-gen-bar"><div class="tm-gen-bar-fill"></div></div>`+
+      `<div class="tm-gen-dots"><div class="tm-gen-dot"></div><div class="tm-gen-dot"></div><div class="tm-gen-dot"></div></div>`+
+      `<span class="tm-gen-label">Generating</span>`+
+    `</div>`+
+    /* Upgrade bar at bottom */
+    `<div class="tm-gen-upgrade" id="tm-gen-upgrade" style="display:none">`+
+      `<span class="tm-gen-upgrade-text">⚡ Remove this screen — </span>`+
+      `<button class="tm-gen-upgrade-btn" onclick="_scShowLicensePrompt()">Enter Pro key</button>`+
+      `<span class="tm-gen-upgrade-text"> or </span>`+
+      `<a class="tm-gen-upgrade-link" href="https://nervix.ai/semeclaw" target="_blank">upgrade at nervix.ai</a>`+
+    `</div>`;
+  return el;
+}
+
+function _tmRenderSlide(slide, idx, total) {
+  const area = document.getElementById('tm-gen-slide-area');
+  if (!area) return;
+  const accent = _ACCENT_COLORS[slide.type] || '#f59e0b';
+  const dotsHtml = Array.from({length: total}, (_,i) =>
+    `<div class="tm-slide-dot${i===idx?' active':''}" style="${i===idx?`background:${accent}`:''}"></div>`
+  ).join('');
+  const ctaHtml = slide.cta_url
+    ? `<a class="tm-slide-cta" href="${slide.cta_url}" target="_blank" style="color:${accent};border-color:${accent}40">${slide.cta_label||'Learn more →'}</a>`
+    : '';
+  area.style.opacity = '0';
+  setTimeout(() => {
+    area.innerHTML =
+      `<div class="tm-slide-badge" style="color:${accent};border-color:${accent}30;background:${accent}10">${slide.badge||''}</div>`+
+      `<div class="tm-slide-headline">${slide.headline||''}</div>`+
+      `<div class="tm-slide-body">${slide.body||''}</div>`+
+      `${ctaHtml}`+
+      `<div class="tm-slide-dots">${dotsHtml}</div>`;
+    area.style.transition = 'opacity .4s ease';
+    area.style.opacity = '1';
+  }, 180);
+}
+
+function _tmShowLoading(agents) {
+  const stage = document.getElementById('tm-stage');
+  if (!stage) return;
+  stage.querySelector('.tm-generating')?.remove();
+  clearInterval(_tmGenSlideTimer);
+  _tmSlideWatchToken = null;
+
+  const el = _tmBuildLoadingShell(agents);
+  stage.prepend(el);
+
+  // Fetch slides async — show placeholder first, slides when ready
+  const headers = {}; const k = _scGetLicense(); if (k) headers['X-SemeClaw-License'] = k;
+  fetch('/api/meeting/loading-slides', {headers}).then(r=>r.ok?r.json():null).then(data => {
+    if (!data || !document.getElementById('tm-generating')) return;
+    _tmSlideWatchToken = data.token || null;
+
+    const upgradeBar = document.getElementById('tm-gen-upgrade');
+    if (upgradeBar && data.tier === 'free') upgradeBar.style.display = 'flex';
+
+    if (!data.slides || !data.slides.length) return;
+    const slides = data.slides;
+    let idx = 0;
+    _tmRenderSlide(slides[0], 0, slides.length);
+    _tmGenSlideTimer = setInterval(() => {
+      if (!document.getElementById('tm-generating')) { clearInterval(_tmGenSlideTimer); return; }
+      idx = (idx + 1) % slides.length;
+      _tmRenderSlide(slides[idx], idx, slides.length);
+    }, 4200);
+  }).catch(() => {});
+}
+
+function _tmHideLoading() {
+  clearInterval(_tmGenSlideTimer);
+  const el = document.getElementById('tm-generating');
+  if (!el) return;
+  el.classList.add('hiding');
+  setTimeout(() => el.remove(), 230);
+}
+
+function _scShowLicensePrompt() {
+  const current = _scGetLicense();
+  const key = prompt('Enter your SemeClaw Pro license key:', current);
+  if (key === null) return;
+  _scSetLicense(key);
+  if (key.trim()) { _tmHideLoading(); toast('Pro key saved — restarting…'); setTimeout(() => window.location.reload(), 800); }
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 function tmAgentJoin(name) {
   const roster=document.getElementById('tm-roster'); if(!roster) return;

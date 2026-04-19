@@ -30,6 +30,9 @@ Thumbs.db
 # Logs
 war_room/logs/*.log
 
+# SemeClaw runtime instance ID — auto-generated, never commit
+war_room/.instance_id
+
 # SemeClaw v0.3.0 runtime state — NEVER commit (contains secrets + PII)
 war_room/webhooks.json
 war_room/shares.json

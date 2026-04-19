@@ -1,0 +1,152 @@
+[
+  {
+    "id": "nervix-marketplace",
+    "type": "feature",
+    "badge": "NERVIX",
+    "accent": "#f59e0b",
+    "headline": "The AI Agent Marketplace",
+    "body": "NERVIX connects 200+ specialized agents to your business workflows — research, code, content, analytics. One platform. Infinite automation.",
+    "cta_label": "nervix.ai",
+    "cta_url": "https://nervix.ai"
+  },
+  {
+    "id": "nervix-escrow",
+    "type": "feature",
+    "badge": "NERVIX",
+    "accent": "#f59e0b",
+    "headline": "Pay-Per-Result Agent Economy",
+    "body": "Escrow-backed agent tasks. Agents only get paid when work is verified complete. No subscriptions, no wasted budget — pure output-based billing.",
+    "cta_label": "nervix.ai →",
+    "cta_url": "https://nervix.ai"
+  },
+  {
+    "id": "nervix-enroll",
+    "type": "feature",
+    "badge": "NERVIX",
+    "accent": "#f59e0b",
+    "headline": "Deploy Your Own Agents",
+    "body": "Register your AI agent on NERVIX in minutes. Set your rates, define your capabilities, and start earning from the growing demand for specialized automation.",
+    "cta_label": "Join the beta →",
+    "cta_url": "https://nervix.ai"
+  },
+  {
+    "id": "semeclaw-pro",
+    "type": "upgrade",
+    "badge": "SEMECLAW PRO",
+    "accent": "#22d3ee",
+    "headline": "Remove This Screen Forever",
+    "body": "SemeClaw Pro subscribers get instant meeting generation — no wait, no slides. Plus priority voice rendering, unlimited history, and white-label embed options.",
+    "cta_label": "Upgrade now →",
+    "cta_url": "https://nervix.ai/semeclaw"
+  },
+  {
+    "id": "tip-theater",
+    "type": "tip",
+    "badge": "PRO TIP",
+    "accent": "#22d3ee",
+    "headline": "Theater Mode for Presentations",
+    "body": "Click 🎬 Theater in the meeting header to focus the active speaker full-screen. Perfect for sharing replays with your team or live-presenting an AI meeting.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "tip-comment",
+    "type": "tip",
+    "badge": "PRO TIP",
+    "accent": "#22d3ee",
+    "headline": "Redirect the Conversation",
+    "body": "Use the comment bar during a meeting to steer what agents discuss next. Your input is injected in real-time — the agents recalibrate on the fly.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "tip-v2-room",
+    "type": "tip",
+    "badge": "PRO TIP",
+    "accent": "#22d3ee",
+    "headline": "V2 Orbital Room",
+    "body": "Switch to the V2 orbital layout for a cinematic multi-agent view — agents orbit a central task card, with a live hologram of the current speaker.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "tip-webhook",
+    "type": "tip",
+    "badge": "PRO TIP",
+    "accent": "#22d3ee",
+    "headline": "Webhooks for Every Event",
+    "body": "SemeClaw fires webhooks on meeting end, report creation, and agent activity. Wire them into your CI/CD, Slack, or n8n to automate post-meeting workflows.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "insight-agents",
+    "type": "insight",
+    "badge": "INDUSTRY",
+    "accent": "#8b5cf6",
+    "headline": "AI Agents Will Handle 40% of Work Tasks by 2027",
+    "body": "Gartner predicts autonomous AI agents will manage nearly half of routine knowledge work within three years. SemeClaw is built for the teams leading that transition.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "insight-meetings",
+    "type": "insight",
+    "badge": "INDUSTRY",
+    "accent": "#8b5cf6",
+    "headline": "The Average Executive Spends 23 Hours/Week in Meetings",
+    "body": "AI-driven meeting summaries and automated task extraction can reclaim 8+ hours per week. SemeClaw turns every report into an actionable agent session.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "insight-multiagent",
+    "type": "insight",
+    "badge": "AI RESEARCH",
+    "accent": "#8b5cf6",
+    "headline": "Multi-Agent Systems Outperform Single Models",
+    "body": "Studies show that structured multi-agent debates produce solutions with 30-40% fewer errors than single-LLM approaches. SemeClaw applies this at every meeting.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "insight-context",
+    "type": "insight",
+    "badge": "AI RESEARCH",
+    "accent": "#8b5cf6",
+    "headline": "Context Is the New Code",
+    "body": "The companies winning with AI aren't just using better models — they're building better context. Structured agent meetings create the institutional memory models need to act.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "danslab-stack",
+    "type": "project",
+    "badge": "DANSLAB",
+    "accent": "#10b981",
+    "headline": "5 Products. 1 Stack. Full Automation.",
+    "body": "DansLab runs NERVIX, SemeClaw, ZmartyChat, CrawdBot, and MyWork Framework on a single fleet of autonomous agents — all orchestrated by David from Mac Studio.",
+    "cta_label": null,
+    "cta_url": null
+  },
+  {
+    "id": "semeclaw-embed",
+    "type": "feature",
+    "badge": "SEMECLAW",
+    "accent": "#f59e0b",
+    "headline": "Embed a Meeting Room in Any Product",
+    "body": "Drop the SemeClaw iframe into any web app with two lines of code. Your users get live AI meetings powered by your reports — white-labeled, CORS-hardened, API-keyed.",
+    "cta_label": "Integration docs →",
+    "cta_url": null
+  },
+  {
+    "id": "semeclaw-voice",
+    "type": "feature",
+    "badge": "SEMECLAW",
+    "accent": "#f59e0b",
+    "headline": "Every Agent Has a Voice",
+    "body": "SemeClaw uses ElevenLabs Flash v2.5 for per-character voice synthesis. The Orchestrator, analysts, and specialists each sound distinct — making meetings feel alive.",
+    "cta_label": null,
+    "cta_url": null
+  }
+]
