@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Config with secrets
+default_workspace/config.user.yaml
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs & generated state
+war_room/logs/
+war_room/audio_cache/
+*.log
+
+# Node (if any frontend build tools appear later)
+node_modules/

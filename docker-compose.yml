@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  semeclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/dansidanutz/semeclaw:latest
+    container_name: semeclaw
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./default_workspace:/app/default_workspace:ro
+      - semeclaw_state:/app/war_room
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/tts/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  semeclaw_state:

@@ -1,6 +1,6 @@
 """
 War Room — Orchestrator
-Dan's Lab Paperclip Agent Fleet coordinator.
+Dan's Lab Agent Fleet coordinator.
 
 Pipeline:
   User task → [Memory context] → Research → Architect|Strategist → [Coder] → Writer → Paperclip issue
@@ -13,24 +13,27 @@ Usage:
   python war_room/war_room.py memory
 """
 
+from __future__ import annotations
+
 import asyncio
-import json
 import logging
 import os
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import httpx
 import litellm
+import typer
+from rich.console import Console
+from rich.table import Table
 
 # ---------------------------------------------------------------------------
 # Bootstrap path so this runs from repo root
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).parent.parent
-WAR_ROOM_DIR_BOOT = Path(__file__).parent
+WAR_ROOM_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so local modules are importable directly
 
@@ -44,16 +47,17 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("war_room")
+console = Console()
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-WAR_ROOM_DIR      = Path(__file__).parent
-AGENTS_DIR        = WAR_ROOM_DIR / "agents"
-RESEARCH_DIR      = WAR_ROOM_DIR / "research"
-LOGS_DIR          = WAR_ROOM_DIR / "logs"
-STATE_FILE        = WAR_ROOM_DIR / "shared_state.json"
-TASK_QUEUE_FILE   = WAR_ROOM_DIR / "task_queue.json"
+AGENTS_DIR      = WAR_ROOM_DIR / "agents"
+RESEARCH_DIR    = WAR_ROOM_DIR / "research"
+LOGS_DIR        = WAR_ROOM_DIR / "logs"
+STATE_FILE      = WAR_ROOM_DIR / "shared_state.json"
+TASK_QUEUE_FILE = WAR_ROOM_DIR / "task_queue.json"
+TELEGRAM_CHAT_FILE = ROOT / ".telegram_chat_id"
 
 RESEARCH_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
@@ -334,19 +338,24 @@ def _load_telegram_creds() -> tuple[str | None, str | None]:
 # Agent definitions (load from markdown files)
 # ---------------------------------------------------------------------------
 
-def load_agent_def(agent_id: str) -> dict:
-    """Load agent markdown file and return {id, name, system_prompt}."""
+@dataclass(frozen=True)
+class AgentDef:
+    id: str
+    system_prompt: str
+
+
+def load_agent_def(agent_id: str) -> AgentDef:
+    """Load agent markdown file and return an AgentDef (front-matter stripped)."""
     path = AGENTS_DIR / f"{agent_id}.md"
     if not path.exists():
         raise FileNotFoundError(f"Agent def not found: {path}")
     text = path.read_text(encoding="utf-8")
-    # Strip YAML front-matter
     if text.startswith("---"):
         parts = text.split("---", 2)
         body = parts[2].strip() if len(parts) >= 3 else text
     else:
         body = text
-    return {"id": agent_id, "system_prompt": body}
+    return AgentDef(id=agent_id, system_prompt=body)
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +389,10 @@ async def call_agent(
     system = agent["system_prompt"]
     user_msg = task
     if context:
-        user_msg = f"## Context from previous agents\n\n{context}\n\n---\n\n## Your Task\n\n{task}"
+        user_msg = (
+            f"## Context from previous agents\n\n{context}\n\n"
+            f"---\n\n## Your Task\n\n{task}"
+        )
 
     logger.info("🤖 [%s] → %s (base: %s)", agent_id, use_model, (api_base or "")[:40])
 
@@ -498,6 +510,28 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
 # Pipeline
 # ---------------------------------------------------------------------------
 
+@dataclass
+class PipelineResult:
+    run_id: str
+    task: str
+    agents_run: list[str]
+    output_file: Path
+    paperclip_issue: dict | None
+    multica_issue: dict | None
+    results: dict[str, str] = field(default_factory=dict)
+
+    def to_public(self) -> dict:
+        return {
+            "run_id":          self.run_id,
+            "task":            self.task,
+            "agents_run":      self.agents_run,
+            "output_file":     str(self.output_file),
+            "paperclip_issue": self.paperclip_issue,
+            "multica_issue":   self.multica_issue,
+            "results":         {k: v[:200] + "…" for k, v in self.results.items()},
+        }
+
+
 class WarRoomPipeline:
     """
     Orchestrates the full pipeline:
@@ -508,7 +542,7 @@ class WarRoomPipeline:
     """
 
     def __init__(self, model: str | None = None):
-        self.model = model or _load_model()
+        self.model = resolve_model(ROOT, model)
         self.results: dict[str, str] = {}
         self.memory = WarRoomMemory(WAR_ROOM_DIR / "memory")
 
@@ -585,14 +619,107 @@ class WarRoomPipeline:
             title, description, ac = self._parse_writer_output(writer_output, task)
             assignee = AGENT_ASSIGNEES.get(agents[-1], "Hermes")
 
-            paperclip_issue = await bridge.create_issue(
-                title=title,
-                description=description,
+        if notify_telegram:
+            await _telegram_notify(task, out_file, paperclip_issue, multica_issue)
+
+        record_completed_task(
+            STATE_FILE,
+            run_id=run_id,
+            task=task,
+            agents=agents,
+            issue_id=paperclip_issue.get("id") if paperclip_issue else None,
+            multica_issue_id=multica_issue.get("id") if multica_issue else None,
+            succeeded=succeeded,
+        )
+        _log_run(run_id, task, agents, started, paperclip_issue, multica_issue, succeeded)
+
+        return PipelineResult(
+            run_id=run_id,
+            task=task,
+            agents_run=agents,
+            output_file=out_file,
+            paperclip_issue=paperclip_issue,
+            multica_issue=multica_issue,
+            results=self.results,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Helpers (module-level so tests can reach them directly)
+# ---------------------------------------------------------------------------
+
+def _slugify(value: str, max_len: int = 40) -> str:
+    cleaned = "".join(c if c.isalnum() else "-" for c in value.lower())
+    # Collapse consecutive dashes
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return cleaned.strip("-")[:max_len].strip("-") or "task"
+
+
+def _write_report_file(
+    task: str,
+    agents: list[str],
+    started_iso: str,
+    results: dict[str, str],
+) -> Path:
+    """Write a markdown report with YAML front-matter + agent outputs."""
+    date_str = started_iso[:10]
+    slug = _slugify(task)
+    out_file = RESEARCH_DIR / f"{slug}-{date_str}.md"
+
+    front_matter = [
+        "---",
+        f"task: {task!r}",
+        f"date: {date_str}",
+        f"started: {started_iso}",
+        f"agents: [{', '.join(agents)}]",
+        "---",
+        "",
+    ]
+    body: list[str] = [
+        "# War Room Report",
+        "",
+        f"**Task:** {task}",
+        f"**Date:** {date_str}",
+        f"**Agents:** {' → '.join(a.capitalize() for a in agents)}",
+    ]
+    for agent_id in agents:
+        output = results.get(agent_id, "").strip()
+        if not output:
+            continue
+        body += ["", "---", "", f"## {agent_id.capitalize()} Agent Output", "", output]
+
+    out_file.write_text("\n".join(front_matter + body) + "\n", encoding="utf-8")
+    return out_file
+
+
+async def _create_external_issues(
+    *,
+    task: str,
+    agents: list[str],
+    writer_output: str,
+    project: str,
+    push_paperclip: bool = True,
+    push_multica: bool = False,
+) -> tuple[dict | None, dict | None]:
+    """Create issues on external platforms. Returns (paperclip_issue, multica_issue)."""
+    parsed = parse_writer_output(writer_output, task)
+    assignee = AGENT_ASSIGNEES.get(agents[-1], "Hermes")
+
+    paperclip_issue = None
+    multica_issue = None
+
+    if push_paperclip:
+        pc = PaperclipAdapter()
+        try:
+            paperclip_issue = await pc.create_issue(
+                title=parsed.title,
+                description=parsed.description,
                 project=project,
                 assignee=assignee,
                 labels=["war-room", "auto-generated"],
                 priority="medium",
-                acceptance_criteria=ac,
+                acceptance_criteria=list(parsed.acceptance_criteria),
             )
             logger.info("📌 Paperclip issue: %s", paperclip_issue.get("id"))
 
@@ -690,9 +817,12 @@ class WarRoomPipeline:
                 else:
                     logger.warning("Telegram notify HTTP %d: %s", r.status_code, r.text[:200])
         except Exception as e:
-            logger.warning("Telegram notify failed: %s", e)
+            logger.warning("Paperclip issue creation failed: %s", e)
+        finally:
+            await pc.close()
 
-    def _update_state(self, run_id: str, task: str, agents: list[str], issue: dict | None):
+    if push_multica:
+        mc = MulticaAdapter()
         try:
             state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
             state.setdefault("completed_tasks", [])
@@ -711,7 +841,9 @@ class WarRoomPipeline:
             state["last_updated"] = datetime.now(timezone.utc).isoformat()
             STATE_FILE.write_text(json.dumps(state, indent=2))
         except Exception as e:
-            logger.warning("State update failed: %s", e)
+            logger.warning("Multica issue creation failed: %s", e)
+        finally:
+            await mc.close()
 
     def _log_run(self, run_id: str, task: str, agents: list[str], started: str, issue: dict | None):
         log_file = LOGS_DIR / f"run-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
@@ -727,9 +859,17 @@ class WarRoomPipeline:
             f.write(json.dumps(record) + "\n")
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
+async def _telegram_notify(
+    task: str,
+    report_file: Path,
+    paperclip_issue: dict | None,
+    multica_issue: dict | None,
+) -> None:
+    if not TELEGRAM_CHAT_FILE.exists():
+        return
+    token = resolve_telegram_token(ROOT)
+    if not token:
+        return
 
 async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERVIX", with_coder: bool = False):
     if agents_str:
@@ -754,10 +894,32 @@ async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERV
     print("=" * 60)
 
 
-async def cmd_status():
-    state = {}
-    if STATE_FILE.exists():
-        state = json.loads(STATE_FILE.read_text())
+def _log_run(
+    run_id: str,
+    task: str,
+    agents: list[str],
+    started: str,
+    paperclip_issue: dict | None,
+    multica_issue: dict | None,
+    succeeded: bool,
+) -> None:
+    log_file = LOGS_DIR / f"run-{started[:10]}.jsonl"
+    record = {
+        "run_id":           run_id,
+        "task":             task,
+        "agents":           agents,
+        "started":          started,
+        "completed":        utc_now_iso(),
+        "paperclip_issue_id": paperclip_issue.get("id") if paperclip_issue else None,
+        "multica_issue_id":   multica_issue.get("id") if multica_issue else None,
+        "succeeded":        succeeded,
+    }
+    import json as _json
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(record) + "\n")
+
+
+def _format_status(state: dict) -> None:
     metrics = state.get("metrics", {})
     completed = state.get("completed_tasks", [])
 
@@ -771,9 +933,20 @@ async def cmd_status():
     print(f"   Memory entries:  {mem_count}")
     print(f"   Last updated:    {state.get('last_updated', 'never')}")
     if completed:
-        print("\n   Recent tasks:")
+        console.print("\n[bold]Recent tasks:[/bold]")
+        recent = Table(show_header=True, box=None, pad_edge=False)
+        recent.add_column("Paperclip", style="cyan", no_wrap=True)
+        recent.add_column("Multica", style="magenta", no_wrap=True)
+        recent.add_column("Task", overflow="fold")
+        recent.add_column("Completed", style="dim", no_wrap=True)
         for t in completed[-5:]:
-            print(f"     [{t.get('issue_id','?')}] {t['task'][:60]} ({t['completed_at'][:10]})")
+            recent.add_row(
+                t.get("issue_id") or "—",
+                t.get("multica_issue_id") or "—",
+                (t.get("task") or "")[:60],
+                (t.get("completed_at") or "")[:16],
+            )
+        console.print(recent)
 
 
 async def cmd_board():
@@ -788,9 +961,13 @@ async def cmd_board():
         print(f"     {name:8s} — {info['role']:14s} [{info['status']}]  open: {info.get('open_issues', 0)}")
     issues = board.get("issues", [])
     if issues:
-        print(f"\n   Issues ({len(issues)}):")
+        tbl = Table(title=f"\nIssues ({len(issues)})", show_header=True, box=None, pad_edge=False)
+        tbl.add_column("ID", style="cyan", no_wrap=True)
+        tbl.add_column("Title", overflow="fold")
+        tbl.add_column("Assignee")
         for i in issues:
-            print(f"     [{i['id']}] {i['title'][:55]} → {i['assignee']}")
+            tbl.add_row(i.get("id", "?"), (i.get("title") or "")[:55], i.get("assignee", "?"))
+        console.print(tbl)
 
 
 async def cmd_memory(limit: int = 10):
@@ -815,7 +992,11 @@ def main():
         )
         sys.exit(1)
 
-    cmd = args[0]
+app = typer.Typer(
+    add_completion=False,
+    help="War Room — Dan's Lab Agent Fleet coordinator.",
+    no_args_is_help=True,
+)
 
     if cmd == "run":
         task = args[1] if len(args) > 1 else "Research AI agent marketplace landscape"
@@ -831,11 +1012,46 @@ def main():
                 with_coder = True
         asyncio.run(cmd_run(task, agents_str, project, with_coder))
 
-    elif cmd == "status":
-        asyncio.run(cmd_status())
+@app.command("run", help="Run a full pipeline for a task.")
+def cli_run(
+    task: str = typer.Argument(..., help="Task description for the pipeline."),
+    agents: str = typer.Option(
+        ",".join(DEFAULT_AGENTS),
+        "--agents",
+        help="Comma-separated agent chain (e.g. research,strategist,writer).",
+    ),
+    project: str = typer.Option("NERVIX", "--project", help="Paperclip project name."),
+    model: str | None = typer.Option(None, "--model", help="Override LLM model string."),
+    no_telegram: bool = typer.Option(False, "--no-telegram", help="Skip Telegram notification."),
+    no_paperclip: bool = typer.Option(False, "--no-paperclip", help="Skip Paperclip issue creation."),
+    multica: bool = typer.Option(False, "--multica", help="Also push to Multica."),
+) -> None:
+    agent_list = [a.strip() for a in agents.split(",") if a.strip()]
+    pipeline = WarRoomPipeline(model=model)
+    result = asyncio.run(pipeline.run(
+        task=task,
+        agents=agent_list,
+        project=project,
+        notify_telegram=not no_telegram,
+        push_paperclip=not no_paperclip,
+        push_multica=multica,
+    ))
 
-    elif cmd == "board":
-        asyncio.run(cmd_board())
+    console.print()
+    console.rule("[bold green]✅ War Room pipeline complete[/bold green]")
+    console.print(f"Run ID:  [cyan]{result.run_id}[/cyan]")
+    console.print(f"Report:  {result.output_file}")
+    if result.paperclip_issue:
+        issue = result.paperclip_issue
+        console.print(
+            f"Paperclip: [cyan]{issue['id']}[/cyan] → {issue['assignee']} ({issue['project']})"
+        )
+    if result.multica_issue:
+        issue = result.multica_issue
+        console.print(
+            f"Multica:   [cyan]{issue['id']}[/cyan] → {issue.get('assignee', '?')}"
+        )
+    console.rule()
 
     elif cmd == "memory":
         limit = 10

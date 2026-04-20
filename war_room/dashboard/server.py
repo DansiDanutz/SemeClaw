@@ -47,6 +47,15 @@ except ImportError:
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
+# Config from environment
+# ---------------------------------------------------------------------------
+SEMECLAW_API_KEY = os.environ.get("SEMECLAW_API_KEY", "").strip()
+SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*")
+SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*")
+SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default")
+SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765")
+
+# ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 WAR_ROOM_DIR = Path(__file__).parent.parent
@@ -55,6 +64,10 @@ LOGS_DIR     = WAR_ROOM_DIR / "logs"
 RESEARCH_DIR = WAR_ROOM_DIR / "research"
 AGENTS_DIR   = WAR_ROOM_DIR / "agents"
 CONFIG_FILE  = WAR_ROOM_DIR / "config.json"
+
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+TELEGRAM_CHATS_FILE = WAR_ROOM_DIR / ".telegram_chats.json"
 
 ROOT = WAR_ROOM_DIR.parent
 
