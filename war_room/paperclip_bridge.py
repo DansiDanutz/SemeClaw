@@ -8,10 +8,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from war_room.adapters.paperclip import (
-    AGENT_ASSIGNEES,
-    PaperclipAdapter,
-)
+try:
+    from war_room.adapters.paperclip import (
+        AGENT_ASSIGNEES,
+        PaperclipAdapter,
+    )
+except ImportError:
+    from adapters.paperclip import (
+        AGENT_ASSIGNEES,
+        PaperclipAdapter,
+    )
 
 PROJECTS = {
     "NERVIX":     "nervix",

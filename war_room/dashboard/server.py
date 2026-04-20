@@ -36,6 +36,12 @@ from typing import Set, Optional
 
 import httpx
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -213,6 +219,11 @@ async def _lifespan(_: FastAPI):
 
 
 app = FastAPI(title="SemeClaw War Room Agent", version=APP_VERSION, lifespan=_lifespan)
+
+# Serve static files (agents.html, images, etc.)
+static_dir = Path(__file__).parent
+if (static_dir / "agents.html").exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
@@ -528,6 +539,15 @@ async def file_watcher():
 # ---------------------------------------------------------------------------
 # REST API endpoints
 # ---------------------------------------------------------------------------
+
+@app.get("/agents", response_class=HTMLResponse)
+async def agents_page():
+    """Serve the agents/orbital meeting room page."""
+    agents_html = static_dir / "agents.html"
+    if agents_html.exists():
+        return HTMLResponse(content=agents_html.read_text(encoding="utf-8"))
+    return JSONResponse({"error": "agents.html not found"}, status_code=404)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():

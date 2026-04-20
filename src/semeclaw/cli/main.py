@@ -109,6 +109,87 @@ def chat(
     chat_command(ctx, agent_id=agent)
 
 
+@app.command("demo")
+def demo(
+    ctx: typer.Context,
+    task: Annotated[
+        str,
+        typer.Option("--task", "-t", help="Demo task to run"),
+    ] = "Research open-source AI agent frameworks and write a positioning brief",
+    mock: Annotated[
+        bool,
+        typer.Option("--mock", "-m", help="Use mock mode (no API calls)"),
+    ] = False,
+) -> None:
+    """Run a demo War Room pipeline with sample agents.
+
+    Uses mock mode by default so it works without API keys.
+    Set --mock=False to run with real LLM calls.
+
+    Examples:
+        semeclaw demo
+        semeclaw demo --task "Build a telemetry pipeline" --mock
+    """
+    import asyncio
+    from semeclaw.cli.demo_runner import run_demo
+
+    console.print()
+    console.print("[bold cyan]🎭 SemeClaw Demo[/bold cyan]")
+    console.print(f"[dim]Task:[/dim] {task}")
+    console.print()
+
+    try:
+        result = asyncio.run(run_demo(task, mock=mock))
+        if result:
+            console.print(f"\n[green]✓ Demo complete[/green]")
+            if result.get("output_file"):
+                console.print(f"[dim]Report:[/dim] {result['output_file']}")
+    except Exception as e:
+        console.print(f"[red]Demo failed:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command("war-room")
+def war_room(
+    ctx: typer.Context,
+    host: Annotated[
+        str,
+        typer.Option("--host", "-h", help="Host to bind to"),
+    ] = "0.0.0.0",
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="Port to bind to"),
+    ] = 8765,
+) -> None:
+    """Start the War Room dashboard server.
+
+    Serves the dashboard, API, and WebSocket endpoints.
+
+    Example:
+        semeclaw war-room
+        semeclaw war-room --port 8080
+    """
+    import subprocess
+    import sys
+
+    dashboard_script = Path(__file__).parent.parent.parent.parent / "war_room" / "dashboard" / "server.py"
+    if not dashboard_script.exists():
+        # Try relative to install
+        dashboard_script = Path(sys.prefix) / "war_room" / "dashboard" / "server.py"
+
+    console.print(f"[bold cyan]🚀 Starting War Room dashboard on {host}:{port}...[/bold cyan]")
+    console.print(f"[dim]Dashboard: http://{host}:{port}[/dim]")
+    console.print()
+
+    # Run the dashboard server directly
+    import uvicorn
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("dashboard_server", str(dashboard_script))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    uvicorn.run(module.app, host=host, port=port, log_level="info")
+
+
 @app.command("server")
 def server(
     ctx: typer.Context,
