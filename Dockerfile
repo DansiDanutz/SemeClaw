@@ -38,7 +38,8 @@ RUN mkdir -p /app/war_room/audio/meetings/saved \
 
 # Symlink data directories to mounted volume so source code in /app/war_room
 # is not overwritten by the Fly.io volume mount
-RUN printf '#!/bin/sh\nmkdir -p /app/data/audio/meetings/saved /app/data/audio/scripts /app/data/research/saved /app/data/logs /app/data/memory /app/data/builds\nln -sf /app/data/audio /app/war_room/audio 2>/dev/null || true\nln -sf /app/data/research /app/war_room/research 2>/dev/null || true\nln -sf /app/data/logs /app/war_room/logs 2>/dev/null || true\nln -sf /app/data/memory /app/war_room/memory 2>/dev/null || true\nln -sf /app/data/builds /app/war_room/builds 2>/dev/null || true\nexec \"$@\"\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -54,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 RUN uv pip install -e .
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uv", "run", "python", "-m", "uvicorn", "war_room.dashboard.server:app", "--host", "0.0.0.0", "--port", "8765"]
+CMD ["/usr/local/bin/uv", "run", "python", "-m", "uvicorn", "war_room.dashboard.server:app", "--host", "0.0.0.0", "--port", "8765"]
