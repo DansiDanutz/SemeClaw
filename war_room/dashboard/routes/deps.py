@@ -90,3 +90,59 @@ def _tenant_id(request) -> str:
     else:
         t = ""
     return t or SEMECLAW_TENANT_ID or "default"
+
+
+# ---------------------------------------------------------------------------
+# Demo agents
+# ---------------------------------------------------------------------------
+_DEMO_AGENTS: list[dict] = []
+try:
+    if os.environ.get("DEMO_MODE"):
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT))
+        from demo.loader import DEMO_AGENTS
+        _DEMO_AGENTS = DEMO_AGENTS
+except Exception:
+    pass
+
+# ---------------------------------------------------------------------------
+# Auth / retention
+# ---------------------------------------------------------------------------
+_PROTECTED_WRITE_PATHS = (
+    "/api/reports",
+    "/api/reports/upload",
+    "/api/reports/delete",
+    "/api/meeting/pin",
+    "/api/meeting/unpin",
+    "/api/meeting/execute",
+    "/api/meeting/task",
+    "/api/meeting/say",
+    "/api/meeting/ai-respond",
+    "/api/meeting/inject",
+    "/api/meeting/replan",
+    "/api/meeting/finalize",
+    "/api/meeting/redirect",
+    "/api/webhooks",
+    "/api/webhooks/delete",
+    "/api/run",
+    "/api/agent/run-start",
+    "/api/agent/run-complete",
+    "/api/voices/clone",
+    "/api/voices/map",
+    "/api/billing/report-usage",
+    "/api/alert-dan",
+)
+
+MEETING_RETENTION_HOURS = 48
+REPORT_RETENTION_HOURS  = 48
+
+# ---------------------------------------------------------------------------
+# TTS / voice maps
+# ---------------------------------------------------------------------------
+_ELEVEN_VOICES: dict[str, str] = {}
+try:
+    _ELEVEN_VOICE_JSON = Path(__file__).parent.parent / ".eleven_voices.json"
+    if _ELEVEN_VOICE_JSON.exists():
+        _ELEVEN_VOICES = json.loads(_ELEVEN_VOICE_JSON.read_text())
+except Exception:
+    pass

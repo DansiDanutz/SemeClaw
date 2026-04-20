@@ -2297,7 +2297,8 @@ async def api_logs():
 # Standalone-agent manifest + embed
 # ---------------------------------------------------------------------------
 
-@app.get("/api/agent/manifest")
+# MOVED to routes/agents.py
+# @app.get("/api/agent/manifest")
 async def api_agent_manifest():
     """Describe what this SemeClaw agent can do. Used by consumers (NERVIX,
     Paperclip companies, direct integrators) to discover capabilities."""
@@ -3098,7 +3099,8 @@ async def api_meeting_inject(request: Request):
 #                                  "X-SemeClaw-Layout": v})
 #
 #
-@app.get("/api/agents")
+# MOVED to routes/agents.py
+# @app.get("/api/agents")
 async def api_agents():
     agents = {}
     for md_file in AGENTS_DIR.glob("*.md"):
@@ -4636,7 +4638,8 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
                      headers={"X-TTS-Engine": "none", "X-Speaker": speaker})
 
 
-@app.get("/api/board")
+# MOVED to routes/health.py
+# @app.get("/api/board")
 async def api_board():
     """Return Paperclip board state via the bridge."""
     # Try to load bridge config
