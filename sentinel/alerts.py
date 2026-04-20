@@ -46,7 +46,7 @@ def _get_tg_creds() -> tuple[str, str]:
 
     # hard fallback: token found in this session
     if not token:
-        token = "[REDACTED_OLD_TOKEN]"
+        raise RuntimeError("Telegram bot token not configured. Set DLS_DAVID_BOT_TOKEN or DLS_TELEGRAM_BOT_TOKEN env var.")
     if not chat:
         chat = "424184493"
 

@@ -20,6 +20,8 @@ from rich.text import Text
 
 console = Console()
 
+app = typer.Typer(help="Onboard wizard for SemeClaw")
+
 
 # ---------------------------------------------------------------------------
 # Provider registry
@@ -327,6 +329,7 @@ def _default_fallback_chain(primary_provider_id: str) -> list[dict]:
 # Main onboarding flow
 # ---------------------------------------------------------------------------
 
+@app.command()
 def run_onboard(workspace: Path, force: bool = False) -> bool:
     """
     Full interactive onboarding wizard.

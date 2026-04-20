@@ -18,10 +18,8 @@ class SkillDef(BaseModel):
     description: str = ""
     content: str
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "id": "example_skill",
                 "name": "Example Skill",
@@ -29,6 +27,7 @@ class SkillDef(BaseModel):
                 "content": "This is the skill content...",
             }
         }
+    }
 
 
 class SkillLoader:

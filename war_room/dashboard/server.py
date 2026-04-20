@@ -46,6 +46,8 @@ except ImportError:
     print("FastAPI not installed. Run: pip install fastapi uvicorn")
     sys.exit(1)
 
+
+from war_room.dashboard.websocket_manager import manager
 # ---------------------------------------------------------------------------
 # Config from environment
 # ---------------------------------------------------------------------------
@@ -445,32 +447,6 @@ async def _rate_limiter(request: Request, call_next):
         window.append(now)
 
     return await call_next(request)
-
-# WebSocket connection manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.add(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.discard(websocket)
-
-    async def broadcast(self, message: dict):
-        """Send a message to all connected clients."""
-        data = json.dumps(message)
-        dead = set()
-        for ws in self.active_connections:
-            try:
-                await ws.send_text(data)
-            except Exception:
-                dead.add(ws)
-        for ws in dead:
-            self.disconnect(ws)
-
-manager = ConnectionManager()
 
 # ---------------------------------------------------------------------------
 # Paperclip — company ID cache
@@ -4553,6 +4529,7 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
     """
     import io
     from fastapi.responses import Response as FResponse
+
 
     _bump("tts_requests")
     tenant = _tenant_id(request)

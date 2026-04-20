@@ -21,6 +21,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -34,8 +35,9 @@ from rich.table import Table
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).parent.parent
 WAR_ROOM_DIR = Path(__file__).parent
+DEFAULT_AGENTS = ("research", "strategist", "writer")
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so local modules are importable directly
+sys.path.insert(0, str(WAR_ROOM_DIR))  # so local modules are importable directly
 
 from paperclip_bridge import PaperclipBridge, AGENT_ASSIGNEES, load_bridge
 from research_tools import ResearchTools
@@ -722,6 +724,8 @@ async def _create_external_issues(
                 acceptance_criteria=list(parsed.acceptance_criteria),
             )
             logger.info("📌 Paperclip issue: %s", paperclip_issue.get("id"))
+        except Exception as e:
+            logger.warning("Paperclip issue creation failed: %s", e)
 
         # Notify via Telegram
         if notify_telegram:
@@ -980,37 +984,11 @@ async def cmd_memory(limit: int = 10):
         print()
 
 
-def main():
-    args = sys.argv[1:]
-    if not args:
-        print(
-            "Usage: war_room.py <run|status|board|memory> [task]\n"
-            "  run   'task'  [--agents=a,b,c] [--project=NERVIX] [--with-coder]\n"
-            "  status\n"
-            "  board\n"
-            "  memory [--limit=10]\n"
-        )
-        sys.exit(1)
-
 app = typer.Typer(
     add_completion=False,
     help="War Room — Dan's Lab Agent Fleet coordinator.",
     no_args_is_help=True,
 )
-
-    if cmd == "run":
-        task = args[1] if len(args) > 1 else "Research AI agent marketplace landscape"
-        agents_str = None
-        project = "NERVIX"
-        with_coder = False
-        for a in args[2:]:
-            if a.startswith("--agents="):
-                agents_str = a.split("=", 1)[1]
-            elif a.startswith("--project="):
-                project = a.split("=", 1)[1]
-            elif a == "--with-coder":
-                with_coder = True
-        asyncio.run(cmd_run(task, agents_str, project, with_coder))
 
 @app.command("run", help="Run a full pipeline for a task.")
 def cli_run(
@@ -1053,16 +1031,12 @@ def cli_run(
         )
     console.rule()
 
-    elif cmd == "memory":
-        limit = 10
-        for a in args[1:]:
-            if a.startswith("--limit="):
-                limit = int(a.split("=", 1)[1])
-        asyncio.run(cmd_memory(limit))
 
-    else:
-        print(f"Unknown command: {cmd}")
-        sys.exit(1)
+@app.command("memory", help="Show recent memory entries.")
+def cli_memory(
+    limit: int = typer.Option(10, "--limit", help="Number of entries to show."),
+) -> None:
+    asyncio.run(cmd_memory(limit))
 
 
 if __name__ == "__main__":
