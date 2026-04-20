@@ -13,7 +13,8 @@ app = "semeclaw"
 primary_region = "iad"            # change to your nearest region
 
 [build]
-  image = "ghcr.io/dansidanutz/semeclaw:latest"
+  dockerfile = "Dockerfile"
+  # image = "ghcr.io/dansidanutz/semeclaw:latest"
 
 [env]
   SEMECLAW_PUBLIC_URL     = "https://semeclaw.fly.dev"
