@@ -141,12 +141,22 @@ jobs:
         run: |
           echo "tag=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.v.outputs.repo }}
+          tags: |
+            type=raw,value=${{ steps.v.outputs.tag }}
+            type=raw,value=latest
 
       - name: Build + push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/${{ steps.v.outputs.owner }}/semeclaw:${{ steps.v.outputs.tag }}
-            ghcr.io/${{ steps.v.outputs.owner }}/semeclaw:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
