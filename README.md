@@ -108,12 +108,55 @@ channels:
 
 See [PROVIDER_EXAMPLES.md](PROVIDER_EXAMPLES.md) for other LLM providers (OpenAI, Gemini, Grok, etc).
 
+## War Room Dashboard
+
+SemeClaw includes a **War Room** — a cinematic multi-agent meeting dashboard that turns any task report into a voiced agent discussion.
+
+```bash
+# Start the War Room dashboard (port 8765)
+python war_room/dashboard/server.py
+```
+
+Features:
+- **Agent Meetings** — Scripted scenarios with distinct neural voices (edge-tts)
+- **Cinematic UI** — Boardroom table with animated avatars, real-time transcript, and synced typewriter text
+- **Demo Scenarios** — Pre-built meetings for NERVIX positioning, telemetry design, and pricing strategy
+- **TTS Caching** — MP3 cache for instant replay
+
+## Deployment
+
+### Docker
+
+```bash
+# Build
+docker build -t semeclaw:latest .
+
+# Run
+docker run -p 8765:8765 -v $(pwd)/default_workspace:/app/default_workspace:ro semeclaw:latest
+```
+
+### Docker Compose
+
+```bash
+docker-compose up -d
+```
+
+### GitHub Container Registry
+
+Images are built and published automatically via GitHub Actions on every release tag:
+
+```bash
+docker pull ghcr.io/dansidanutz/semeclaw:latest
+```
+
 ## Commands
 
 | Command | Description |
 |---------|------------|
 | `uv run semeclaw chat` | Start interactive chat |
 | `uv run semeclaw server` | Start multi-platform server |
+| `uv run pytest war_room/tests/` | Run War Room tests |
+| `python war_room/dashboard/server.py` | Start War Room dashboard |
 | `/help` | List all slash commands |
 | `/skills` | Show available skills |
 | `/session` | Show session info |

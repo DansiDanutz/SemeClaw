@@ -20,12 +20,18 @@ env/
 default_workspace/config.user.yaml
 .env
 
-# Generated state / logs
-war_room/logs/
-war_room/audio_cache/
-war_room/*.json
-war_room/*.json.lock
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs & generated state
+war_room/logs/
+war_room/audio_cache/
+*.log
+
+# Node (if any frontend build tools appear later)
+node_modules/

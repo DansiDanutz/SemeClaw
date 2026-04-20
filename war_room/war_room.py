@@ -1,37 +1,54 @@
 """
 War Room — Orchestrator
-Dan's Lab Paperclip Agent Fleet coordinator.
+Dan's Lab Agent Fleet coordinator.
 
 Pipeline:
-  User task → Research → Architect|Strategist → Writer → Paperclip issue
+  User task → Research → Architect|Strategist → Writer → External issue(s)
+
+Issues are pushed to:
+  - Paperclip (default, always)
+  - Multica (when reachable / configured)
 
 Usage:
   python war_room/war_room.py run "Research open-source AI agent marketplaces"
   python war_room/war_room.py status
   python war_room/war_room.py board
+  python war_room/war_room.py --help
 """
 
+from __future__ import annotations
+
 import asyncio
-import json
 import logging
 import sys
 import uuid
-from datetime import datetime
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import httpx
 import litellm
+import typer
+from rich.console import Console
+from rich.table import Table
 
 # ---------------------------------------------------------------------------
 # Bootstrap path so this runs from repo root
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).parent.parent
-WAR_ROOM_DIR_BOOT = Path(__file__).parent
+WAR_ROOM_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(WAR_ROOM_DIR_BOOT))  # so paperclip_bridge is importable directly
+sys.path.insert(0, str(WAR_ROOM_DIR))
 
-from paperclip_bridge import PaperclipBridge, AGENT_ASSIGNEES, load_bridge
+from adapters.paperclip import PaperclipAdapter, AGENT_ASSIGNEES  # noqa: E402
+from adapters.multica import MulticaAdapter  # noqa: E402
+from adapters.base import AdapterHealth  # noqa: E402
+from config import resolve_model, resolve_telegram_token  # noqa: E402
+from parsing import parse_writer_output  # noqa: E402
+from state import (  # noqa: E402
+    atomic_write_json,
+    record_completed_task,
+    utc_now_iso,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,54 +56,46 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("war_room")
+console = Console()
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-WAR_ROOM_DIR      = Path(__file__).parent
-AGENTS_DIR        = WAR_ROOM_DIR / "agents"
-RESEARCH_DIR      = WAR_ROOM_DIR / "research"
-LOGS_DIR          = WAR_ROOM_DIR / "logs"
-STATE_FILE        = WAR_ROOM_DIR / "shared_state.json"
-TASK_QUEUE_FILE   = WAR_ROOM_DIR / "task_queue.json"
+AGENTS_DIR      = WAR_ROOM_DIR / "agents"
+RESEARCH_DIR    = WAR_ROOM_DIR / "research"
+LOGS_DIR        = WAR_ROOM_DIR / "logs"
+STATE_FILE      = WAR_ROOM_DIR / "shared_state.json"
+TASK_QUEUE_FILE = WAR_ROOM_DIR / "task_queue.json"
+TELEGRAM_CHAT_FILE = ROOT / ".telegram_chat_id"
 
 RESEARCH_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# LLM config (reads from SemeClaw workspace config if available)
-# ---------------------------------------------------------------------------
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
-
-def _load_model() -> str:
-    cfg_path = ROOT / "default_workspace" / "config.yaml"
-    if not cfg_path.exists():
-        return DEFAULT_MODEL
-    try:
-        import yaml
-        cfg = yaml.safe_load(cfg_path.read_text())
-        return cfg.get("model", DEFAULT_MODEL)
-    except Exception:
-        return DEFAULT_MODEL
+DEFAULT_AGENTS = ("research", "strategist", "writer")
 
 
 # ---------------------------------------------------------------------------
 # Agent definitions (load from markdown files)
 # ---------------------------------------------------------------------------
 
-def load_agent_def(agent_id: str) -> dict:
-    """Load agent markdown file and return {id, name, system_prompt}."""
+@dataclass(frozen=True)
+class AgentDef:
+    id: str
+    system_prompt: str
+
+
+def load_agent_def(agent_id: str) -> AgentDef:
+    """Load agent markdown file and return an AgentDef (front-matter stripped)."""
     path = AGENTS_DIR / f"{agent_id}.md"
     if not path.exists():
         raise FileNotFoundError(f"Agent def not found: {path}")
     text = path.read_text(encoding="utf-8")
-    # Strip YAML front-matter
     if text.startswith("---"):
         parts = text.split("---", 2)
         body = parts[2].strip() if len(parts) >= 3 else text
     else:
         body = text
-    return {"id": agent_id, "system_prompt": body}
+    return AgentDef(id=agent_id, system_prompt=body)
 
 
 # ---------------------------------------------------------------------------
@@ -99,26 +108,23 @@ async def call_agent(
     context: str = "",
     model: str | None = None,
 ) -> str:
-    """
-    Call a War Room agent with a task.
-    Returns the agent's response as a string.
-    """
-    model = model or _load_model()
+    """Call a War Room agent with a task. Returns the response text."""
+    model = resolve_model(ROOT, model)
     agent = load_agent_def(agent_id)
 
-    system = agent["system_prompt"]
     user_msg = task
     if context:
-        user_msg = f"## Context from previous agents\n\n{context}\n\n---\n\n## Your Task\n\n{task}"
+        user_msg = (
+            f"## Context from previous agents\n\n{context}\n\n"
+            f"---\n\n## Your Task\n\n{task}"
+        )
 
     logger.info("🤖 Calling agent [%s] with model %s", agent_id, model)
 
-    messages = [{"role": "user", "content": user_msg}]
-
     response = await litellm.acompletion(
         model=model,
-        messages=messages,
-        system=system,
+        messages=[{"role": "user", "content": user_msg}],
+        system=agent.system_prompt,
         max_tokens=4096,
         temperature=0.3,
     )
@@ -131,14 +137,36 @@ async def call_agent(
 # Pipeline
 # ---------------------------------------------------------------------------
 
+@dataclass
+class PipelineResult:
+    run_id: str
+    task: str
+    agents_run: list[str]
+    output_file: Path
+    paperclip_issue: dict | None
+    multica_issue: dict | None
+    results: dict[str, str] = field(default_factory=dict)
+
+    def to_public(self) -> dict:
+        return {
+            "run_id":          self.run_id,
+            "task":            self.task,
+            "agents_run":      self.agents_run,
+            "output_file":     str(self.output_file),
+            "paperclip_issue": self.paperclip_issue,
+            "multica_issue":   self.multica_issue,
+            "results":         {k: v[:200] + "…" for k, v in self.results.items()},
+        }
+
+
 class WarRoomPipeline:
     """
-    Orchestrates a full Research → Architect/Strategist → Writer pipeline
-    and creates a Paperclip issue from the output.
+    Orchestrates Research → Architect/Strategist → Writer
+    and creates external issues from the Writer output.
     """
 
     def __init__(self, model: str | None = None):
-        self.model = model or _load_model()
+        self.model = resolve_model(ROOT, model)
         self.results: dict[str, str] = {}
 
     async def run(
@@ -147,259 +175,404 @@ class WarRoomPipeline:
         agents: list[str] | None = None,
         project: str = "NERVIX",
         notify_telegram: bool = True,
-    ) -> dict:
-        """
-        Run the pipeline.
-        agents: which agents to involve (default: research → strategist → writer)
-        Returns summary dict with results and Paperclip issue.
-        """
-        agents = agents or ["research", "strategist", "writer"]
-        run_id = str(uuid.uuid4())[:8]
-        started = datetime.utcnow().isoformat()
+        push_paperclip: bool = True,
+        push_multica: bool = False,
+    ) -> PipelineResult:
+        agents = agents or list(DEFAULT_AGENTS)
+        run_id = uuid.uuid4().hex[:8]
+        started = utc_now_iso()
 
         logger.info("🚀 War Room pipeline started | task=%s | run_id=%s", task[:60], run_id)
 
         context = ""
         self.results = {}
+        succeeded = True
+        try:
+            for agent_id in agents:
+                logger.info("▶️  Running agent: %s", agent_id)
+                output = await call_agent(agent_id, task, context=context, model=self.model)
+                self.results[agent_id] = output
+                context += f"\n\n## Output from {agent_id.capitalize()} Agent\n\n{output}"
+        except Exception as e:
+            succeeded = False
+            logger.exception("Pipeline failed during agent run: %s", e)
+            # Save whatever we have so the run isn't silently lost
+            if not self.results:
+                raise
 
-        for agent_id in agents:
-            logger.info("▶️  Running agent: %s", agent_id)
-            output = await call_agent(agent_id, task, context=context, model=self.model)
-            self.results[agent_id] = output
-            context += f"\n\n## Output from {agent_id.capitalize()} Agent\n\n{output}"
-
-        # Save all outputs to research dir
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
-        slug = task[:40].lower().replace(" ", "-").replace("/", "-")
-        out_file = RESEARCH_DIR / f"{slug}-{date_str}.md"
-        out_file.write_text(self._build_report(task, agents, started), encoding="utf-8")
+        out_file = _write_report_file(task, agents, started, self.results)
         logger.info("📄 Saved report: %s", out_file.name)
 
-        # Create Paperclip issue from writer output
         paperclip_issue = None
-        async with PaperclipBridge(mock=True) as bridge:
-            writer_output = self.results.get("writer", "")
-            title, description, ac = self._parse_writer_output(writer_output, task)
-            assignee = AGENT_ASSIGNEES.get(agents[-1], "Hermes")
+        multica_issue = None
+        if succeeded:
+            paperclip_issue, multica_issue = await _create_external_issues(
+                task=task,
+                agents=agents,
+                writer_output=self.results.get("writer", ""),
+                project=project,
+                push_paperclip=push_paperclip,
+                push_multica=push_multica,
+            )
 
-            paperclip_issue = await bridge.create_issue(
-                title=title,
-                description=description,
+        if notify_telegram:
+            await _telegram_notify(task, out_file, paperclip_issue, multica_issue)
+
+        record_completed_task(
+            STATE_FILE,
+            run_id=run_id,
+            task=task,
+            agents=agents,
+            issue_id=paperclip_issue.get("id") if paperclip_issue else None,
+            multica_issue_id=multica_issue.get("id") if multica_issue else None,
+            succeeded=succeeded,
+        )
+        _log_run(run_id, task, agents, started, paperclip_issue, multica_issue, succeeded)
+
+        return PipelineResult(
+            run_id=run_id,
+            task=task,
+            agents_run=agents,
+            output_file=out_file,
+            paperclip_issue=paperclip_issue,
+            multica_issue=multica_issue,
+            results=self.results,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Helpers (module-level so tests can reach them directly)
+# ---------------------------------------------------------------------------
+
+def _slugify(value: str, max_len: int = 40) -> str:
+    cleaned = "".join(c if c.isalnum() else "-" for c in value.lower())
+    # Collapse consecutive dashes
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return cleaned.strip("-")[:max_len].strip("-") or "task"
+
+
+def _write_report_file(
+    task: str,
+    agents: list[str],
+    started_iso: str,
+    results: dict[str, str],
+) -> Path:
+    """Write a markdown report with YAML front-matter + agent outputs."""
+    date_str = started_iso[:10]
+    slug = _slugify(task)
+    out_file = RESEARCH_DIR / f"{slug}-{date_str}.md"
+
+    front_matter = [
+        "---",
+        f"task: {task!r}",
+        f"date: {date_str}",
+        f"started: {started_iso}",
+        f"agents: [{', '.join(agents)}]",
+        "---",
+        "",
+    ]
+    body: list[str] = [
+        "# War Room Report",
+        "",
+        f"**Task:** {task}",
+        f"**Date:** {date_str}",
+        f"**Agents:** {' → '.join(a.capitalize() for a in agents)}",
+    ]
+    for agent_id in agents:
+        output = results.get(agent_id, "").strip()
+        if not output:
+            continue
+        body += ["", "---", "", f"## {agent_id.capitalize()} Agent Output", "", output]
+
+    out_file.write_text("\n".join(front_matter + body) + "\n", encoding="utf-8")
+    return out_file
+
+
+async def _create_external_issues(
+    *,
+    task: str,
+    agents: list[str],
+    writer_output: str,
+    project: str,
+    push_paperclip: bool = True,
+    push_multica: bool = False,
+) -> tuple[dict | None, dict | None]:
+    """Create issues on external platforms. Returns (paperclip_issue, multica_issue)."""
+    parsed = parse_writer_output(writer_output, task)
+    assignee = AGENT_ASSIGNEES.get(agents[-1], "Hermes")
+
+    paperclip_issue = None
+    multica_issue = None
+
+    if push_paperclip:
+        pc = PaperclipAdapter()
+        try:
+            paperclip_issue = await pc.create_issue(
+                title=parsed.title,
+                description=parsed.description,
                 project=project,
                 assignee=assignee,
                 labels=["war-room", "research", "auto-generated"],
                 priority="medium",
-                acceptance_criteria=ac,
+                acceptance_criteria=list(parsed.acceptance_criteria),
             )
             logger.info("📌 Paperclip issue: %s", paperclip_issue.get("id"))
-
-        # Notify via Telegram if available
-        if notify_telegram:
-            await self._telegram_notify(task, out_file, paperclip_issue)
-
-        # Update shared state
-        self._update_state(run_id, task, agents, paperclip_issue)
-
-        # Log run
-        self._log_run(run_id, task, agents, started, paperclip_issue)
-
-        return {
-            "run_id":         run_id,
-            "task":           task,
-            "agents_run":     agents,
-            "output_file":    str(out_file),
-            "paperclip_issue": paperclip_issue,
-            "results":        {k: v[:200] + "…" for k, v in self.results.items()},
-        }
-
-    # ------------------------------------------------------------------ #
-    #  Helpers                                                              #
-    # ------------------------------------------------------------------ #
-
-    def _build_report(self, task: str, agents: list[str], started: str) -> str:
-        lines = [
-            f"# War Room Report",
-            f"**Task:** {task}",
-            f"**Date:** {started[:10]}",
-            f"**Agents:** {' → '.join(a.capitalize() for a in agents)}",
-            "",
-        ]
-        for agent_id in agents:
-            output = self.results.get(agent_id, "")
-            lines += [f"\n---\n\n## {agent_id.capitalize()} Agent Output\n\n{output}"]
-        return "\n".join(lines)
-
-    def _parse_writer_output(self, writer_output: str, fallback_task: str) -> tuple[str, str, list[str]]:
-        """
-        Try to extract a Paperclip issue title/description/AC from Writer output.
-        Falls back to task string if not structured.
-        """
-        title = f"[War Room] {fallback_task[:70]}"
-        description = writer_output[:1000] if writer_output else fallback_task
-        ac: list[str] = []
-
-        # Try to find a "Title:" line in the writer output
-        for line in writer_output.splitlines():
-            stripped = line.strip()
-            if stripped.lower().startswith("title:"):
-                title = stripped[6:].strip()
-            if "- [ ]" in stripped:
-                ac.append(stripped.replace("- [ ]", "").strip())
-
-        return title, description, ac
-
-    async def _telegram_notify(self, task: str, report_file: Path, issue: dict | None):
-        """Send Telegram notification if .telegram_chat_id exists."""
-        chat_id_file = ROOT / ".telegram_chat_id"
-        if not chat_id_file.exists():
-            return
-
-        cfg_path = ROOT / "default_workspace" / "config.yaml"
-        bot_token = None
-        if cfg_path.exists():
-            try:
-                import yaml
-                cfg = yaml.safe_load(cfg_path.read_text())
-                bot_token = cfg.get("telegram", {}).get("bot_token")
-            except Exception:
-                pass
-
-        if not bot_token:
-            return
-
-        chat_id = chat_id_file.read_text().strip()
-        issue_id = issue.get("id", "?") if issue else "?"
-        msg = (
-            f"🏛 <b>War Room complete</b>\n"
-            f"<b>Task:</b> {task[:80]}\n"
-            f"<b>Paperclip:</b> {issue_id}\n"
-            f"<b>Report:</b> {report_file.name}"
-        )
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                    json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
-                    timeout=10,
-                )
         except Exception as e:
-            logger.warning("Telegram notify failed: %s", e)
+            logger.warning("Paperclip issue creation failed: %s", e)
+        finally:
+            await pc.close()
 
-    def _update_state(self, run_id: str, task: str, agents: list[str], issue: dict | None):
+    if push_multica:
+        mc = MulticaAdapter()
         try:
-            state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
-            state.setdefault("completed_tasks", [])
-            state.setdefault("metrics", {"tasks_run": 0, "tasks_succeeded": 0, "paperclip_issues_created": 0})
-            state["completed_tasks"].append({
-                "run_id":  run_id,
-                "task":    task,
-                "agents":  agents,
-                "issue_id": issue.get("id") if issue else None,
-                "completed_at": datetime.utcnow().isoformat(),
-            })
-            state["metrics"]["tasks_run"] += 1
-            state["metrics"]["tasks_succeeded"] += 1
-            if issue:
-                state["metrics"]["paperclip_issues_created"] += 1
-            state["last_updated"] = datetime.utcnow().isoformat()
-            STATE_FILE.write_text(json.dumps(state, indent=2))
+            multica_issue = await mc.create_issue(
+                title=parsed.title,
+                description=parsed.description,
+                assignee=assignee,
+                priority="medium",
+                status="backlog",
+            )
+            logger.info("📌 Multica issue: %s", multica_issue.get("id"))
         except Exception as e:
-            logger.warning("State update failed: %s", e)
+            logger.warning("Multica issue creation failed: %s", e)
+        finally:
+            await mc.close()
 
-    def _log_run(self, run_id: str, task: str, agents: list[str], started: str, issue: dict | None):
-        log_file = LOGS_DIR / f"run-{datetime.utcnow().strftime('%Y-%m-%d')}.jsonl"
-        record = {
-            "run_id":    run_id,
-            "task":      task,
-            "agents":    agents,
-            "started":   started,
-            "completed": datetime.utcnow().isoformat(),
-            "issue_id":  issue.get("id") if issue else None,
-        }
-        with log_file.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
+    return paperclip_issue, multica_issue
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
+async def _telegram_notify(
+    task: str,
+    report_file: Path,
+    paperclip_issue: dict | None,
+    multica_issue: dict | None,
+) -> None:
+    if not TELEGRAM_CHAT_FILE.exists():
+        return
+    token = resolve_telegram_token(ROOT)
+    if not token:
+        return
 
-async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERVIX"):
-    agents = agents_str.split(",") if agents_str else None
-    pipeline = WarRoomPipeline()
-    result = await pipeline.run(task, agents=agents, project=project)
-    print("\n" + "=" * 60)
-    print("✅ War Room pipeline complete")
-    print(f"   Run ID:  {result['run_id']}")
-    print(f"   Report:  {result['output_file']}")
-    if result.get("paperclip_issue"):
-        issue = result["paperclip_issue"]
-        print(f"   Issue:   {issue['id']} → {issue['assignee']} ({issue['project']})")
-    print("=" * 60)
+    chat_id = TELEGRAM_CHAT_FILE.read_text(encoding="utf-8").strip()
+    if not chat_id:
+        return
+
+    pc_id = paperclip_issue.get("id", "?") if paperclip_issue else "—"
+    mc_id = multica_issue.get("id", "?") if multica_issue else "—"
+    msg = (
+        f"🏛 <b>War Room complete</b>\n"
+        f"<b>Task:</b> {task[:80]}\n"
+        f"<b>Paperclip:</b> {pc_id}\n"
+        f"<b>Multica:</b> {mc_id}\n"
+        f"<b>Report:</b> {report_file.name}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
+            )
+    except Exception as e:
+        logger.warning("Telegram notify failed: %s", e)
 
 
-async def cmd_status():
-    state = {}
-    if STATE_FILE.exists():
-        state = json.loads(STATE_FILE.read_text())
+def _log_run(
+    run_id: str,
+    task: str,
+    agents: list[str],
+    started: str,
+    paperclip_issue: dict | None,
+    multica_issue: dict | None,
+    succeeded: bool,
+) -> None:
+    log_file = LOGS_DIR / f"run-{started[:10]}.jsonl"
+    record = {
+        "run_id":           run_id,
+        "task":             task,
+        "agents":           agents,
+        "started":          started,
+        "completed":        utc_now_iso(),
+        "paperclip_issue_id": paperclip_issue.get("id") if paperclip_issue else None,
+        "multica_issue_id":   multica_issue.get("id") if multica_issue else None,
+        "succeeded":        succeeded,
+    }
+    import json as _json
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(record) + "\n")
+
+
+def _format_status(state: dict) -> None:
     metrics = state.get("metrics", {})
     completed = state.get("completed_tasks", [])
-    print("\n🏛  War Room Status")
-    print(f"   Tasks run:       {metrics.get('tasks_run', 0)}")
-    print(f"   Tasks succeeded: {metrics.get('tasks_succeeded', 0)}")
-    print(f"   Paperclip issues:{metrics.get('paperclip_issues_created', 0)}")
-    print(f"   Last updated:    {state.get('last_updated', 'never')}")
+
+    console.print()
+    console.print("[bold]🏛  War Room Status[/bold]")
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_row("Tasks run:",        str(metrics.get("tasks_run", 0)))
+    table.add_row("Tasks succeeded:",  str(metrics.get("tasks_succeeded", 0)))
+    table.add_row("Tasks failed:",     str(metrics.get("tasks_failed", 0)))
+    table.add_row("Paperclip issues:", str(metrics.get("paperclip_issues_created", 0)))
+    table.add_row("Multica issues:",   str(metrics.get("multica_issues_created", 0)))
+    table.add_row("Last updated:",     state.get("last_updated") or "never")
+    console.print(table)
+
     if completed:
-        print("\n   Recent tasks:")
+        console.print("\n[bold]Recent tasks:[/bold]")
+        recent = Table(show_header=True, box=None, pad_edge=False)
+        recent.add_column("Paperclip", style="cyan", no_wrap=True)
+        recent.add_column("Multica", style="magenta", no_wrap=True)
+        recent.add_column("Task", overflow="fold")
+        recent.add_column("Completed", style="dim", no_wrap=True)
         for t in completed[-5:]:
-            print(f"     [{t.get('issue_id','?')}] {t['task'][:60]} ({t['completed_at'][:10]})")
+            recent.add_row(
+                t.get("issue_id") or "—",
+                t.get("multica_issue_id") or "—",
+                (t.get("task") or "")[:60],
+                (t.get("completed_at") or "")[:16],
+            )
+        console.print(recent)
 
 
-async def cmd_board():
-    async with PaperclipBridge(mock=True) as bridge:
-        board = await bridge.get_board_state()
-    print("\n🏛  Paperclip Board")
-    print(f"   Mode: {board.get('mode', 'live')}")
-    print(f"   Projects: {', '.join(board.get('projects', []))}")
-    print("\n   Agents:")
-    for name, info in board.get("agents", {}).items():
-        print(f"     {name:8s} — {info['role']:14s} [{info['status']}]  open: {info.get('open_issues', 0)}")
+def _format_board(board: dict, label: str = "Board") -> None:
+    console.print()
+    console.print(f"[bold]🏛  {label}[/bold]")
+    console.print(f"Mode: [cyan]{board.get('mode', 'live')}[/cyan]")
+    console.print(f"Projects: {', '.join(board.get('projects', [])) or '—'}")
+
+    agents = board.get("agents", {})
+    if agents:
+        tbl = Table(title="\nAgents", show_header=True, box=None, pad_edge=False)
+        tbl.add_column("Name", style="cyan")
+        tbl.add_column("Role")
+        tbl.add_column("Status", style="green")
+        tbl.add_column("Open", justify="right")
+        for name, info in agents.items():
+            tbl.add_row(name, info.get("role", ""), info.get("status", ""),
+                        str(info.get("open_issues", 0)))
+        console.print(tbl)
+
     issues = board.get("issues", [])
     if issues:
-        print(f"\n   Issues ({len(issues)}):")
+        tbl = Table(title=f"\nIssues ({len(issues)})", show_header=True, box=None, pad_edge=False)
+        tbl.add_column("ID", style="cyan", no_wrap=True)
+        tbl.add_column("Title", overflow="fold")
+        tbl.add_column("Assignee")
         for i in issues:
-            print(f"     [{i['id']}] {i['title'][:55]} → {i['assignee']}")
+            tbl.add_row(i.get("id", "?"), (i.get("title") or "")[:55], i.get("assignee", "?"))
+        console.print(tbl)
 
 
-def main():
-    import sys
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: war_room.py <run|status|board> [task] [--agents=a,b,c] [--project=NERVIX]")
-        sys.exit(1)
+# ---------------------------------------------------------------------------
+# Typer CLI
+# ---------------------------------------------------------------------------
 
-    cmd = args[0]
+app = typer.Typer(
+    add_completion=False,
+    help="War Room — Dan's Lab Agent Fleet coordinator.",
+    no_args_is_help=True,
+)
 
-    if cmd == "run":
-        task = args[1] if len(args) > 1 else "Research AI agent marketplace landscape"
-        agents_str = None
-        project = "NERVIX"
-        for a in args[2:]:
-            if a.startswith("--agents="):
-                agents_str = a.split("=", 1)[1]
-            elif a.startswith("--project="):
-                project = a.split("=", 1)[1]
-        asyncio.run(cmd_run(task, agents_str, project))
 
-    elif cmd == "status":
-        asyncio.run(cmd_status())
+@app.command("run", help="Run a full pipeline for a task.")
+def cli_run(
+    task: str = typer.Argument(..., help="Task description for the pipeline."),
+    agents: str = typer.Option(
+        ",".join(DEFAULT_AGENTS),
+        "--agents",
+        help="Comma-separated agent chain (e.g. research,strategist,writer).",
+    ),
+    project: str = typer.Option("NERVIX", "--project", help="Paperclip project name."),
+    model: str | None = typer.Option(None, "--model", help="Override LLM model string."),
+    no_telegram: bool = typer.Option(False, "--no-telegram", help="Skip Telegram notification."),
+    no_paperclip: bool = typer.Option(False, "--no-paperclip", help="Skip Paperclip issue creation."),
+    multica: bool = typer.Option(False, "--multica", help="Also push to Multica."),
+) -> None:
+    agent_list = [a.strip() for a in agents.split(",") if a.strip()]
+    pipeline = WarRoomPipeline(model=model)
+    result = asyncio.run(pipeline.run(
+        task=task,
+        agents=agent_list,
+        project=project,
+        notify_telegram=not no_telegram,
+        push_paperclip=not no_paperclip,
+        push_multica=multica,
+    ))
 
-    elif cmd == "board":
-        asyncio.run(cmd_board())
+    console.print()
+    console.rule("[bold green]✅ War Room pipeline complete[/bold green]")
+    console.print(f"Run ID:  [cyan]{result.run_id}[/cyan]")
+    console.print(f"Report:  {result.output_file}")
+    if result.paperclip_issue:
+        issue = result.paperclip_issue
+        console.print(
+            f"Paperclip: [cyan]{issue['id']}[/cyan] → {issue['assignee']} ({issue['project']})"
+        )
+    if result.multica_issue:
+        issue = result.multica_issue
+        console.print(
+            f"Multica:   [cyan]{issue['id']}[/cyan] → {issue.get('assignee', '?')}"
+        )
+    console.rule()
 
-    else:
-        print(f"Unknown command: {cmd}")
-        sys.exit(1)
+
+@app.command("status", help="Show War Room metrics and recent tasks.")
+def cli_status() -> None:
+    from state import load_state
+    state = load_state(STATE_FILE)
+    _format_status(state)
+
+
+@app.command("board", help="Show live board state from all connected platforms.")
+def cli_board() -> None:
+    async def _go() -> None:
+        pc = PaperclipAdapter()
+        mc = MulticaAdapter()
+        try:
+            pc_board = await pc.get_board_state()
+            _format_board(pc_board, label="Paperclip")
+        except Exception as e:
+            console.print(f"[red]Paperclip board failed: {e}[/red]")
+        finally:
+            await pc.close()
+
+        try:
+            mc_agents = await mc.list_agents()
+            mc_tasks = await mc.list_tasks()
+            # Synthesize a board-like view from Multica data
+            mc_board = {
+                "mode": "live" if mc._is_reachable() else "local",
+                "projects": [],
+                "agents": {
+                    a["name"]: {"role": a.get("role", "Agent"), "status": a["status"], "open_issues": 0}
+                    for a in mc_agents
+                },
+                "issues": mc_tasks,
+            }
+            if mc_board["agents"] or mc_board["issues"]:
+                _format_board(mc_board, label="Multica")
+            else:
+                console.print("\n[yellow]Multica: no agents or issues found[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Multica board failed: {e}[/red]")
+        finally:
+            await mc.close()
+
+    asyncio.run(_go())
+
+
+@app.command("enqueue", help="Queue a task for later processing.")
+def cli_enqueue(
+    task: str = typer.Argument(..., help="Task description."),
+    project: str = typer.Option("NERVIX", "--project"),
+) -> None:
+    from state import enqueue_task
+    enqueue_task(TASK_QUEUE_FILE, {"task": task, "project": project})
+    console.print(f"[green]Queued:[/green] {task}")
+
+
+def main() -> None:
+    app()
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 
 from semeclaw.cli.chat import chat_command
+from semeclaw.cli.onboard import app as onboard_app
 from semeclaw.utils.config import Config
 
 app = typer.Typer(
@@ -19,6 +20,9 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=True,
 )
+
+# Register subcommands
+app.add_typer(onboard_app, name="onboard")
 
 console = Console()
 
