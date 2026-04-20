@@ -68,7 +68,7 @@ def test_pipeline_run_records_state_and_writes_report(
         return f"[{agent_id}] response for {task!r}"
 
     # Writer returns structured output so parsing can extract AC
-    async def fake_call_agent_mixed(agent_id: str, task: str, context: str = "", model: str | None = None) -> str:
+    async def fake_call_agent_mixed(agent_id: str, task: str, context: str = "", model: str | None = None, **kwargs) -> str:
         if agent_id == "writer":
             return (
                 "# Shipping Telemetry Spec\n\n"

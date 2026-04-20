@@ -47,7 +47,7 @@ class TelegramAdapter(Adapter):
     """Telegram Bot adapter for War Room integration."""
 
     def __init__(self, token: str | None = None, base_url: str | None = None) -> None:
-        resolved_token = token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        resolved_token = token if token is not None else os.environ.get("TELEGRAM_BOT_TOKEN", "")
         api_base = (base_url or DEFAULT_BASE).rstrip("/")
         resolved_base = f"{api_base}/bot{resolved_token}" if resolved_token else api_base
         super().__init__("telegram", resolved_base)
