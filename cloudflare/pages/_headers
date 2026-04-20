@@ -1,0 +1,12 @@
+/manifest.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=60, stale-while-revalidate=300
+  Content-Type: application/json
+
+/*.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=60
+
+/health
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json

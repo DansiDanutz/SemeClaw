@@ -1,0 +1,51 @@
+name: Deploy Updates Manifest + Assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/pages/**"
+      - "assets/**"
+      - ".github/workflows/deploy-updates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-manifest:
+    runs-on: ubuntu-latest
+    name: Deploy manifest to Cloudflare Pages
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: updates-semeclaw
+          directory: cloudflare/pages
+          branch: main
+
+  upload-assets:
+    runs-on: ubuntu-latest
+    name: Upload assets to R2
+    needs: deploy-manifest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install boto3
+        run: pip install boto3
+
+      - name: Upload assets to R2
+        run: python cloudflare/r2/upload-assets.py
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
