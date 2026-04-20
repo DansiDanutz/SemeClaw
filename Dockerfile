@@ -37,6 +37,7 @@ RUN mkdir -p /app/war_room/audio/meetings/saved \
              /app/war_room/logs
 
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
     SEMECLAW_PUBLIC_URL=http://0.0.0.0:8765 \
     SEMECLAW_TENANT_ID=default
 
