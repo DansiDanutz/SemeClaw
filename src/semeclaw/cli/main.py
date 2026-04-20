@@ -27,7 +27,7 @@ app.add_typer(onboard_app, name="onboard")
 console = Console()
 
 # Commands that do NOT require a pre-loaded config
-_NO_CONFIG_COMMANDS = {"init"}
+_NO_CONFIG_COMMANDS = {"init", "demo", "war-room"}
 
 
 def workspace_callback(ctx: typer.Context, workspace: str) -> Path:
