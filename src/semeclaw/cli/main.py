@@ -176,6 +176,9 @@ def war_room(
     if not dashboard_script.exists():
         # Try relative to install
         dashboard_script = Path(sys.prefix) / "war_room" / "dashboard" / "server.py"
+    if not dashboard_script.exists():
+        # Docker /app fallback
+        dashboard_script = Path.cwd() / "war_room" / "dashboard" / "server.py"
 
     console.print(f"[bold cyan]🚀 Starting War Room dashboard on {host}:{port}...[/bold cyan]")
     console.print(f"[dim]Dashboard: http://{host}:{port}[/dim]")
