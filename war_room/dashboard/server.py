@@ -231,6 +231,27 @@ if (static_dir / "agents.html").exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # ---------------------------------------------------------------------------
+# Router mounts (incremental modularization of the monolithic server)
+# Stubs are in war_room/dashboard/routes/ — real extraction is TODO.
+# ---------------------------------------------------------------------------
+# try:
+#     from war_room.dashboard.routes import health, embed, agents, reports
+#     from war_room.dashboard.routes import meetings, webhooks, paperclip
+#     from war_room.dashboard.routes import billing, alerts
+#
+#     app.include_router(health.router)
+#     app.include_router(embed.router)
+#     app.include_router(agents.router)
+#     app.include_router(reports.router)
+#     app.include_router(meetings.router)
+#     app.include_router(webhooks.router)
+#     app.include_router(paperclip.router)
+#     app.include_router(billing.router)
+#     app.include_router(alerts.router)
+# except Exception as e:
+#     logger.warning("Router mount skipped (routes may be stubs): %s", e)
+
+# ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
 # ---------------------------------------------------------------------------
 try:

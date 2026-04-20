@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen || uv sync
 
+      - name: Lint with ruff
+        run: |
+          uv run ruff check src/ war_room/ || true
+          uv run ruff format --check src/ war_room/ || true
+
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
@@ -69,15 +74,25 @@ jobs:
           print('meeting_skill OK:', len(script.segments), 'segments')
           "
 
+      - name: Smoke test — semeclaw demo runs
+        run: |
+          uv run semeclaw demo | tee /tmp/demo.log
+          grep -q "Demo complete" /tmp/demo.log
+          grep -q "Dexter" /tmp/demo.log
+          grep -q "Memo" /tmp/demo.log
+          grep -q "Hermes" /tmp/demo.log
+          echo "✓ semeclaw demo smoke test passed"
+
       - name: Smoke test — server boots + manifest responds
         run: |
-          uv run python war_room/dashboard/server.py &
+          uv run semeclaw war-room &
           SERVER_PID=$!
           sleep 6
           curl -sf http://127.0.0.1:8765/api/agent/manifest > /tmp/manifest.json
           cat /tmp/manifest.json | python -c "import sys,json,re; d=json.load(sys.stdin); assert d['id']=='semeclaw-war-room'; assert re.match(r'^\d+\.\d+\.\d+$', d['version']); assert len(d['capabilities'])>=10; print('OK:', d['id'], 'v'+d['version'], 'caps='+str(len(d['capabilities'])))"
           curl -sf http://127.0.0.1:8765/api/agent/health > /tmp/health.json
-          curl -sf http://127.0.0.1:8765/metrics | head -5
+          curl -sf http://127.0.0.1:8765/agents | head -5
+          curl -sf http://127.0.0.1:8765/embed.js | head -3
           kill $SERVER_PID || true
         env:
           SEMECLAW_API_KEY: ""

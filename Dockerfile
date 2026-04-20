@@ -27,6 +27,7 @@ RUN uv sync --frozen --no-install-project || uv sync --no-install-project
 COPY src ./src
 COPY war_room ./war_room
 COPY default_workspace ./default_workspace
+COPY install.sh setup.sh .env.example ./
 COPY README.md INTEGRATION.md SEMECLAW_AGENT_PLAN.md ./
 
 # Data dirs created on first run, but pre-create for volume-mounting
@@ -44,4 +45,7 @@ EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8765/api/agent/health || exit 1
 
-CMD ["uv", "run", "python", "war_room/dashboard/server.py"]
+# Ensure the semeclaw CLI is available
+RUN uv pip install -e .
+
+CMD ["uv", "run", "semeclaw", "war-room"]

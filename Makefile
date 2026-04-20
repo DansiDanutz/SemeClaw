@@ -1,9 +1,13 @@
-.PHONY: help install test lint run dashboard docker-build docker-run clean
+.PHONY: help install dev demo test lint format run dashboard docker-build docker-run clean
 
 help:
 	@echo "SemeClaw — Available commands:"
 	@echo "  make install      Install dependencies with uv"
+	@echo "  make dev          Install + start dashboard in dev mode"
+	@echo "  make demo         Run the welcome demo (no API keys)"
 	@echo "  make test         Run all tests"
+	@echo "  make lint         Run ruff linter"
+	@echo "  make format       Run ruff formatter"
 	@echo "  make run          Start SemeClaw chat"
 	@echo "  make dashboard    Start War Room dashboard"
 	@echo "  make docker-build Build Docker image"
@@ -13,14 +17,27 @@ help:
 install:
 	uv sync --all-extras --dev
 
+dev: install
+	@echo "🚀 Starting War Room dashboard on http://127.0.0.1:8765"
+	uv run semeclaw war-room
+
+demo:
+	uv run semeclaw demo
+
 test:
-	uv run pytest war_room/tests/ -v
+	uv run pytest war_room/tests/ tests/ -v
+
+lint:
+	uv run ruff check src/ war_room/
+
+format:
+	uv run ruff format src/ war_room/
 
 run:
 	uv run semeclaw chat
 
 dashboard:
-	python war_room/dashboard/server.py
+	uv run semeclaw war-room
 
 docker-build:
 	docker build -t semeclaw:latest .
