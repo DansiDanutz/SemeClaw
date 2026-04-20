@@ -62,6 +62,44 @@ Every meeting includes a **host announcer**, a **conversational orchestrator**, 
 
 ## 🏃 Quickstart
 
+### One-line install (macOS / Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DansiDanutz/SemeClaw/main/install.sh | bash
+```
+
+Or manually:
+```bash
+git clone https://github.com/DansiDanutz/SemeClaw.git
+cd SemeClaw
+chmod +x install.sh && ./install.sh
+```
+
+### Run the demo (no API keys needed)
+
+```bash
+cd ~/SemeClaw
+source .venv/bin/activate
+
+# See the War Room agents in action
+semeclaw demo
+
+# Start the dashboard
+semeclaw war-room
+# → http://127.0.0.1:8765
+```
+
+### Configure providers for real LLM calls
+
+```bash
+# Interactive wizard — auto-detects keys, tests connections
+semeclaw init
+
+# Or edit .env directly
+cp .env.example .env
+# fill in ANTHROPIC_API_KEY, OPENROUTER_API_KEY, ELEVENLABS_API_KEY
+```
+
 ### Local dev
 
 Requirements:
@@ -71,15 +109,7 @@ Requirements:
 ```bash
 git clone https://github.com/DansiDanutz/SemeClaw.git
 cd SemeClaw
-
-# copy env + add your keys
-cp .env.example .env
-# fill in ELEVENLABS_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY
-
-# run
 uv sync
-uv run python war_room/dashboard/server.py
-# → http://127.0.0.1:8765
 ```
 
 Verify it's alive:
@@ -88,10 +118,8 @@ curl http://127.0.0.1:8765/api/agent/manifest | jq .version
 # "0.7.0"
 ```
 
-### One-command install
+### Legacy setup.sh
 ```bash
-git clone https://github.com/Dansidanutz/SemeClaw.git
-cd SemeClaw
 chmod +x setup.sh && ./setup.sh
 ```
 
@@ -108,7 +136,7 @@ docker run -p 8765:8765 --env-file .env semeclaw:0.7.0
 
 | Service | Port | Purpose | Start |
 |---------|------|---------|-------|
-| War Room Dashboard | 8765 | Main UI + API + WebSocket | `uv run python war_room/dashboard/server.py` |
+| War Room Dashboard | 8765 | Main UI + API + WebSocket | `semeclaw war-room` |
 | Sentinel | 18790 | Fleet health monitor | `uv run python -m sentinel.sentinel` |
 | Coordinator | 8996 | LLM circuit-breaker proxy | `uv run python -m coordinator.coordinator` |
 | KPI Collector | — | Redis stream → Supabase | `uv run python -m kpis.collector` |
