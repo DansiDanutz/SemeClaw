@@ -8,6 +8,17 @@ llm:
   api_base: null
   temperature: 0.7
   max_tokens: 4096
+  # Optional fallback chain. SemeClaw will roll over when the primary
+  # provider hits quota, billing, access-denied, rate-limit, or transient errors.
+  # fallbacks:
+  #   - provider: openrouter
+  #     model: openrouter/qwen/qwen3.6-plus:free
+  #     api_key: your-openrouter-api-key
+  #     api_base: https://openrouter.ai/api/v1
+  #   - provider: ollama
+  #     model: ollama/qwen3:8b
+  #     api_key: ollama
+  #     api_base: http://localhost:11434
 
 default_agent: seme
 

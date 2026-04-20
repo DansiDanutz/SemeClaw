@@ -52,7 +52,7 @@ For NERVIX: backend Python code, API endpoints, database migrations, CI/CD pipel
 - **Code review** — catching security issues, performance problems, architecture violations
 
 ## Stack I Work With
-- Language: Python 3.13 (never 3.14 — broken on macOS)
+- Language: Python 3.10+ minimum, 3.13 preferred on macOS (never 3.14 — broken on macOS)
 - Package manager: uv
 - Framework: FastAPI + uvicorn
 - Models: ollama/qwen2.5-coder:7b (local, free) → zai/glm-5 → claude-sonnet-4-6

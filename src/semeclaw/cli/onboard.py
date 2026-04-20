@@ -259,14 +259,20 @@ def write_config(
     telegram_chat_id: str = "",
     brave_key: str = "",
 ) -> Path:
+    llm_cfg = {
+        "provider": provider.id,
+        "model": model,
+        "api_key": api_key if not api_key.startswith("$") else api_key,
+        "temperature": 0.7,
+        "max_tokens": 4096,
+    }
+
+    fallbacks = _default_fallback_chain(provider.id)
+    if fallbacks:
+        llm_cfg["fallbacks"] = fallbacks
+
     cfg: dict = {
-        "llm": {
-            "provider": provider.id,
-            "model": model,
-            "api_key": api_key if not api_key.startswith("$") else api_key,
-            "temperature": 0.7,
-            "max_tokens": 4096,
-        },
+        "llm": llm_cfg,
         "default_agent": default_agent,
     }
 
@@ -286,6 +292,35 @@ def write_config(
     with open(out, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
     return out
+
+
+def _default_fallback_chain(primary_provider_id: str) -> list[dict]:
+    """Build a practical fallback chain from locally available providers."""
+    fallbacks: list[dict] = []
+
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if primary_provider_id != "openrouter" and openrouter_key:
+        fallbacks.append(
+            {
+                "provider": "openrouter",
+                "model": "openrouter/qwen/qwen3.6-plus:free",
+                "api_key": openrouter_key,
+                "api_base": "https://openrouter.ai/api/v1",
+            }
+        )
+
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").strip() or "http://localhost:11434"
+    if primary_provider_id != "ollama" and _probe_http(ollama_url + "/api/tags"):
+        fallbacks.append(
+            {
+                "provider": "ollama",
+                "model": "ollama/qwen3:8b",
+                "api_key": "ollama",
+                "api_base": ollama_url,
+            }
+        )
+
+    return fallbacks
 
 
 # ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Set, Optional
@@ -158,7 +159,45 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="SemeClaw War Room Agent", version="0.6.0")
+APP_VERSION = "0.7.0"
+
+
+async def _prune_loop() -> None:
+    while True:
+        try:
+            removed = _prune_old_meetings()
+            if removed:
+                logger.info(f"meeting prune: removed {removed} files older than {MEETING_RETENTION_HOURS}h")
+        except Exception as e:
+            logger.warning(f"meeting prune failed: {e}")
+        await asyncio.sleep(3600)
+
+
+async def _start_background_tasks() -> list[asyncio.Task]:
+    """Start long-lived background tasks for the dashboard process."""
+    tasks = [
+        asyncio.create_task(file_watcher(), name="semeclaw-file-watcher"),
+        asyncio.create_task(_droplet_probe_loop(), name="semeclaw-droplet-probe-loop"),
+        asyncio.create_task(_prune_loop(), name="semeclaw-prune-loop"),
+    ]
+    if SEMECLAW_ADS_URL:
+        tasks.append(asyncio.create_task(_register_with_adclaw(), name="semeclaw-adclaw-register"))
+    return tasks
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    tasks = await _start_background_tasks()
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+
+app = FastAPI(title="SemeClaw War Room Agent", version=APP_VERSION, lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # Standalone-agent hardening: CORS + optional bearer auth + CSP iframe
@@ -246,16 +285,8 @@ def _get_slides_secret() -> bytes:
 
 
 def _issue_watch_token(ip: str) -> str:
-    """Return a time-limited, IP-bound token that proves the client fetched slides.
-
-    Format: "<unix_ts_int>.<hmac_hex_20>"
-    Valid for FREE_TIER_WAIT_SECONDS + 30 seconds.
-    """
-    ts = int(_time.monotonic() * 1000)   # ms monotonic — not guessable from wall clock
-    wall = int(_time.time())             # wall time for expiry check on verify
-    msg = f"{ip}:{wall}:{ts}".encode()
-    sig = _hmac.new(_get_slides_secret(), msg, "sha256").hexdigest()[:24]
-    return f"{wall}.{sig}"
+    """Backward-compatible helper that now delegates to the verifiable v2 format."""
+    return _issue_watch_token_v2(ip)
 
 
 def _verify_watch_token(token: str, ip: str) -> bool:
@@ -267,9 +298,6 @@ def _verify_watch_token(token: str, ip: str) -> bool:
         age = _time.time() - wall
         if age < 0 or age > FREE_TIER_WAIT_SECONDS + 30:
             return False
-        # Recompute — we don't know the original ts so we can't reproduce the
-        # exact msg, but we can check all ts values in the valid window.
-        # Instead, store a separate sig over (ip, wall) only.
         msg = f"{ip}:{wall}".encode()
         expected = _hmac.new(_get_slides_secret(), msg, "sha256").hexdigest()[:24]
         return _hmac.compare_digest(sig, expected)
@@ -343,7 +371,7 @@ async def _semeclaw_auth_and_csp(request, call_next):
     # Iframe-embed-friendly CSP
     if SEMECLAW_FRAME_ANCESTORS:
         response.headers["Content-Security-Policy"] = f"frame-ancestors {SEMECLAW_FRAME_ANCESTORS}"
-    response.headers["X-SemeClaw-Version"] = "0.6.0"
+    response.headers["X-SemeClaw-Version"] = APP_VERSION
     return response
 
 
@@ -786,7 +814,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     body = {
         "event": event,
         "ts": datetime.now(timezone.utc).isoformat(),
-        "agent_version": "0.6.0",
+        "agent_version": APP_VERSION,
         "tenant_id": payload.get("tenant_id", SEMECLAW_TENANT_ID),
         "data": payload,
     }
@@ -820,7 +848,7 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
                         "content-type": "application/json",
                         "x-semeclaw-event": event,
                         "x-semeclaw-signature": f"sha256={sig}" if sig else "",
-                        "user-agent": "SemeClaw/0.6.0",
+                        "user-agent": f"SemeClaw/{APP_VERSION}",
                     },
                 )
         except Exception as e:
@@ -853,7 +881,7 @@ async def api_events(tenant: str | None = None, events: str | None = None):
     async def _stream():
         # Initial hello
         hello = {"event": "connected", "ts": datetime.now(timezone.utc).isoformat(),
-                 "agent_version": "0.6.0", "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
+                 "agent_version": APP_VERSION, "data": {"subscribers": len(_SSE_SUBSCRIBERS)}}
         yield f"event: connected\ndata: {json.dumps(hello)}\n\n"
         try:
             while True:
@@ -1460,16 +1488,16 @@ async def api_meeting_html(name: str):
 
 def request_version() -> str:
     """Used by the HTML transcript footer. Keeps string in one place."""
-    return "0.6.0"
+    return APP_VERSION
 
 
 # ---------------------------------------------------------------------------
 # Stripe billing scaffold — wires up but stays inert until STRIPE_SECRET_KEY is set
 # ---------------------------------------------------------------------------
 
-STRIPE_SECRET_KEY        = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY   = os.environ.get("STRIPE_PUBLISHABLE_KEY", "").strip()
-STRIPE_WEBHOOK_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_PRICE_PER_MEETING = os.environ.get("STRIPE_PRICE_PER_MEETING", "").strip()  # price_xxx
 
 
@@ -1517,7 +1545,7 @@ async def metrics():
     lines = [
         "# HELP semeclaw_info SemeClaw agent info",
         "# TYPE semeclaw_info gauge",
-        f'semeclaw_info{{version="0.6.0",tenant="{SEMECLAW_TENANT_ID}"}} 1',
+        f'semeclaw_info{{version="{APP_VERSION}",tenant="{SEMECLAW_TENANT_ID}"}} 1',
     ]
     for k, v in _METRICS.items():
         lines.append(f"# HELP semeclaw_{k} Count of {k}")
@@ -2216,28 +2244,6 @@ async def api_meeting_unpin(name: str = "", file: str = ""):
     return JSONResponse({"ok": True, "moved": moved, "saved": False})
 
 
-@app.on_event("startup")
-async def _startup_tasks() -> None:
-    """Single startup handler — starts all background tasks regardless of launch method."""
-    # File watcher + droplet health probes
-    asyncio.create_task(file_watcher())
-    asyncio.create_task(_droplet_probe_loop())
-    # Register with AdClaw ad server if configured
-    if SEMECLAW_ADS_URL:
-        asyncio.create_task(_register_with_adclaw())
-    # Hourly meeting log prune
-    async def _prune_loop():
-        while True:
-            try:
-                removed = _prune_old_meetings()
-                if removed:
-                    logger.info(f"meeting prune: removed {removed} files older than {MEETING_RETENTION_HOURS}h")
-            except Exception as e:
-                logger.warning(f"meeting prune failed: {e}")
-            await asyncio.sleep(3600)
-    asyncio.create_task(_prune_loop())
-
-
 @app.get("/api/logs")
 async def api_logs():
     entries = []
@@ -2263,7 +2269,7 @@ async def api_agent_manifest():
     return JSONResponse({
         "id":          "semeclaw-war-room",
         "name":        "SemeClaw War Room",
-        "version":     "0.7.0",
+        "version":     APP_VERSION,
         "tenant":      SEMECLAW_TENANT_ID,
         "public_url":  SEMECLAW_PUBLIC_URL,
         "description": ("Cinematic AI agent meeting room. Converts any task report "

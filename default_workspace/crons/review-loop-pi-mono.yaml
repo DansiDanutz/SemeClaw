@@ -1,0 +1,19 @@
+id: review-loop-pi-mono
+schedule: 30 9 * * 1-5
+agent: seme
+description: Recurring repo review loop for /Users/davidai/pi-mono
+enabled: true
+prompt: "Run the repository review loop for /Users/davidai/pi-mono.\n\n0. Call get_skill\
+  \ with skill_id=repo-review-loop and follow it.\n1. Call pi_company_status for this\
+  \ repo path to confirm pi-company is configured.\n2. Call github_pr_review_bundle\
+  \ for this repo path.\n   - If there is an open PR, use the PR bundle.\n   - If\
+  \ there is no open PR, the tool will fall back to a local diff review bundle.\n\
+  3. Read the bundle file that was created.\n4. Produce a short review with findings\
+  \ first, focused on correctness, regressions, missing tests, rollout risk, and ownership\
+  \ gaps.\n5. Save a short operational summary with memory_save under axis=projects\
+  \ and key matching the repo name plus '-review-loop'.\n6. In that summary include:\n\
+  \   - whether this was a PR review bundle or a local diff bundle\n   - the bundle\
+  \ file path\n   - the concrete findings, or say 'no major findings'\n   - the highest-risk\
+  \ areas to inspect next\n7. If there are meaningful risks or blockers, send a concise\
+  \ telegram_notify message with the repo, bundle path, and top findings.\n8. Return\
+  \ a concise summary of what bundle was created, where it lives, and the top findings."

@@ -213,7 +213,7 @@ Agents arranged in a 360° ring. The center **LIVE SPEAKER card** morphs in real
 
 | Layer | Tech |
 |-------|------|
-| Runtime | Python 3.13 + uvicorn |
+| Runtime | Python 3.10+ minimum, 3.13 recommended + uvicorn |
 | Web framework | FastAPI |
 | Frontend | Vanilla HTML + JS (no build step) |
 | Voice TTS | ElevenLabs Flash v2.5 → edge-tts fallback |

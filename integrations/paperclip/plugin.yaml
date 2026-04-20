@@ -1,0 +1,4 @@
+id: paperclip
+name: Paperclip
+description: Paperclip adapter and integration surface.
+version: 0.1.0

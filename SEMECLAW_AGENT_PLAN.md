@@ -83,7 +83,7 @@ Today SemeClaw runs as Dan's personal fleet brain on Mac Studio. The war-room da
 - [x] Write `INTEGRATION.md` guide for consumers
 
 ### Phase 2 — Deployability (next)
-- [ ] `Dockerfile` multi-stage build (Python 3.13 + uvicorn)
+- [ ] `Dockerfile` multi-stage build (Python 3.13 recommended for deploy parity; 3.10+ minimum)
 - [ ] `docker-compose.yml` with optional Chroma + Redis
 - [ ] GitHub Actions CI (lint + build)
 - [ ] `.env.example` documenting every env var

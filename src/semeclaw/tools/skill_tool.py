@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from semeclaw.core.plugin_loader import PluginLoader
 from semeclaw.tools.base import BaseTool
 from semeclaw.core.skill_loader import SkillLoader
 
@@ -20,7 +21,8 @@ def create_skill_tool(config: "Config") -> BaseTool:
     Returns:
         BaseTool instance for skill access
     """
-    skill_loader = SkillLoader(config.skills_path)
+    plugin_loader = PluginLoader.from_workspace(config.workspace)
+    skill_loader = SkillLoader(config.skills_path, extra_skill_paths=plugin_loader.skill_paths())
     skills = skill_loader.discover_definitions()
 
     # Build enum of available skill IDs

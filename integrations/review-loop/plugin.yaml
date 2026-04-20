@@ -1,0 +1,7 @@
+id: review-loop
+name: Review Loop
+description: Scheduled repository review loop installation and workflow skill.
+version: 0.1.0
+tool_factory: semeclaw.tools.review_loop_tools:create_review_loop_tools
+skill_paths:
+  - ../../default_workspace/skills

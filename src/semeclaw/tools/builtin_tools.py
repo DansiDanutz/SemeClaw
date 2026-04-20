@@ -1,5 +1,6 @@
 """Built-in tools for SemeClaw."""
 
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -72,26 +73,43 @@ def edit_file(path: str, old_text: str, new_text: str) -> str:
 
 @tool
 def bash(command: str) -> str:
-    """Execute a shell command and return output.
+    """Execute a simple command safely and return output.
 
     Args:
-        command: Shell command to execute
+        command: Command to execute. Shell operators like ;, |, &&, > are rejected.
 
     Returns:
         Command stdout and stderr combined
     """
+    if any(token in command for token in ("\n", "\r", "&&", "||", ";", "|", ">", "<", "`", "$()")):
+        return (
+            "Error: unsafe shell syntax detected. "
+            "Use a single command with explicit arguments instead of shell operators."
+        )
+
+    try:
+        argv = shlex.split(command)
+    except ValueError as e:
+        return f"Error parsing command: {e}"
+
+    if not argv:
+        return "Error: Command is empty"
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            argv,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         output = result.stdout + result.stderr
         return output if output else "(no output)"
     except subprocess.TimeoutExpired:
         return "Error: Command timed out after 30 seconds"
+    except FileNotFoundError:
+        return f"Error: Command not found: {argv[0]}"
     except Exception as e:
         return f"Error executing command: {e}"
 

@@ -22,6 +22,25 @@ class LLMConfig(BaseModel):
     api_base: str | None = None
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, gt=0)
+    fallbacks: list["LLMFallbackConfig"] = Field(default_factory=list)
+
+    @field_validator("api_base")
+    @classmethod
+    def api_base_must_be_url(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith(("http://", "https://")):
+            raise ValueError("api_base must be a valid URL")
+        return v
+
+
+class LLMFallbackConfig(BaseModel):
+    """Fallback LLM endpoint configuration."""
+
+    provider: str
+    model: str
+    api_key: str
+    api_base: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, gt=0)
 
     @field_validator("api_base")
     @classmethod
@@ -99,12 +118,22 @@ class Config(BaseModel):
 
         # Load user config and merge
         user_config_file = workspace_dir / "config.user.yaml"
+        base_config_file = workspace_dir / "config.yaml"
+
+        selected_file: Path | None = None
         if user_config_file.exists():
-            with open(user_config_file) as f:
-                user_config = yaml.safe_load(f) or {}
-            runtime_config = cls._deep_merge(runtime_config, user_config)
-        else:
-            raise FileNotFoundError(f"Config file not found: {user_config_file}")
+            selected_file = user_config_file
+        elif base_config_file.exists():
+            selected_file = base_config_file
+
+        if selected_file is None:
+            raise FileNotFoundError(
+                f"Config file not found: {user_config_file} or {base_config_file}"
+            )
+
+        with open(selected_file) as f:
+            user_config = yaml.safe_load(f) or {}
+        runtime_config = cls._deep_merge(runtime_config, user_config)
 
         return runtime_config
 

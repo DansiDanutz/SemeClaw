@@ -13,6 +13,7 @@ from litellm.types.completion import ChatCompletionMessageParam as Message
 from semeclaw.provider.llm import LLMProvider
 from semeclaw.core.session_state import SessionState
 from semeclaw.core.commands import CommandRegistry
+from semeclaw.core.plugin_loader import PluginLoader
 from semeclaw.tools import ToolRegistry
 
 if TYPE_CHECKING:
@@ -56,6 +57,10 @@ class Agent:
 
             skill_tool = create_skill_tool(self.config)
             registry.register(skill_tool)
+
+        plugin_loader = PluginLoader.from_workspace(self.config.workspace)
+        for plugin_tool in plugin_loader.create_tools(self.config):
+            registry.register(plugin_tool)
 
         return registry
 

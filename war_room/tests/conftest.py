@@ -1,8 +1,5 @@
-"""
-Test configuration for War Room tests.
-Sets up async event loop for pytest-asyncio.
-"""
-import pytest
+"""War Room test configuration.
 
-# Configure asyncio mode for all async tests
-pytest_plugins = ["pytest_asyncio"]
+pytest-asyncio is registered in the repo-root conftest.py so pytest 8+
+does not fail collection on nested pytest_plugins declarations.
+"""

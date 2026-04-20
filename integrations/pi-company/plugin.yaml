@@ -1,0 +1,5 @@
+id: pi-company
+name: Pi Company
+description: Repo bootstrap and company context integration for pi-company workflows.
+version: 0.1.0
+tool_factory: semeclaw.tools.pi_company_tools:create_pi_company_tools

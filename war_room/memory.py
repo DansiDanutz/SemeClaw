@@ -20,7 +20,7 @@ Usage:
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -69,7 +69,7 @@ class WarRoomMemory:
             "summary":  summary[:800],
             "run_id":   run_id,
             "file":     file,
-            "date":     datetime.utcnow().isoformat(),
+            "date":     datetime.now(timezone.utc).isoformat(),
         }
 
         entries = self._load_index()

@@ -232,7 +232,7 @@ class PaperclipBridge:
             "assignee":    assignee,
             "labels":      labels or [],
             "priority":    priority,
-            "status":      "todo",
+            "status":      "backlog",
             "acceptance_criteria": acceptance_criteria or [],
             "created_at":  now,
             "created_by":  "war_room",

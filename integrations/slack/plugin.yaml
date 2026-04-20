@@ -1,0 +1,4 @@
+id: slack
+name: Slack
+description: Slack integration surface for SemeClaw embedding and delivery.
+version: 0.1.0

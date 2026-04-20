@@ -26,11 +26,34 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Reject tracked runtime artifacts
+        run: |
+          forbidden=$(git ls-files \
+            'war_room/logs/*.log' \
+            'war_room/logs/*.jsonl' \
+            'war_room/audio/_test.mp3' \
+            'war_room/audio/meetings/*.mp3' \
+            'war_room/audio/meetings/saved/*.mp3' \
+            'war_room/audio/scripts/*.json' \
+            'war_room/memory/memory.json' \
+            'war_room/shared_state.json' \
+            'war_room/research/*.md' \
+            'war_room/builds')
+          forbidden=$(printf '%s\n' "$forbidden" | grep -v '^war_room/research/saved/' || true)
+          if [ -n "$forbidden" ]; then
+            echo 'Tracked runtime artifacts detected:'
+            printf '%s\n' "$forbidden"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: uv sync --frozen || uv sync
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run full pytest suite
+        run: uv run pytest -q
 
       - name: Smoke test — meeting_skill module
         run: |

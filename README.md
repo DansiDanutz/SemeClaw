@@ -6,7 +6,7 @@
 **Embed in any app. Own your AI operations.**
 
 [![Version](https://img.shields.io/badge/version-0.7.0-10b981.svg)](./pyproject.toml)
-[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B%20(min)%20%C2%B7%203.13%20(rec)-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-Proprietary-8b5cf6.svg)](#license)
 [![Agent](https://img.shields.io/badge/OpenClaw-Agent-f59e0b.svg)](https://github.com/czl9707/build-your-own-openclaw)
@@ -49,7 +49,7 @@ Every meeting includes a **host announcer**, a **conversational orchestrator**, 
 | 🪟 **iframe + JS SDK** | `/embed` + `/embed.js` — drop into Notion, CMS, NERVIX marketplace, anywhere |
 | 🔐 **Bearer auth on writes** | Reads stay open (so embeds work) · writes protected via `SEMECLAW_API_KEY` |
 | 🌐 **CORS + CSP configurable** | Allow-list origins + iframe parents via env |
-| 🐳 **Docker-ready** | Python 3.13 + uvicorn + ffmpeg + healthcheck |
+| 🐳 **Docker-ready** | Python 3.13 recommended for deploy parity (3.10+ minimum) + uvicorn + ffmpeg + healthcheck |
 | 📎 **Paperclip bridge** | Hook into Paperclip fleet ops today · first-class agent adapter coming in Phase 4 |
 | 🛡 **Sentinel** | Fleet health monitor — probes all droplets every 60s, fires Telegram alerts on CPU/RAM/disk thresholds. Runs on :18790 |
 | ⚡ **Coordinator** | 8-backend circuit-breaker LLM proxy on :8996. Auto-fails over across Claude / OpenRouter / Ollama / local models |
@@ -63,6 +63,10 @@ Every meeting includes a **host announcer**, a **conversational orchestrator**, 
 ## 🏃 Quickstart
 
 ### Local dev
+
+Requirements:
+- Python 3.10+ minimum
+- Python 3.13 recommended for parity with Docker/dev deploys
 
 ```bash
 git clone https://github.com/DansiDanutz/SemeClaw.git

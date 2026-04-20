@@ -1,8 +1,28 @@
 """Built-in command implementations."""
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from semeclaw.core.commands.base import Command
+from semeclaw.core.plugin_loader import PluginLoader
+from semeclaw.integrations.pi_company import (
+    bootstrap_repo,
+    format_bootstrap_result,
+    format_status,
+    get_status,
+)
+from semeclaw.integrations.review_loop import (
+    DEFAULT_REVIEW_LOOP_SCHEDULE,
+    format_review_loop_install,
+    install_review_loop,
+)
+from semeclaw.integrations.github_pr import (
+    format_local_review_bundle_result,
+    format_pr_status,
+    format_review_bundle_result,
+    get_pr_status,
+    write_review_bundle_or_local,
+)
 
 if TYPE_CHECKING:
     from semeclaw.core.agent import AgentSession
@@ -183,4 +203,127 @@ class ContextCommand(Command):
         else:
             lines.append("  Status: OK")
 
+        return "\n".join(lines)
+
+
+class PiCompanyCommand(Command):
+    """Inspect or bootstrap pi-company in a target repository."""
+
+    name = "/pi-company"
+    aliases = []
+    description = "Inspect or bootstrap pi-company in a repository"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        parts = args.split()
+        subcommand = parts[0] if parts else "status"
+        target = Path(parts[1]).expanduser() if len(parts) > 1 else session.agent.config.workspace
+
+        if subcommand == "status":
+            status = get_status(target_path=target, workspace=session.agent.config.workspace)
+            return format_status(status)
+
+        if subcommand == "bootstrap":
+            company_name = " ".join(parts[2:]).strip() or None
+            try:
+                result = bootstrap_repo(
+                    target_path=target,
+                    workspace=session.agent.config.workspace,
+                    company_name=company_name,
+                )
+            except Exception as exc:
+                return f"Error bootstrapping pi-company: {exc}"
+            return format_bootstrap_result(result)
+
+        return (
+            "Usage:\n"
+            "  /pi-company status [target_path]\n"
+            "  /pi-company bootstrap [target_path] [company_name]"
+        )
+
+
+class GitHubPrCommand(Command):
+    """Inspect or bundle a GitHub pull request with gh."""
+
+    name = "/github-pr"
+    aliases = ["/pr"]
+    description = "Inspect PR status or generate a local review bundle"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        parts = args.split()
+        subcommand = parts[0] if parts else "status"
+        repo_path = Path(parts[1]).expanduser() if len(parts) > 1 else session.agent.config.workspace
+        pr_ref = parts[2] if len(parts) > 2 else None
+
+        try:
+            if subcommand == "status":
+                return format_pr_status(get_pr_status(repo_path=repo_path, pr_ref=pr_ref))
+            if subcommand == "bundle":
+                bundle = write_review_bundle_or_local(repo_path=repo_path, pr_ref=pr_ref)
+                if hasattr(bundle, "status"):
+                    return format_review_bundle_result(bundle)
+                return format_local_review_bundle_result(bundle)
+        except Exception as exc:
+            return f"GitHub PR command failed: {exc}"
+
+        return (
+            "Usage:\n"
+            "  /github-pr status [repo_path] [pr_ref]\n"
+            "  /github-pr bundle [repo_path] [pr_ref]"
+        )
+
+
+class ReviewLoopCommand(Command):
+    """Install recurring review loops for repos."""
+
+    name = "/review-loop"
+    aliases = []
+    description = "Install a recurring review-loop cron for a repository"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        parts = args.split()
+        subcommand = parts[0] if parts else "install"
+
+        if subcommand != "install":
+            return (
+                "Usage:\n"
+                f"  /review-loop install [repo_path] [schedule]\n"
+                f"Default schedule: {DEFAULT_REVIEW_LOOP_SCHEDULE}"
+            )
+
+        repo_path = Path(parts[1]).expanduser() if len(parts) > 1 else session.agent.config.workspace
+        schedule = " ".join(parts[2:]).strip() or DEFAULT_REVIEW_LOOP_SCHEDULE
+
+        try:
+            result = install_review_loop(
+                workspace=session.agent.config.workspace,
+                repo_path=repo_path,
+                schedule=schedule,
+            )
+        except Exception as exc:
+            return f"Review loop install failed: {exc}"
+
+        return format_review_loop_install(result)
+
+
+class PluginsCommand(Command):
+    """List discovered plugins and their capabilities."""
+
+    name = "/plugins"
+    aliases = []
+    description = "List discovered SemeClaw plugins"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        loader = PluginLoader.from_workspace(session.agent.config.workspace)
+        plugins = loader.discover_plugins()
+        if not plugins:
+            return "No plugins discovered."
+
+        lines = [f"Plugins ({len(plugins)}):"]
+        for plugin in plugins:
+            tool_info = "tools" if plugin.tool_factory else "docs-only"
+            skill_count = len(plugin.skill_paths)
+            desc = f" - {plugin.description}" if plugin.description else ""
+            lines.append(
+                f"  - {plugin.id} ({plugin.name}, {tool_info}, skill_paths={skill_count}){desc}"
+            )
         return "\n".join(lines)

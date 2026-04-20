@@ -34,13 +34,14 @@ class SkillDef(BaseModel):
 class SkillLoader:
     """Loads skill definitions from SKILL.md files."""
 
-    def __init__(self, skills_path: Path) -> None:
+    def __init__(self, skills_path: Path, extra_skill_paths: list[Path] | None = None) -> None:
         """Initialize skill loader.
 
         Args:
             skills_path: Path to skills directory
         """
         self.skills_path = skills_path
+        self.extra_skill_paths = extra_skill_paths or []
 
     def discover_definitions(self) -> list[SkillDef]:
         """Discover all skill definitions from skills directory.
@@ -48,11 +49,15 @@ class SkillLoader:
         Returns:
             List of SkillDef instances
         """
-        return discover_definitions(
-            self.skills_path,
-            "SKILL.md",
-            self._parse_skill_def,
-        )
+        discovered: dict[str, SkillDef] = {}
+        for path in [self.skills_path, *self.extra_skill_paths]:
+            for skill in discover_definitions(
+                path,
+                "SKILL.md",
+                self._parse_skill_def,
+            ):
+                discovered.setdefault(skill.id, skill)
+        return list(discovered.values())
 
     def get(self, skill_id: str) -> SkillDef | None:
         """Get a skill by ID.
@@ -63,15 +68,17 @@ class SkillLoader:
         Returns:
             SkillDef or None if not found
         """
-        skill_file = self.skills_path / skill_id / "SKILL.md"
-        if not skill_file.exists():
-            return None
+        for base_path in [self.skills_path, *self.extra_skill_paths]:
+            skill_file = base_path / skill_id / "SKILL.md"
+            if not skill_file.exists():
+                continue
 
-        try:
-            content = skill_file.read_text()
-            return parse_definition(content, skill_id, self._parse_skill_def)
-        except Exception:
-            return None
+            try:
+                content = skill_file.read_text()
+                return parse_definition(content, skill_id, self._parse_skill_def)
+            except Exception:
+                return None
+        return None
 
     @staticmethod
     def _parse_skill_def(

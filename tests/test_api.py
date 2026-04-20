@@ -41,24 +41,28 @@ from fastapi.testclient import TestClient
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def open_client():
     """TestClient with no API key (open mode)."""
     original = srv.SEMECLAW_API_KEY
     srv.SEMECLAW_API_KEY = ""
-    with TestClient(srv.app, raise_server_exceptions=False) as c:
-        yield c
-    srv.SEMECLAW_API_KEY = original
+    try:
+        with TestClient(srv.app, raise_server_exceptions=False) as c:
+            yield c
+    finally:
+        srv.SEMECLAW_API_KEY = original
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def auth_client():
     """TestClient with API key enforced."""
     original = srv.SEMECLAW_API_KEY
     srv.SEMECLAW_API_KEY = _TEST_API_KEY
-    with TestClient(srv.app, raise_server_exceptions=False) as c:
-        yield c
-    srv.SEMECLAW_API_KEY = original
+    try:
+        with TestClient(srv.app, raise_server_exceptions=False) as c:
+            yield c
+    finally:
+        srv.SEMECLAW_API_KEY = original
 
 
 @pytest.fixture()
@@ -107,7 +111,7 @@ class TestHealth:
 
     def test_version_header_present(self, open_client):
         r = open_client.get("/api/agent/health")
-        assert r.headers.get("x-semeclaw-version") == "0.6.0"
+        assert r.headers.get("x-semeclaw-version") == srv.APP_VERSION
 
 
 class TestManifest:
@@ -123,6 +127,7 @@ class TestManifest:
         import re
         d = open_client.get("/api/agent/manifest").json()
         assert re.match(r"^\d+\.\d+\.\d+$", d["version"])
+        assert d["version"] == srv.APP_VERSION
 
     def test_manifest_capabilities_count(self, open_client):
         d = open_client.get("/api/agent/manifest").json()
@@ -156,7 +161,7 @@ class TestMetrics:
 
     def test_metrics_has_version_label(self, open_client):
         r = open_client.get("/metrics")
-        assert 'version="0.6.0"' in r.text
+        assert f'version="{srv.APP_VERSION}"' in r.text
 
 
 # ── Reports CRUD ──────────────────────────────────────────────────────────────
@@ -297,34 +302,48 @@ class TestAuth:
 class TestRateLimiting:
     """Verify the in-memory sliding-window rate limiter triggers 429.
 
-    We test using /api/meeting/script (cheap, no external calls) rather than
-    /api/tts (calls edge-tts, slow in CI). The limiter logic is identical for
-    all prefixes — the limit value is what differs.
+    We test using /api/meeting/script instead of /api/tts. To avoid the free-
+    tier server-side wait, the test temporarily enables a pro license key and
+    sends it on each request. That isolates the rate-limiter behavior itself.
     """
+
+    TEST_PRO_LICENSE = "test-pro-license"
 
     @pytest.fixture(autouse=True)
     def _reset_rate_windows(self):
         """Clear rate-limit windows before and after each test."""
+        original_keys = set(srv._PRO_KEYS)
         srv._RATE_WINDOWS.clear()
+        srv._PRO_KEYS = {self.TEST_PRO_LICENSE}
         yield
         srv._RATE_WINDOWS.clear()
+        srv._PRO_KEYS = original_keys
 
     def _script_limit(self):
         return srv._RATE_LIMIT_BY_PREFIX.get("/api/meeting/script", 30)
+
+    def _script_headers(self):
+        return {"x-semeclaw-license": self.TEST_PRO_LICENSE}
 
     def test_script_rate_limit_triggers_429(self, open_client, report_name):
         """Exceed the /api/meeting/script limit — must get at least one 429."""
         limit = self._script_limit()
         statuses = []
         for _ in range(limit + 3):
-            r = open_client.get(f"/api/meeting/script?name={report_name}")
+            r = open_client.get(
+                f"/api/meeting/script?name={report_name}",
+                headers=self._script_headers(),
+            )
             statuses.append(r.status_code)
         assert 429 in statuses, f"Expected 429 after {limit} requests; got: {set(statuses)}"
 
     def test_429_has_retry_after_header(self, open_client, report_name):
         limit = self._script_limit()
         for _ in range(limit + 3):
-            r = open_client.get(f"/api/meeting/script?name={report_name}")
+            r = open_client.get(
+                f"/api/meeting/script?name={report_name}",
+                headers=self._script_headers(),
+            )
             if r.status_code == 429:
                 assert "retry-after" in r.headers
                 return
@@ -333,7 +352,10 @@ class TestRateLimiting:
     def test_429_body_has_error_key(self, open_client, report_name):
         limit = self._script_limit()
         for _ in range(limit + 3):
-            r = open_client.get(f"/api/meeting/script?name={report_name}")
+            r = open_client.get(
+                f"/api/meeting/script?name={report_name}",
+                headers=self._script_headers(),
+            )
             if r.status_code == 429:
                 assert r.json()["error"] == "rate_limit_exceeded"
                 return
