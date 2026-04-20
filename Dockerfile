@@ -49,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Ensure the semeclaw CLI is available
 RUN uv pip install -e .
 
-CMD ["uv", "run", "python", "-m", "uvicorn", "war_room.dashboard.server:app", "--host", "0.0.0.0", "--port", "8765"]
+CMD [".venv/bin/python", "-m", "uvicorn", "war_room.dashboard.server:app", "--host", "0.0.0.0", "--port", "8765"]
