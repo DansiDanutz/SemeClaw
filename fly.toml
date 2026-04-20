@@ -60,7 +60,7 @@ primary_region = "iad"            # change to your nearest region
 
 [[mounts]]
   source      = "semeclaw_data"
-  destination = "/app/war_room"
+  destination = "/app/data"
   # Persists meeting audio, reports, webhooks.json, shares.json, tenant data
 
 [deploy]

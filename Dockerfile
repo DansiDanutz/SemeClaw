@@ -36,6 +36,10 @@ RUN mkdir -p /app/war_room/audio/meetings/saved \
              /app/war_room/research/saved \
              /app/war_room/logs
 
+# Symlink data directories to mounted volume so source code in /app/war_room
+# is not overwritten by the Fly.io volume mount
+RUN printf '#!/bin/sh\nmkdir -p /app/data/audio/meetings/saved /app/data/audio/scripts /app/data/research/saved /app/data/logs /app/data/memory /app/data/builds\nln -sf /app/data/audio /app/war_room/audio 2>/dev/null || true\nln -sf /app/data/research /app/war_room/research 2>/dev/null || true\nln -sf /app/data/logs /app/war_room/logs 2>/dev/null || true\nln -sf /app/data/memory /app/war_room/memory 2>/dev/null || true\nln -sf /app/data/builds /app/war_room/builds 2>/dev/null || true\nexec \"$@\"\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     SEMECLAW_PUBLIC_URL=http://0.0.0.0:8765 \
@@ -49,4 +53,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Ensure the semeclaw CLI is available
 RUN uv pip install -e .
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD [".venv/bin/python", "-m", "uvicorn", "war_room.dashboard.server:app", "--host", "0.0.0.0", "--port", "8765"]
