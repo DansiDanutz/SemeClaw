@@ -89,6 +89,8 @@ class Config(BaseModel):
     websearch: WebSearchConfig | None = None
     webread: WebReadConfig | None = None
     channels: ChannelsConfig | None = None
+    supabase_url: str | None = None
+    supabase_key: str | None = None
 
     @model_validator(mode="after")
     def resolve_paths(self) -> "Config":

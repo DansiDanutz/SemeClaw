@@ -21,11 +21,15 @@ primary_region = "iad"            # change to your nearest region
   SEMECLAW_CORS_ORIGINS   = "*"
   SEMECLAW_FRAME_ANCESTORS = "*"
   SEMECLAW_TENANT_ID      = "default"
+  WAR_ROOM_DIR            = "/app/war_room"
 
 # Secrets (set via `fly secrets set ...`):
-#   ELEVENLABS_API_KEY
-#   OPENROUTER_API_KEY
-#   SEMECLAW_API_KEY
+#   ANTHROPIC_API_KEY   — primary LLM (Claude)
+#   OPENROUTER_API_KEY  — fallback LLM
+#   SEMECLAW_API_KEY    — server auth (optional)
+#   SUPABASE_URL        — data persistence
+#   SUPABASE_KEY        — Supabase service key
+#   TELEGRAM_BOT_TOKEN  — Telegram channel (optional)
 
 [[services]]
   protocol = "tcp"
@@ -69,4 +73,4 @@ primary_region = "iad"            # change to your nearest region
 [[vm]]
   cpu_kind = "shared"
   cpus     = 1
-  memory   = "512mb"
+  memory   = "256mb"
