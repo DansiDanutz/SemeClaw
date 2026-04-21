@@ -54,6 +54,11 @@ header::before{
   background:linear-gradient(90deg,transparent 0%,var(--amber) 25%,var(--cyan) 55%,var(--violet) 82%,transparent 100%);
   background-size:300% 100%;animation:scan 8s linear infinite;
 }
+header::after{
+  content:'';position:absolute;top:100%;left:0;right:0;height:60px;pointer-events:none;
+  background:radial-gradient(ellipse 40% 100% at 30% 0%,rgba(245,158,11,.04) 0%,transparent 60%),
+             radial-gradient(ellipse 35% 100% at 75% 0%,rgba(139,92,246,.03) 0%,transparent 60%);
+}
 @keyframes scan{0%{background-position:100% 0}100%{background-position:-200% 0}}
 .hdr-brand{display:flex;align-items:center;gap:10px}
 .hdr-icon{
@@ -245,7 +250,8 @@ header::before{
 .main.meeting-full{filter:blur(4px);opacity:.3;pointer-events:none}
 
 /* ══ CARDS ══ */
-.card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;animation:fade-up .5s var(--ease-out) both;box-shadow:0 6px 30px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.028);position:relative}
+.card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;animation:fade-up .5s var(--ease-out) both;box-shadow:0 6px 30px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.028);position:relative;transition:transform .25s var(--ease-out),box-shadow .25s ease,border-color .25s ease}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04);border-color:var(--border-2)}
 .main>.card{flex-shrink:0;overflow:visible}
 /* Per-card colored top edge */
 .card:nth-child(1)::before{background:linear-gradient(90deg,var(--amber) 0%,rgba(245,158,11,.1) 60%,transparent)}
@@ -1399,6 +1405,182 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .tm-gen-upgrade-btn:hover{background:rgba(34,211,238,.08);}
 .tm-gen-upgrade-link{color:rgba(245,158,11,.55);font-size:9.5px;font-family:var(--mono);text-decoration:none;}
 .tm-gen-upgrade-link:hover{color:var(--amber);}
+
+/* ══════════════════════════════════════════════════════════════
+   SPONSORED SPOTLIGHT — Cinematic Ad Card (pre-meeting)
+   Appears during team assembly, auto-rotates 2-3 slides.
+   Liquid Glass + Cinema Mobile Dark style.
+══════════════════════════════════════════════════════════════ */
+.tm-spotlight{
+  position:absolute;inset:0;z-index:12;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 40%,#0c1020 0%,#010308 70%);
+  padding:20px;gap:0;
+}
+.tm-spotlight.visible{display:flex}
+.tm-spotlight.entering{animation:spotlight-in .6s cubic-bezier(0.16,1,0.3,1) both}
+.tm-spotlight.exiting{animation:spotlight-out .4s cubic-bezier(0.7,0,0.84,0) forwards}
+@keyframes spotlight-in{from{opacity:0;transform:translateY(30px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes spotlight-out{to{opacity:0;transform:translateY(20px) scale(.97)}}
+
+/* Close button */
+.tm-spotlight-close{
+  position:absolute;top:14px;right:16px;z-index:5;
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  color:var(--text-3);font-size:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.tm-spotlight-close:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3);color:var(--red)}
+
+/* Header row: badge + credits */
+.tm-spotlight-header{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-bottom:16px;z-index:2;
+}
+.tm-spotlight-badge{
+  font-size:8px;font-family:var(--mono);font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;
+  padding:3px 10px;border-radius:20px;
+  background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:var(--amber);
+}
+.tm-spotlight-credits{
+  font-size:8px;font-family:var(--mono);color:var(--text-3);letter-spacing:.5px;
+}
+.tm-spotlight-credits b{color:var(--cyan);font-weight:600}
+
+/* Glass card container */
+.tm-spotlight-card{
+  position:relative;z-index:1;
+  width:min(520px,88vw);
+  background:rgba(12,18,42,.65);
+  backdrop-filter:blur(28px) saturate(1.4);
+  -webkit-backdrop-filter:blur(28px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;
+  box-shadow:
+    0 24px 80px rgba(0,0,0,.6),
+    0 0 0 1px rgba(255,255,255,.04) inset,
+    0 1px 0 rgba(255,255,255,.06) inset;
+  overflow:hidden;
+}
+/* Gradient top border */
+.tm-spotlight-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;z-index:3;
+  background:linear-gradient(90deg,transparent 5%,var(--amber) 30%,var(--violet) 70%,transparent 95%);
+  opacity:.7;
+}
+/* Ambient glow behind card */
+.tm-spotlight-card::after{
+  content:'';position:absolute;top:-40%;left:-20%;right:-20%;bottom:-40%;z-index:-1;
+  background:radial-gradient(ellipse at 50% 50%,rgba(245,158,11,.06) 0%,transparent 55%);
+  pointer-events:none;
+}
+
+/* Subject line */
+.tm-spotlight-subject{
+  padding:18px 22px 0;
+  font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.2px;line-height:1.3;
+}
+
+/* Slides container */
+.tm-spotlight-slides{
+  position:relative;width:100%;aspect-ratio:16/8;
+  margin-top:10px;overflow:hidden;
+}
+.tm-spotlight-slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:14px 22px;text-align:center;
+  opacity:0;transition:opacity .5s ease;
+  pointer-events:none;
+}
+.tm-spotlight-slide.active{opacity:1;pointer-events:auto}
+
+/* Slide inner elements */
+.tm-spotlight-slide-icon{font-size:28px;margin-bottom:6px;filter:drop-shadow(0 0 12px rgba(245,158,11,.2))}
+.tm-spotlight-slide-title{font-size:16px;font-weight:700;color:#fff;line-height:1.25;margin-bottom:4px}
+.tm-spotlight-slide-body{font-size:11px;color:rgba(255,255,255,.45);line-height:1.55;max-width:380px}
+.tm-spotlight-slide-url{
+  font-size:9px;font-family:var(--mono);color:var(--cyan);opacity:.6;
+  margin-top:6px;letter-spacing:.3px;
+}
+
+/* Slide dots */
+.tm-spotlight-dots{display:flex;gap:5px;justify-content:center;padding:8px 0 6px}
+.tm-spotlight-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:rgba(255,255,255,.15);transition:all .3s;
+}
+.tm-spotlight-dot.active{background:var(--amber);transform:scale(1.4);box-shadow:0 0 6px rgba(245,158,11,.35)}
+
+/* Progress bar */
+.tm-spotlight-bar{
+  height:2px;background:rgba(255,255,255,.04);margin:0 22px 14px;border-radius:2px;overflow:hidden;
+}
+.tm-spotlight-bar-fill{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,transparent,var(--cyan));
+  border-radius:2px;
+  transition:width 3s linear;
+}
+.tm-spotlight-bar-fill.running{width:100%}
+
+/* Description */
+.tm-spotlight-desc{
+  padding:0 22px 16px;
+  font-size:10px;font-family:var(--mono);color:var(--text-3);
+  line-height:1.5;letter-spacing:.2px;
+  border-top:1px solid rgba(255,255,255,.04);
+  padding-top:12px;
+}
+
+/* Agent assembly status below card */
+.tm-spotlight-status{
+  margin-top:18px;display:flex;align-items:center;gap:8px;z-index:2;
+}
+.tm-spotlight-status-orb{
+  width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:11px;
+  opacity:.5;animation:orb-breathe 1.9s ease-in-out infinite;
+}
+.tm-spotlight-status-orb:nth-child(2){animation-delay:.15s}
+.tm-spotlight-status-orb:nth-child(3){animation-delay:.3s}
+.tm-spotlight-status-orb:nth-child(4){animation-delay:.45s}
+.tm-spotlight-status-orb:nth-child(5){animation-delay:.6s}
+.tm-spotlight-status-bar{
+  width:60px;height:1.5px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;
+}
+.tm-spotlight-status-bar-fill{
+  height:100%;width:40%;
+  background:linear-gradient(90deg,transparent,var(--amber),transparent);
+  animation:gen-scan 1.9s ease-in-out infinite;
+}
+.tm-spotlight-status-text{
+  font-size:8px;font-family:var(--mono);color:rgba(255,255,255,.2);
+  letter-spacing:1.5px;text-transform:uppercase;
+}
+
+/* Layout-specific overrides */
+.tm-stage.v2-layout .tm-spotlight{
+  position:absolute;inset:0;z-index:12;
+}
+.tm-stage.theater-layout .tm-spotlight{
+  position:absolute;inset:0;z-index:12;
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+  .tm-spotlight.entering{animation:none;opacity:1}
+  .tm-spotlight.exiting{animation:none;display:none}
+  .tm-spotlight-slide{transition:none}
+  .tm-spotlight-bar-fill{transition:none}
+  .tm-spotlight-status-orb{animation:none}
+  .card{transition:none!important;animation:none!important}
+  .card:hover{transform:none!important}
+  @keyframes scan{0%,100%{background-position:0 0}}
+}
 </style>
 </head>
 <body>
@@ -1607,6 +1789,29 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
       <div class="tm-roster" id="tm-roster">
         <span class="tm-room-title">The Room</span>
         <button class="tm-to-v2-btn" onclick="if(!_tmV2Enabled)toggleTMLayout()" title="Switch to cinematic v2 layout">🎭 Switch to V2 Room →</button>
+      </div>
+      <!-- Sponsored Spotlight — appears during team assembly -->
+      <div class="tm-spotlight" id="tm-spotlight">
+        <button class="tm-spotlight-close" onclick="dismissSpotlight()">&#x2715;</button>
+        <div class="tm-spotlight-header">
+          <span class="tm-spotlight-badge">Sponsored</span>
+          <span class="tm-spotlight-credits"><b>1</b> credit / view</span>
+        </div>
+        <div class="tm-spotlight-card">
+          <div class="tm-spotlight-subject" id="tm-spotlight-subject"></div>
+          <div class="tm-spotlight-slides" id="tm-spotlight-slides"></div>
+          <div class="tm-spotlight-dots" id="tm-spotlight-dots"></div>
+          <div class="tm-spotlight-bar"><div class="tm-spotlight-bar-fill" id="tm-spotlight-bar-fill"></div></div>
+          <div class="tm-spotlight-desc" id="tm-spotlight-desc"></div>
+        </div>
+        <div class="tm-spotlight-status" id="tm-spotlight-status">
+          <div class="tm-spotlight-status-orb" style="background:rgba(245,158,11,.12);color:#f59e0b">&#x1F9E0;</div>
+          <div class="tm-spotlight-status-orb" style="background:rgba(34,211,238,.10);color:#22d3ee">&#x1F50D;</div>
+          <div class="tm-spotlight-status-orb" style="background:rgba(139,92,246,.10);color:#8b5cf6">&#x2699;&#xFE0F;</div>
+          <div class="tm-spotlight-status-orb" style="background:rgba(16,185,129,.10);color:#10b981">&#x1F4A1;</div>
+          <div class="tm-spotlight-status-bar"><div class="tm-spotlight-status-bar-fill"></div></div>
+          <span class="tm-spotlight-status-text">Assembling team</span>
+        </div>
       </div>
       <div id="tm-dialogue-col">
         <div class="tm-wave" id="tm-wave">
@@ -4450,8 +4655,11 @@ function _tmShowLoading(agents) {
   const el = _tmBuildLoadingShell(agents);
   stage.prepend(el);
 
+  // Show Sponsored Spotlight alongside loading screen
+  _fetchAndShowSpotlight();
+
   // Fetch slides async — show placeholder first, slides when ready
-  const headers = {}; const k = _scGetLicense(); if (k) headers['X-SemeClaw-License'] = k;
+  const headers = {}; const k = _scGetLicense(); if (k) headers['X-Semeclaw-License'] = k;
   fetch('/api/meeting/loading-slides', {headers}).then(r=>r.ok?r.json():null).then(data => {
     if (!data || !document.getElementById('tm-generating')) return;
     _tmSlideWatchToken = data.token || null;
@@ -4473,6 +4681,7 @@ function _tmShowLoading(agents) {
 
 function _tmHideLoading() {
   clearInterval(_tmGenSlideTimer);
+  dismissSpotlight();
   const el = document.getElementById('tm-generating');
   if (!el) return;
   el.classList.add('hiding');
@@ -4486,6 +4695,144 @@ function _scShowLicensePrompt() {
   _scSetLicense(key);
   if (key.trim()) { _tmHideLoading(); toast('Pro key saved — restarting…'); setTimeout(() => window.location.reload(), 800); }
 }
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Sponsored Spotlight — Ad Card During Team Assembly ── */
+let _spotlightTimer = null;
+let _spotlightSlideIdx = 0;
+let _spotlightSlides = [];
+let _spotlightAdId = null;
+
+function showSpotlight(adData) {
+  const el = document.getElementById('tm-spotlight');
+  if (!el || !adData) return;
+
+  _spotlightAdId = adData.ad_id || null;
+  _spotlightSlides = adData.slides || [];
+  _spotlightSlideIdx = 0;
+
+  const subject = document.getElementById('tm-spotlight-subject');
+  const desc = document.getElementById('tm-spotlight-desc');
+  if (subject) subject.textContent = adData.subject || adData.headline || 'Featured Project';
+  if (desc) desc.textContent = adData.description || adData.tagline || '';
+
+  // Build slides
+  const slidesEl = document.getElementById('tm-spotlight-slides');
+  const dotsEl = document.getElementById('tm-spotlight-dots');
+  if (slidesEl) {
+    if (!_spotlightSlides.length) {
+      // Fallback placeholder slide
+      slidesEl.innerHTML = '<div class="tm-spotlight-slide active">' +
+        '<div class="tm-spotlight-slide-icon">&#x1F680;</div>' +
+        '<div class="tm-spotlight-slide-title">Your project could be here</div>' +
+        '<div class="tm-spotlight-slide-body">Submit your repo and reach thousands of AI teams</div>' +
+        '<div class="tm-spotlight-slide-url">semeclaw.fly.dev/advertise</div>' +
+        '</div>';
+      if (dotsEl) dotsEl.innerHTML = '';
+    } else {
+      slidesEl.innerHTML = _spotlightSlides.map((s, i) => {
+        const accent = (s.type === 'cta') ? '#22d3ee' : '#f59e0b';
+        return '<div class="tm-spotlight-slide' + (i === 0 ? ' active' : '') + '">' +
+          (s.icon ? '<div class="tm-spotlight-slide-icon">' + s.icon + '</div>' : '') +
+          (s.headline ? '<div class="tm-spotlight-slide-title">' + s.headline + '</div>' : '') +
+          (s.body ? '<div class="tm-spotlight-slide-body">' + s.body + '</div>' : '') +
+          (s.url ? '<div class="tm-spotlight-slide-url">' + s.url + '</div>' : '') +
+          '</div>';
+      }).join('');
+      if (dotsEl) {
+        dotsEl.innerHTML = _spotlightSlides.map((_, i) =>
+          '<div class="tm-spotlight-dot' + (i === 0 ? ' active' : '') + '"></div>'
+        ).join('');
+      }
+    }
+  }
+
+  // Show with animation
+  el.classList.add('visible', 'entering');
+  el.classList.remove('exiting');
+  setTimeout(() => el.classList.remove('entering'), 600);
+
+  // Start slide rotation
+  clearInterval(_spotlightTimer);
+  _spotlightTimer = setInterval(_spotlightAdvanceSlide, 3500);
+
+  // Log impression (fire-and-forget)
+  if (_spotlightAdId) {
+    fetch('/api/spotlight/impression', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ad_id: _spotlightAdId, slide_count: _spotlightSlides.length })
+    }).catch(() => {});
+  }
+}
+
+function dismissSpotlight() {
+  const el = document.getElementById('tm-spotlight');
+  if (!el) return;
+  clearInterval(_spotlightTimer);
+  el.classList.add('exiting');
+  setTimeout(() => {
+    el.classList.remove('visible', 'exiting');
+  }, 400);
+}
+
+function _spotlightAdvanceSlide() {
+  if (!_spotlightSlides.length) return;
+  _spotlightSlideIdx = (_spotlightSlideIdx + 1) % _spotlightSlides.length;
+
+  const slidesEl = document.getElementById('tm-spotlight-slides');
+  const dotsEl = document.getElementById('tm-spotlight-dots');
+  if (slidesEl) {
+    const slides = slidesEl.querySelectorAll('.tm-spotlight-slide');
+    slides.forEach((s, i) => s.classList.toggle('active', i === _spotlightSlideIdx));
+  }
+  if (dotsEl) {
+    const dots = dotsEl.querySelectorAll('.tm-spotlight-dot');
+    dots.forEach((d, i) => d.classList.toggle('active', i === _spotlightSlideIdx));
+  }
+
+  // Progress bar restart
+  const fill = document.getElementById('tm-spotlight-bar-fill');
+  if (fill) {
+    fill.classList.remove('running');
+    void fill.offsetWidth; // force reflow
+    fill.classList.add('running');
+  }
+}
+
+function _fetchAndShowSpotlight() {
+  const headers = {};
+  const k = _scGetLicense();
+  if (k) headers['X-SemeClaw-License'] = k;
+  fetch('/api/meeting/loading-slides', { headers })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data) return;
+      // Transform loading-slides format into spotlight format
+      const adData = {
+        ad_id: data.ad_id || data.token || null,
+        subject: data.subject || data.headline || 'Featured',
+        description: data.description || '',
+        slides: (data.slides || []).map(s => ({
+          icon: _SPOTLIGHT_ICONS[s.type] || '&#x1F4A1;',
+          headline: s.headline || '',
+          body: s.body || '',
+          url: s.url || s.cta_url || ''
+        }))
+      };
+      showSpotlight(adData);
+    })
+    .catch(() => {});
+}
+
+const _SPOTLIGHT_ICONS = {
+  product: '&#x1F680;',
+  feature: '&#x26A1;',
+  social: '&#x1F4AC;',
+  cta: '&#x1F449;',
+  sponsor: '&#x2B50;',
+  default: '&#x1F4A1;'
+};
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function tmAgentJoin(name) {

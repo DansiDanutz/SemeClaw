@@ -402,6 +402,7 @@ _PROTECTED_WRITE_PATHS = (
     "/api/meeting/pin", "/api/meeting/unpin",
     "/api/meeting/finalize", "/api/meeting/replan",
     "/api/meeting/redirect",
+    "/api/spotlight/impression",
     "/api/reports/delete",
     "/api/webhooks",
     "/api/reports",
@@ -1947,6 +1948,40 @@ async def api_meeting_loading_slides(request: Request):
         "slides": slides,
         "token": token,
     })
+
+
+@app.post("/api/spotlight/impression")
+async def api_spotlight_impression(request: Request):
+    """Log a Sponsored Spotlight impression for billing (1 credit = 1 view).
+    Proxies to AdClaw if SEMECLAW_ADS_URL configured, else local logging."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    ad_id = body.get("ad_id", "unknown")
+    slide_count = body.get("slide_count", 0)
+    ip = ((request.headers.get("x-forwarded-for") or "") or
+          (request.client.host if request.client else "unknown")).split(",")[0].strip()
+
+    if SEMECLAW_ADS_URL:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as _c:
+                await _c.post(
+                    f"{SEMECLAW_ADS_URL}/api/impressions/log",
+                    json={
+                        "ad_id": ad_id,
+                        "instance_id": SEMECLAW_INSTANCE_ID,
+                        "ip_hash": _hash_ip(ip),
+                        "slide_count": slide_count,
+                    },
+                )
+        except Exception as _e:
+            logger.warning("AdClaw impression proxy failed (non-fatal): %s", _e)
+    else:
+        logger.info("Spotlight impression: ad=%s slides=%s ip_hash=%s", ad_id, slide_count, _hash_ip(ip))
+
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/meeting/script")
