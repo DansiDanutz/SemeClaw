@@ -113,7 +113,7 @@ async def api_advertiser_projects(advertiser_id: str):
         rows = await _supa(
             "get",
             f"adclaw_projects?advertiser_id=eq.{advertiser_id}"
-            "&select=id,name,github_url,description,ad_goal,target_audience,created_at"
+            "&select=id,name,github_url,webpage_url,description,ad_goal,target_audience,created_at"
             "&order=created_at.desc",
         )
         return JSONResponse(rows)
@@ -134,6 +134,7 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
             "advertiser_id": advertiser_id,
             "name": name,
             "github_url": (body.get("github_url") or "").strip(),
+            "webpage_url": (body.get("webpage_url") or "").strip(),
             "description": (body.get("description") or "").strip(),
             "ad_goal": (body.get("ad_goal") or "").strip(),
             "target_audience": (body.get("target_audience") or "").strip(),
@@ -189,6 +190,7 @@ def _compose_draft(project: dict) -> dict:
     goal = (project.get("ad_goal") or "").strip()
     audience = (project.get("target_audience") or "").strip()
     url = project.get("github_url") or ""
+    webpage = project.get("webpage_url") or ""
 
     headline = goal or f"Meet {name}"
     hook = f"Looking for what *{name}* does?"
@@ -206,7 +208,7 @@ def _compose_draft(project: dict) -> dict:
         "badge": "Featured",
         "body": body,
         "cta_label": "Learn more",
-        "cta_url": url or "#",
+        "cta_url": webpage or url or "#",
         "accent_color": "#f59e0b",
         "hook": hook,
         "hook_highlight": name,

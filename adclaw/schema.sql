@@ -23,6 +23,7 @@ create table if not exists adclaw_projects (
   advertiser_id   uuid not null references adclaw_advertisers(id) on delete cascade,
   name            text not null,
   github_url      text,
+  webpage_url     text,
   description     text,
   ad_goal         text,
   target_audience text,
