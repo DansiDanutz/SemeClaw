@@ -58,13 +58,13 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
     """NERVIX landing page."""
-    return templates.TemplateResponse("landing.html", {"request": request, "stripe_key": get_publishable_key()})
+    return templates.TemplateResponse(request, "landing.html", {"stripe_key": get_publishable_key()})
 
 
 @app.get("/signup", response_class=HTMLResponse)
 async def signup_page(request: Request):
     """Member sign-up page."""
-    return templates.TemplateResponse("signup.html", {"request": request})
+    return templates.TemplateResponse(request, "signup.html", {})
 
 
 @app.post("/api/members")
@@ -102,9 +102,9 @@ async def dashboard(request: Request, member_id: str):
     )
 
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "stats": stats,
             "stripe_key": get_publishable_key(),
         },
