@@ -94,3 +94,6 @@ coordinator/*.log
 
 # UPGRADE notes (internal)
 UPGRADE_PLAN.md
+
+# Wrangler cache and config
+.wrangler/
