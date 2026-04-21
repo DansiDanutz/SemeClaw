@@ -16,6 +16,20 @@ create table if not exists adclaw_advertisers (
 );
 
 -- -----------------------------------------------------------------------
+-- Projects (advertiser inputs for card generation)
+-- -----------------------------------------------------------------------
+create table if not exists adclaw_projects (
+  id              uuid primary key default gen_random_uuid(),
+  advertiser_id   uuid not null references adclaw_advertisers(id) on delete cascade,
+  name            text not null,
+  github_url      text,
+  description     text,
+  ad_goal         text,
+  target_audience text,
+  created_at      timestamptz not null default now()
+);
+
+-- -----------------------------------------------------------------------
 -- Campaigns
 -- -----------------------------------------------------------------------
 create table if not exists adclaw_campaigns (
@@ -135,3 +149,9 @@ begin
   end if;
 end;
 $$;
+
+-- -----------------------------------------------------------------------
+-- Slide edit tracking (added 2026-04-21)
+-- -----------------------------------------------------------------------
+alter table adclaw_slides add column if not exists edits_today integer not null default 0;
+alter table adclaw_slides add column if not exists last_edited_at timestamptz;

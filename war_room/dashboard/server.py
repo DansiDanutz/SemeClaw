@@ -237,7 +237,7 @@ if (static_dir / "agents.html").exists():
 try:
     from war_room.dashboard.routes import health, embed, agents, reports
     from war_room.dashboard.routes import meetings, webhooks, paperclip
-    from war_room.dashboard.routes import billing, alerts
+    from war_room.dashboard.routes import billing, alerts, advertiser
 
     app.include_router(health.router)
     app.include_router(embed.router)
@@ -248,6 +248,7 @@ try:
     app.include_router(paperclip.router)
     app.include_router(billing.router)
     app.include_router(alerts.router)
+    app.include_router(advertiser.router)
 except Exception as e:
     logger.warning("Router mount skipped (routes may be stubs): %s", e)
 

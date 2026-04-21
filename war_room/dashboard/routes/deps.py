@@ -150,6 +150,37 @@ MEETING_RETENTION_HOURS = 48
 REPORT_RETENTION_HOURS  = 48
 
 # ---------------------------------------------------------------------------
+# Supabase — shared credentials for all routers
+# ---------------------------------------------------------------------------
+def _load_supa_creds() -> tuple[str, str]:
+    url = os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip()
+    key = os.environ.get("DLS_TEAM_SUPABASE_SERVICE_KEY", "").strip()
+    if not url or not key:
+        fe = Path.home() / ".openclaw" / "fleet.env"
+        if fe.exists():
+            for line in fe.read_text().splitlines():
+                if "=" in line and not line.startswith("#"):
+                    k, _, v = line.partition("=")
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k.startswith("export "):
+                        k = k[7:].strip()
+                    if k == "DLS_TEAM_SUPABASE_URL" and not url:
+                        url = v
+                    elif k == "DLS_TEAM_SUPABASE_SERVICE_KEY" and not key:
+                        key = v
+    return url, key
+
+
+SUPA_URL, SUPA_KEY = _load_supa_creds()
+SUPA_HEADERS = {
+    "apikey": SUPA_KEY,
+    "Authorization": f"Bearer {SUPA_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+}
+
+# ---------------------------------------------------------------------------
 # TTS / voice maps
 # ---------------------------------------------------------------------------
 _ELEVEN_VOICES: dict[str, str] = {}

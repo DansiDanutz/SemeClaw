@@ -201,6 +201,9 @@ header::after{
 .qa-btn:hover{border-color:var(--amber);color:var(--amber);background:var(--amber-soft)}
 .qa-btn.alert{border-color:rgba(239,68,68,.3);color:var(--red)}
 .qa-btn.alert:hover{border-color:var(--red);background:var(--red-dim)}
+.qa-btn.ad-now{border-color:rgba(245,158,11,.5);color:var(--amber);background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(236,72,153,.08));box-shadow:0 0 12px rgba(245,158,11,.14),inset 0 1px 0 rgba(255,255,255,.06);position:relative}
+.qa-btn.ad-now::before{content:'';position:absolute;inset:-1px;border-radius:7px;background:linear-gradient(135deg,var(--amber),var(--pink));opacity:0;transition:opacity .2s;z-index:-1}
+.qa-btn.ad-now:hover{border-color:var(--amber);color:#fff;background:linear-gradient(135deg,rgba(245,158,11,.35),rgba(236,72,153,.25));box-shadow:0 0 22px rgba(245,158,11,.4)}
 /* ── Failure reason popover ── */
 .dot-popover{position:fixed;z-index:500;background:var(--surface-2);border:1px solid rgba(239,68,68,.5);border-radius:10px;padding:10px 14px;max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.7),0 0 0 1px rgba(239,68,68,.15);animation:pop-in .18s var(--ease-out);pointer-events:none}
 .dot-popover-label{font-size:8px;font-family:var(--mono);color:var(--red);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;font-weight:700}
@@ -1606,6 +1609,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
   <span class="hdr-clock" id="hdr-clock">—</span>
   <button class="qa-btn" onclick="runMorningBrief()" title="Generate morning brief for Dan">⚡ Brief</button>
   <button class="qa-btn alert" onclick="alertDan()" title="Send alert to Dan via Telegram">🚨 Alert</button>
+  <button class="qa-btn ad-now" onclick="window.open('https://ad-semeclaw.vercel.app/','_blank','noopener')" title="Open SemeClaw Advertiser Console">📢 Ad NOW</button>
   <span class="hdr-time" id="last-updated">—</span>
   <div class="sys-health" id="sys-health-badge" title="System health: avg agent success rate">⬡ <span id="sys-health-val">—</span></div>
   <div class="ws-pill connecting" id="ws-pill"><div class="ws-dot"></div><span id="ws-label">Connecting</span></div>
