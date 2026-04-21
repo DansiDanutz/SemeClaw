@@ -59,6 +59,18 @@ header::after{
   background:radial-gradient(ellipse 40% 100% at 30% 0%,rgba(245,158,11,.04) 0%,transparent 60%),
              radial-gradient(ellipse 35% 100% at 75% 0%,rgba(139,92,246,.03) 0%,transparent 60%);
 }
+.update-banner{
+  position:fixed;top:56px;left:0;right:0;z-index:48;
+  background:linear-gradient(90deg,var(--amber-dim),rgba(245,158,11,.08));
+  border-bottom:1px solid rgba(245,158,11,.35);
+  color:var(--amber);
+  font-family:var(--mono);font-size:11px;letter-spacing:.4px;
+  padding:8px 20px;display:none;align-items:center;gap:10px;
+  backdrop-filter:blur(12px);
+}
+.update-banner.show{display:flex}
+.update-banner a{color:var(--text);text-decoration:underline}
+.update-banner a:hover{color:var(--amber)}
 @keyframes scan{0%{background-position:100% 0}100%{background-position:-200% 0}}
 .hdr-brand{display:flex;align-items:center;gap:10px}
 .hdr-icon{
@@ -1601,6 +1613,13 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
   <button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" title="Toggle fleet panel">☰</button>
 </header>
 
+<div class="update-banner" id="update-banner">
+  🚀 New version <strong id="update-ver"></strong> available —
+  <a id="update-link" href="#" target="_blank">Release notes</a>
+  <span style="flex:1"></span>
+  <button class="hdr-btn" onclick="document.getElementById('update-banner').classList.remove('show')" style="padding:2px 8px;font-size:10px">Dismiss</button>
+</div>
+
 <div class="layout">
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
@@ -2023,6 +2042,8 @@ function init() {
   updateClock(); setInterval(updateClock, 1000);  // P1: live clock
   setInterval(refresh, 30000);
   setInterval(loadAgentHealth, 60000);     // refresh dots every 60s
+  checkForUpdate();
+  setInterval(checkForUpdate, 300000);     // check for updates every 5 min
   _renderTMLangBar();
   // ESC closes TM overlay (or any open modal)
   document.addEventListener('keydown', e => {
@@ -2035,6 +2056,21 @@ function init() {
 }
 
 /* ══════ MOBILE SIDEBAR TOGGLE ══════ */
+async function checkForUpdate(){
+  try{
+    const r=await fetch('/api/agent/update-check');
+    if(!r.ok) return;
+    const d=await r.json();
+    if(d.update_available){
+      const banner=document.getElementById('update-banner');
+      document.getElementById('update-ver').textContent=d.latest;
+      const link=document.getElementById('update-link');
+      if(d.release_url) link.href=d.release_url;
+      banner.classList.add('show');
+    }
+  }catch(_){}
+}
+
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   const ov = document.getElementById('sidebar-overlay');

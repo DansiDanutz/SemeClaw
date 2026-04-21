@@ -24,6 +24,7 @@ SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*")
 SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*")
 SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default")
 SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
+SEMECLAW_MANIFEST_URL = os.environ.get("SEMECLAW_MANIFEST_URL", "https://semeclaw-updates.1fc06dad3c7f42576be40fc6437f8fec.workers.dev/manifest.json")
 
 # ---------------------------------------------------------------------------
 # Paths
