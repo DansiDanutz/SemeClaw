@@ -370,4 +370,4 @@ External contributions welcome once we open-source (Phase 5).
 
 Proprietary — © 2026 Dan Semenescu / NERVIX. All rights reserved.
 
-Contact: [dan@nervix.ai](mailto:dan@nervix.ai)
+Contact: [seme@kryptostack.com](mailto:seme@kryptostack.com) · [WhatsApp](https://wa.me/40750257337)

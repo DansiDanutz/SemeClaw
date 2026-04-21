@@ -30,6 +30,9 @@ COPY default_workspace ./default_workspace
 COPY install.sh setup.sh .env.example ./
 COPY README.md INTEGRATION.md SEMECLAW_AGENT_PLAN.md ./
 
+# Dashboard code lives outside the volume mount so Fly restarts don't wipe it
+COPY war_room/dashboard /app/dashboard
+
 # Data dirs created on first run, but pre-create for volume-mounting
 RUN mkdir -p /app/war_room/audio/meetings/saved \
              /app/war_room/audio/scripts \
@@ -39,7 +42,8 @@ RUN mkdir -p /app/war_room/audio/meetings/saved \
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     SEMECLAW_PUBLIC_URL=http://0.0.0.0:8765 \
-    SEMECLAW_TENANT_ID=default
+    SEMECLAW_TENANT_ID=default \
+    WAR_ROOM_DIR=/app/war_room
 
 EXPOSE 8765
 

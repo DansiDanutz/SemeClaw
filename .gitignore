@@ -79,6 +79,14 @@ war_room/builds/
 
 # Launch config (local paths baked in)
 .claude/launch.json
+.claude/settings.local.json
+
+# Runtime data
+default_workspace/.history/
+default_workspace/memories/
+default_workspace/research/meetings/
+default_workspace/research/experiments/
+default_workspace/research/reflections/
 
 # Sentinel / coordinator runtime
 sentinel/tripwire/

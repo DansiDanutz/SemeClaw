@@ -12,6 +12,7 @@ from rich.console import Console
 
 from semeclaw.cli.chat import chat_command
 from semeclaw.cli.onboard import app as onboard_app
+from semeclaw.meeting.room import MeetingRoom
 from semeclaw.utils.config import Config
 
 app = typer.Typer(
@@ -149,6 +150,52 @@ def demo(
         raise typer.Exit(1)
 
 
+@app.command("meeting")
+def meeting(
+    ctx: typer.Context,
+    topic: Annotated[
+        str,
+        typer.Option("--topic", "-t", help="Meeting topic / agenda"),
+    ] = "NERVIX Strategy Session",
+    agents: Annotated[
+        str,
+        typer.Option("--agents", "-a", help="Comma-separated agent IDs"),
+    ] = "seme,cookie,researcher",
+    mock: Annotated[
+        bool,
+        typer.Option("--mock", "-m", help="Run in mock mode (no API calls)"),
+    ] = False,
+) -> None:
+    """Run a multi-agent meeting with NERVIX branding.
+
+    Orchestrates agents to discuss a topic, synthesizes a summary,
+    and saves the report to research/meetings/.
+
+    Plays ambient background music during the meeting and a brand
+    jingle when the NERVIX advertisement is shown.
+
+    Examples:
+        semeclaw meeting
+        semeclaw meeting --topic "Q3 Roadmap" --agents "seme,cookie"
+        semeclaw meeting --topic "Test" --mock
+    """
+    config = ctx.obj.get("config")
+    if not config:
+        console.print("[red]Config not loaded. Run semeclaw init first.[/red]")
+        raise typer.Exit(1)
+
+    agent_ids = [a.strip() for a in agents.split(",") if a.strip()]
+    room = MeetingRoom(topic=topic, agent_ids=agent_ids, config=config)
+
+    try:
+        result = asyncio.run(room.generate_context(mock=mock))
+        console.print(f"\n[green]Meeting complete![/green]")
+        console.print(f"[dim]Report:[/dim] {result}")
+    except Exception as e:
+        console.print(f"[red]Meeting failed:[/red] {e}")
+        raise typer.Exit(1)
+
+
 @app.command("war-room")
 def war_room(
     ctx: typer.Context,
@@ -172,13 +219,25 @@ def war_room(
     import subprocess
     import sys
 
-    dashboard_script = Path(__file__).parent.parent.parent.parent / "war_room" / "dashboard" / "server.py"
+    # Resolution order: Docker path → repo path → install path
+    dashboard_script = (
+        Path("/app/dashboard/server.py")
+        if Path("/app/dashboard/server.py").exists()
+        else Path(__file__).parent.parent.parent.parent / "war_room" / "dashboard" / "server.py"
+    )
     if not dashboard_script.exists():
         # Try relative to install
         dashboard_script = Path(sys.prefix) / "war_room" / "dashboard" / "server.py"
     if not dashboard_script.exists():
         # Docker /app fallback
         dashboard_script = Path.cwd() / "war_room" / "dashboard" / "server.py"
+
+    if not dashboard_script.exists():
+        console.print(f"[red]Dashboard server not found at {dashboard_script}[/red]")
+        console.print("[dim]Expected one of:[/dim]")
+        console.print("  - /app/dashboard/server.py  (Docker)")
+        console.print("  - ./war_room/dashboard/server.py  (repo)")
+        raise typer.Exit(1)
 
     console.print(f"[bold cyan]🚀 Starting War Room dashboard on {host}:{port}...[/bold cyan]")
     console.print(f"[dim]Dashboard: http://{host}:{port}[/dim]")
@@ -188,6 +247,9 @@ def war_room(
     import uvicorn
     import importlib.util
     spec = importlib.util.spec_from_file_location("dashboard_server", str(dashboard_script))
+    if spec is None:
+        console.print(f"[red]Could not load dashboard server from {dashboard_script}[/red]")
+        raise typer.Exit(1)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     uvicorn.run(module.app, host=host, port=port, log_level="info")

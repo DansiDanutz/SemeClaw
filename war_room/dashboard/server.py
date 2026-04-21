@@ -71,7 +71,7 @@ SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:87
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-WAR_ROOM_DIR = Path(__file__).parent.parent
+WAR_ROOM_DIR = Path(os.environ.get("WAR_ROOM_DIR", str(Path(__file__).parent.parent)))
 STATE_FILE   = WAR_ROOM_DIR / "shared_state.json"
 LOGS_DIR     = WAR_ROOM_DIR / "logs"
 RESEARCH_DIR = WAR_ROOM_DIR / "research"
