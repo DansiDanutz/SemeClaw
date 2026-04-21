@@ -53,11 +53,30 @@ async def api_advertiser_auth_config():
 
 
 # ---------------------------------------------------------------------------
+# Auto-create advertiser row if missing (Supabase Auth user → adclaw_advertisers)
+# ---------------------------------------------------------------------------
+async def _ensure_advertiser(advertiser_id: str) -> None:
+    """Idempotently create an advertiser row so FK constraints succeed."""
+    try:
+        rows = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=id")
+        if not rows:
+            await _supa("post", "adclaw_advertisers", json={
+                "id": advertiser_id,
+                "email": "",
+                "wallet_credits": 0,
+                "is_subscribed": False,
+            })
+    except Exception as e:
+        logger.warning("ensure_advertiser failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
 # Wallet
 # ---------------------------------------------------------------------------
 @router.get("/api/advertiser/{advertiser_id}/wallet")
 async def api_advertiser_wallet(advertiser_id: str):
     try:
+        await _ensure_advertiser(advertiser_id)
         rows = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=id,email,wallet_credits,is_subscribed,sub_expires_at")
         if not rows:
             return JSONResponse({"id": advertiser_id, "wallet_credits": 0, "is_subscribed": False, "sub_expires_at": None}, status_code=200)
@@ -110,6 +129,7 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
     if not name:
         return JSONResponse({"error": "name required"}, status_code=400)
     try:
+        await _ensure_advertiser(advertiser_id)
         rows = await _supa("post", "adclaw_projects", json={
             "advertiser_id": advertiser_id,
             "name": name,
@@ -209,6 +229,7 @@ async def api_advertiser_create_slide(advertiser_id: str, request: Request):
     body = await request.json()
     campaign = (body.get("campaign") or "").strip() or "Generated"
     try:
+        await _ensure_advertiser(advertiser_id)
         # Ensure a campaign exists for this advertiser
         camp_rows = await _supa("get", f"adclaw_campaigns?advertiser_id=eq.{advertiser_id}&name=eq.{campaign}&select=id")
         if camp_rows:
@@ -304,6 +325,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
     body = await request.json()
     tier = body.get("tier", "standard")  # standard | subscription
     try:
+        await _ensure_advertiser(advertiser_id)
         import stripe
         stripe.api_key = STRIPE_SECRET_KEY
 
