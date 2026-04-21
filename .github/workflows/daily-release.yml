@@ -52,7 +52,8 @@ jobs:
           # Update manifest version
           sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/" cloudflare/pages/manifest.json
           sed -i "s/\"download_url\": \"[^\"]*\"/\"download_url\": \"https:\/\/github.com\/DansiDanutz\/SemeClaw\/archive\/refs\/tags\/$NEW_TAG.zip\"/" cloudflare/pages/manifest.json
-          sed -i "s/\"docker_image\": \"[^\"]*\"/\"docker_image\": \"ghcr.io\/dansidanutz\/semeclaw:$NEW_VERSION\"/" cloudflare/pages/manifest.json
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          sed -i "s/\"docker_image\": \"[^\"]*\"/\"docker_image\": \"ghcr.io\/$REPO_LOWER:$NEW_VERSION\"/" cloudflare/pages/manifest.json
           sed -i "s/\"released_at\": \"[^\"]*\"/\"released_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"/" cloudflare/pages/manifest.json
 
           git add pyproject.toml cloudflare/pages/manifest.json
@@ -105,8 +106,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.bump-and-tag.outputs.new_version }}
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository | lower }}:${{ needs.bump-and-tag.outputs.new_version }}
+            ghcr.io/${{ github.repository | lower }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
