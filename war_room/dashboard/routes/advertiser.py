@@ -113,7 +113,7 @@ async def api_advertiser_projects(advertiser_id: str):
         rows = await _supa(
             "get",
             f"adclaw_projects?advertiser_id=eq.{advertiser_id}"
-            "&select=id,name,github_url,webpage_url,description,ad_goal,target_audience,created_at"
+            "&select=id,name,github_url,webpage_url,description,notes,ad_goal,target_audience,created_at"
             "&order=created_at.desc",
         )
         return JSONResponse(rows)
@@ -136,12 +136,33 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
             "github_url": (body.get("github_url") or "").strip(),
             "webpage_url": (body.get("webpage_url") or "").strip(),
             "description": (body.get("description") or "").strip(),
+            "notes": (body.get("notes") or "").strip(),
             "ad_goal": (body.get("ad_goal") or "").strip(),
             "target_audience": (body.get("target_audience") or "").strip(),
         })
         return JSONResponse(rows[0] if rows else {"id": "", "name": name}, status_code=201)
     except Exception as e:
         logger.warning("create project error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.patch("/api/advertiser/{advertiser_id}/projects/{project_id}")
+async def api_advertiser_update_project(advertiser_id: str, project_id: str, request: Request):
+    body = await request.json()
+    try:
+        # Verify ownership
+        rows = await _supa("get", f"adclaw_projects?id=eq.{project_id}&advertiser_id=eq.{advertiser_id}&select=id")
+        if not rows:
+            return JSONResponse({"error": "project not found"}, status_code=404)
+        patch = {}
+        for k in ("name", "github_url", "webpage_url", "description", "notes", "ad_goal", "target_audience"):
+            if k in body:
+                patch[k] = (body[k] or "").strip()
+        if patch:
+            await _supa("patch", f"adclaw_projects?id=eq.{project_id}", json=patch)
+        return JSONResponse({"ok": True, "project_id": project_id})
+    except Exception as e:
+        logger.warning("update project error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

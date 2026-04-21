@@ -25,6 +25,7 @@ create table if not exists adclaw_projects (
   github_url      text,
   webpage_url     text,
   description     text,
+  notes           text,
   ad_goal         text,
   target_audience text,
   created_at      timestamptz not null default now()
@@ -156,3 +157,9 @@ $$;
 -- -----------------------------------------------------------------------
 alter table adclaw_slides add column if not exists edits_today integer not null default 0;
 alter table adclaw_slides add column if not exists last_edited_at timestamptz;
+
+-- -----------------------------------------------------------------------
+-- Project webpage + notes (added 2026-04-21)
+-- -----------------------------------------------------------------------
+alter table adclaw_projects add column if not exists webpage_url text;
+alter table adclaw_projects add column if not exists notes text;
