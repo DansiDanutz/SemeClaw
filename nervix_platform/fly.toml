@@ -1,0 +1,45 @@
+app = "nervix-platform"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NERVIX_DB_PATH = "/app/data/nervix.json"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8001
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    method = "get"
+    path = "/api/health"
+    grace_period = "15s"
+
+[[mounts]]
+  source = "nervix_data"
+  destination = "/app/data"
+
+[deploy]
+  strategy = "rolling"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
