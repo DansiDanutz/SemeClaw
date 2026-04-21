@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — NERVIX</title>
+  <link rel="stylesheet" href="/static/nervix.css">
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  <header class="nav">
+    <span class="logo">🧠 NERVIX</span>
+    <span class="credits">Credits: <strong>{{ stats.credit_balance }}</strong></span>
+  </header>
+
+  <main class="container dashboard">
+    <h1>Welcome, {{ stats.member.name }}</h1>
+
+    <section class="stats">
+      <div class="stat">
+        <span class="stat-value">{{ stats.projects|length }}</span>
+        <span class="stat-label">Projects</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ stats.total_ad_plays }}</span>
+        <span class="stat-label">Ad Plays</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ stats.total_clicks }}</span>
+        <span class="stat-label">Clicks</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ stats.credit_balance }}</span>
+        <span class="stat-label">Credits</span>
+      </div>
+    </section>
+
+    <section class="buy-credits">
+      <h2>Buy Credits</h2>
+      <div class="tiers">
+        <div class="tier" onclick="buyCredits('starter')">
+          <h3>Starter</h3>
+          <p class="price">$5</p>
+          <p>100 credits</p>
+          <button class="btn btn-secondary">Buy</button>
+        </div>
+        <div class="tier" onclick="buyCredits('pro')">
+          <h3>Pro</h3>
+          <p class="price">$19</p>
+          <p>500 credits</p>
+          <button class="btn btn-secondary">Buy</button>
+        </div>
+        <div class="tier" onclick="buyCredits('team')">
+          <h3>Team</h3>
+          <p class="price">$49</p>
+          <p>2,000 credits</p>
+          <button class="btn btn-secondary">Buy</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="projects">
+      <h2>Your Projects</h2>
+      <form action="/api/projects" method="post" class="form-inline">
+        <input type="hidden" name="member_id" value="{{ stats.member.id }}">
+        <input type="text" name="title" placeholder="Project title" required>
+        <input type="text" name="description" placeholder="Description" required>
+        <input type="url" name="url" placeholder="URL (optional)">
+        <button type="submit" class="btn btn-primary">Add Project</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr><th>Title</th><th>Status</th><th>Plays</th><th>Clicks</th></tr>
+        </thead>
+        <tbody>
+          {% for p in stats.projects %}
+          <tr>
+            <td>{{ p.title }}</td>
+            <td><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
+            <td>{{ p.ad_plays }}</td>
+            <td>{{ p.clicks }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="transactions">
+      <h2>Recent Transactions</h2>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Description</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for t in stats.recent_transactions %}
+          <tr>
+            <td>{{ t.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ t.description }}</td>
+            <td class="{% if t.amount > 0 %}positive{% else %}negative{% endif %}">
+              {{ "+" if t.amount > 0 else "" }}{{ t.amount }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    async function buyCredits(tier) {
+      const res = await fetch('/api/checkout?member_id={{ stats.member.id }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          tier: tier,
+          success_url: window.location.href,
+          cancel_url: window.location.href
+        })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert('Checkout error: ' + JSON.stringify(data));
+      }
+    }
+  </script>
+</body>
+</html>

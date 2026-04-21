@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — NERVIX</title>
+  <link rel="stylesheet" href="/static/nervix.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Join NERVIX</h1>
+    <form action="/api/members" method="post" class="form">
+      <label>
+        Name
+        <input type="text" name="name" required placeholder="Your name">
+      </label>
+      <label>
+        Email
+        <input type="email" name="email" required placeholder="you@example.com">
+      </label>
+      <button type="submit" class="btn btn-primary">Create Account</button>
+    </form>
+    <p class="hint">Already have an account? <a href="/">Go to dashboard</a></p>
+  </main>
+</body>
+</html>
