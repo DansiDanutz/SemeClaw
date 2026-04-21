@@ -73,4 +73,4 @@ primary_region = "iad"            # change to your nearest region
 [[vm]]
   cpu_kind = "shared"
   cpus     = 1
-  memory   = "256mb"
+  memory   = "1024mb"
