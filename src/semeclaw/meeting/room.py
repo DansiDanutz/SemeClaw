@@ -76,7 +76,8 @@ class MeetingRoom:
         prompt = (
             f"You are participating in a strategy meeting about: {self.topic}\n\n"
             f"Provide your perspective, key insights, and any data-driven recommendations. "
-            f"Be concise but thorough. Format your response as markdown."
+            f"Be concise but thorough. Format your response as markdown.\n\n"
+            f"IMPORTANT: Do NOT use any tools or function calls. Respond with plain text/markdown only."
         )
 
         try:
@@ -132,43 +133,53 @@ class MeetingRoom:
         if mock:
             return self._mock_synthesize(agent_outputs)
 
-        # Use the first available agent as synthesizer
-        for agent_id in self.agent_ids:
-            try:
-                agent_def = self._loader.load(agent_id)
-            except Exception:
-                continue
-            agent = Agent(agent_def, self.config)
-            session = agent.new_session()
+        # Build synthesis prompt
+        parts = [f"# Meeting: {self.topic}\n\n"]
+        parts.append("## Agent Contributions\n\n")
+        for out in agent_outputs:
+            if "error" in out:
+                parts.append(f"### {out['agent']}\n\n**Error:** {out['error']}\n\n")
+            else:
+                resp = out.get("response", "")
+                # Truncate very long responses to keep synthesis prompt manageable
+                if len(resp) > 3000:
+                    resp = resp[:3000] + "\n\n...[truncated]"
+                parts.append(f"### {out['agent']}\n\n{resp}\n\n")
 
-            parts = [f"# Meeting: {self.topic}\n\n"]
-            parts.append("## Agent Contributions\n\n")
-            for out in agent_outputs:
-                if "error" in out:
-                    parts.append(f"### {out['agent']}\n\n**Error:** {out['error']}\n\n")
-                else:
-                    parts.append(f"### {out['agent']}\n\n{out.get('response', '')}\n\n")
+        synthesis_prompt = (
+            "You are a meeting summarizer. Synthesize the following agent contributions into a clear, "
+            "structured markdown summary.\n\n"
+            "Required sections:\n"
+            "1. Executive Summary (2-3 sentences)\n"
+            "2. Key Points & Insights (bullet points)\n"
+            "3. Action Items (with owners in parentheses)\n"
+            "4. Open Questions\n\n"
+            "---\n\n"
+            + "\n".join(parts)
+        )
 
-            parts.append("\n## Synthesized Summary\n\n")
-            synthesis_prompt = (
-                "Synthesize the following agent contributions into a coherent meeting summary.\n\n"
-                "Include:\n"
-                "- Executive summary (2-3 sentences)\n"
-                "- Key points and insights\n"
-                "- Action items with owners\n"
-                "- Open questions\n\n"
-                "---\n\n"
-                + "\n".join(parts)
+        # Call LLM directly via litellm — bypass agent framework to avoid tool interference
+        try:
+            import litellm
+            messages = [
+                {"role": "system", "content": "You are a professional meeting summarizer. Respond with markdown only. Do not use tools or function calls."},
+                {"role": "user", "content": synthesis_prompt},
+            ]
+            llm = self.config.llm
+            resp = await litellm.acompletion(
+                model=llm.model,
+                messages=messages,
+                temperature=llm.temperature,
+                max_tokens=llm.max_tokens,
+                api_key=llm.api_key,
+                api_base=llm.api_base,
             )
-
-            try:
-                summary = await session.chat(synthesis_prompt)
-                if summary and summary.strip():
-                    return summary
-                print(f"  [synthesizer:{agent_id}] returned empty, trying next...")
-            except Exception as e:
-                print(f"  [synthesizer:{agent_id}] ERROR: {e}")
-                continue
+            summary = resp.choices[0].message.content or ""
+            if summary.strip():
+                print(f"  [synthesizer] Summary generated ({len(summary)} chars)")
+                return summary
+        except Exception as e:
+            print(f"  [synthesizer] LLM error: {e}")
 
         # Fallback: return raw contributions
         print("  Falling back to mock synthesis...")

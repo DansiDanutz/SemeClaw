@@ -37,7 +37,13 @@ jobs:
           MAJOR=$(echo "$CURRENT" | cut -d. -f1)
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
           PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+          # Find next available patch version (skip existing tags)
           NEW_PATCH=$((PATCH + 1))
+          while git ls-remote --tags origin "refs/tags/v${MAJOR}.${MINOR}.${NEW_PATCH}" | grep -q .; do
+            NEW_PATCH=$((NEW_PATCH + 1))
+          done
+
           NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           NEW_TAG="v${NEW_VERSION}"
 
@@ -93,14 +99,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase repo name
+        id: repo
+        run: echo "LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: Build and push release image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.bump-and-tag.outputs.new_version }}
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ steps.repo.outputs.LOWER }}:${{ needs.bump-and-tag.outputs.new_version }}
+            ghcr.io/${{ steps.repo.outputs.LOWER }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
