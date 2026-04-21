@@ -150,12 +150,19 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
 @router.get("/api/advertiser/{advertiser_id}/library")
 async def api_advertiser_library(advertiser_id: str):
     try:
-        # Slides belong to campaigns which belong to advertisers
+        # 1. Get all campaign IDs for this advertiser
+        campaigns = await _supa(
+            "get",
+            f"adclaw_campaigns?advertiser_id=eq.{advertiser_id}&select=id",
+        )
+        if not campaigns:
+            return JSONResponse([])
+        campaign_ids = ",".join(c["id"] for c in campaigns)
+
+        # 2. Get slides for those campaigns
         rows = await _supa(
             "get",
-            f"adclaw_slides?campaign_id=in.("
-            f"select id from adclaw_campaigns where advertiser_id=eq.{advertiser_id}"
-            f")"
+            f"adclaw_slides?campaign_id=in.({campaign_ids})"
             "&select=*,campaign:adclaw_campaigns(name)"
             "&order=created_at.desc",
         )
