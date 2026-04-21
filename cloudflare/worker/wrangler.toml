@@ -1,0 +1,11 @@
+name = "semeclaw-updates"
+main = "index.js"
+compatibility_date = "2026-04-21"
+
+[vars]
+R2_BUCKET_NAME = "semeclaw-assets"
+R2_ENDPOINT_URL = "https://1fc06dad3c7f42576be40fc6437f8fec.r2.cloudflarestorage.com"
+
+# Secrets (set via `wrangler secret put` or dashboard):
+# R2_ACCESS_KEY_ID
+# R2_SECRET_ACCESS_KEY
