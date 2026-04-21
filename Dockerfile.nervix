@@ -1,0 +1,33 @@
+FROM python:3.13-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+# Copy deps first for layer caching
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# Copy source
+COPY src/ ./src/
+COPY nervix_platform/ ./nervix_platform/
+COPY default_workspace/ ./default_workspace/
+
+# Create non-root user
+RUN useradd -m -u 1000 app && chown -R app:app /app
+USER app
+
+ENV PYTHONUNBUFFERED=1
+ENV NERVIX_PORT=8080
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+CMD ["uv", "run", "python", "-m", "uvicorn", "nervix_platform.server:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -6,6 +6,7 @@ from war_room.dashboard.routes.deps import (
     AGENTS_DIR,
     APP_VERSION,
     SEMECLAW_API_KEY,
+    SEMECLAW_MANIFEST_URL,
     SEMECLAW_PUBLIC_URL,
     SEMECLAW_TENANT_ID,
     _DEMO_AGENTS,
@@ -15,7 +16,39 @@ from war_room.dashboard.routes.deps import (
     REPORT_RETENTION_HOURS,
 )
 
+import httpx
+
 router = APIRouter(tags=["agents"])
+
+
+@router.get("/api/agent/update-check")
+async def api_agent_update_check():
+    """Poll the remote R2 manifest and report whether a newer version exists."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(SEMECLAW_MANIFEST_URL)
+            r.raise_for_status()
+            data = r.json()
+        latest = data.get("latest")
+        updates = data.get("updates", [])
+        entry = updates[0] if updates else {}
+        return {
+            "current": APP_VERSION,
+            "latest": latest,
+            "update_available": latest is not None and latest != APP_VERSION,
+            "release_url": entry.get("release_url", ""),
+            "image": entry.get("image", ""),
+            "date": entry.get("date", ""),
+            "manifest_url": SEMECLAW_MANIFEST_URL,
+        }
+    except Exception as exc:
+        return {
+            "current": APP_VERSION,
+            "latest": None,
+            "update_available": False,
+            "error": str(exc),
+            "manifest_url": SEMECLAW_MANIFEST_URL,
+        }
 
 
 @router.get("/api/agent/manifest")

@@ -5,7 +5,7 @@
 **Turn any markdown report into a cinematic multi-agent meeting with voice.**
 **Embed in any app. Own your AI operations.**
 
-[![Version](https://img.shields.io/badge/version-0.7.0-10b981.svg)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.7.5-10b981.svg)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.10%2B%20(min)%20%C2%B7%203.13%20(rec)-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-Proprietary-8b5cf6.svg)](#license)

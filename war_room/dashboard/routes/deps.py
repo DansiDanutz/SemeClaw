@@ -24,6 +24,7 @@ SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*")
 SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*")
 SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default")
 SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
+SEMECLAW_MANIFEST_URL = os.environ.get("SEMECLAW_MANIFEST_URL", "https://semeclaw-updates.1fc06dad3c7f42576be40fc6437f8fec.workers.dev/manifest.json")
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -48,9 +49,21 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_PRICE_PER_MEETING = os.environ.get("STRIPE_PRICE_PER_MEETING", "").strip()
 
 # ---------------------------------------------------------------------------
-# App version
+# App version (read from pyproject.toml so it stays in sync with releases)
 # ---------------------------------------------------------------------------
-APP_VERSION = "0.7.0"
+def _read_version() -> str:
+    try:
+        import tomllib
+        pyproject = ROOT / "pyproject.toml"
+        if pyproject.exists():
+            with pyproject.open("rb") as f:
+                data = tomllib.load(f)
+                return data.get("project", {}).get("version", "0.7.0")
+    except Exception:
+        pass
+    return "0.7.0"
+
+APP_VERSION = _read_version()
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
