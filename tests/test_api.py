@@ -41,26 +41,44 @@ from fastapi.testclient import TestClient
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _patch_slow_deps(monkeypatch):
+    """Suppress network calls in health endpoint so tests stay fast."""
+    async def _empty_supa(*args, **kwargs):
+        return []
+
+    async def _no_company():
+        return None
+
+    monkeypatch.setattr(srv, "_supa", _empty_supa)
+    monkeypatch.setattr(srv, "_get_company_id", _no_company)
+
+
+@pytest.fixture(scope="module")
+def _client():
+    """Module-scoped TestClient to avoid per-test app recompilation overhead."""
+    with TestClient(srv.app, raise_server_exceptions=False) as c:
+        yield c
+
+
 @pytest.fixture()
-def open_client():
+def open_client(_client):
     """TestClient with no API key (open mode)."""
     original = srv.SEMECLAW_API_KEY
     srv.SEMECLAW_API_KEY = ""
     try:
-        with TestClient(srv.app, raise_server_exceptions=False) as c:
-            yield c
+        yield _client
     finally:
         srv.SEMECLAW_API_KEY = original
 
 
 @pytest.fixture()
-def auth_client():
+def auth_client(_client):
     """TestClient with API key enforced."""
     original = srv.SEMECLAW_API_KEY
     srv.SEMECLAW_API_KEY = _TEST_API_KEY
     try:
-        with TestClient(srv.app, raise_server_exceptions=False) as c:
-            yield c
+        yield _client
     finally:
         srv.SEMECLAW_API_KEY = original
 

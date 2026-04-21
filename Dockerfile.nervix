@@ -1,31 +1,33 @@
 FROM python:3.13-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git ca-certificates && rm -rf /var/lib/apt/lists/*
+    curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
 
+# Install uv
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Copy project files
-COPY pyproject.toml uv.lock* ./
-COPY src ./src
-COPY nervix_platform ./nervix_platform
+# Copy deps first for layer caching
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
-# Install package + deps
-RUN uv sync --frozen --no-install-project || uv sync --no-install-project
-RUN uv pip install -e .
+# Copy source
+COPY src/ ./src/
+COPY nervix_platform/ ./nervix_platform/
+COPY default_workspace/ ./default_workspace/
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    NERVIX_DB_PATH=/app/data/nervix.json
+# Create non-root user
+RUN useradd -m -u 1000 app && chown -R app:app /app
+USER app
 
-# Data directory for JSON DB (mount a Fly volume here)
-RUN mkdir -p /app/data
+ENV PYTHONUNBUFFERED=1
+ENV NERVIX_PORT=8080
 
-EXPOSE 8001
+EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8001/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 
-CMD ["uv", "run", "python", "-m", "uvicorn", "nervix_platform.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uv", "run", "python", "-m", "uvicorn", "nervix_platform.server:app", "--host", "0.0.0.0", "--port", "8080"]
