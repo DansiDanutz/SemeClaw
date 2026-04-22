@@ -1245,7 +1245,7 @@ header::after{
 header::before{height:2px!important;background:linear-gradient(90deg,transparent,rgba(245,158,11,.95) 12%,rgba(34,211,238,.9) 40%,rgba(139,92,246,.85) 65%,transparent)!important;background-size:200% 100%!important;animation:rainbow-scan 4s linear infinite!important;}
 @keyframes rainbow-scan{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .metric{background:linear-gradient(145deg,rgba(10,20,40,.97),rgba(8,15,32,.95))!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:13px!important;transition:all .32s cubic-bezier(0.16,1,0.3,1)!important;}
-.metric-val{font-size:2rem!important;background:linear-gradient(135deg,#fbbf24,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.metric-val{font-size:2rem!important;background:linear-gradient(135deg,#fbbf24,#f59e0b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 .agent{background:linear-gradient(145deg,rgba(10,20,40,.9),rgba(8,15,32,.85))!important;border:1px solid rgba(255,255,255,.065)!important;border-radius:13px!important;transition:all .28s cubic-bezier(0.16,1,0.3,1)!important;}
 .card{background:linear-gradient(168deg,rgba(5,13,30,.98),rgba(4,10,24,.96))!important;border:1px solid rgba(255,255,255,.065)!important;border-radius:16px!important;}
 .run-btn{background:linear-gradient(135deg,#f59e0b,#e58a00,#d97706)!important;border-radius:11px!important;}
@@ -1257,7 +1257,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .tm-prompt-icon{font-size:64px!important;filter:drop-shadow(0 0 18px rgba(245,158,11,.55));animation:mic-float 3s ease-in-out infinite!important;}
 @keyframes mic-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}}
 
-.tm-prompt-title{background:linear-gradient(135deg,#fff 0%,#fbbf24 50%,#22d3ee 100%)!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important;font-size:1.6rem!important;letter-spacing:.3px!important;}
+.tm-prompt-title{background:linear-gradient(135deg,#fff 0%,#fbbf24 50%,#22d3ee 100%)!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;font-size:1.6rem!important;letter-spacing:.3px!important;}
 
 .tm-prompt-box{background:rgba(5,13,30,.85)!important;border:1px solid rgba(245,158,11,.12)!important;border-radius:12px!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;transition:border-color .3s,box-shadow .3s!important;}
 .tm-prompt-box:focus-within{border-color:rgba(245,158,11,.45)!important;box-shadow:0 0 30px rgba(245,158,11,.08),0 0 60px rgba(245,158,11,.04)!important;}
@@ -1660,7 +1660,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .sync-select-btn { font-size:9px; font-family:var(--mono); color:var(--text-3); background:none; border:1px solid var(--border); border-radius:4px; padding:3px 8px; cursor:pointer; transition:all .15s; }
 .sync-select-btn:hover { color:var(--amber); border-color:var(--amber); }
 .sync-agents-list { display:flex; flex-direction:column; gap:4px; max-height:280px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-2) transparent; }
-.sync-agent-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); cursor:pointer; transition:all .15s; user-select:none; }
+.sync-agent-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); cursor:pointer; transition:all .15s; -webkit-user-select:none;user-select:none; }
 .sync-agent-item:hover { border-color:var(--border-2); background:var(--surface-2); }
 .sync-agent-item.tracked { border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.05); }
 .sync-agent-item.tracked:hover { border-color:var(--amber); }
@@ -1782,14 +1782,14 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
       <div class="launcher-body">
         <input class="task-field" id="task-input" type="text" placeholder="e.g. Research NERVIX competitor landscape and draft a go-to-market strategy" />
         <div class="launcher-row">
-          <select class="sel" id="agents-select">
+          <select class="sel" id="agents-select" aria-label="Agent pipeline">
             <option value="research,strategist,writer">Research → Strategist → Writer</option>
             <option value="research,architect,writer">Research → Architect → Writer</option>
             <option value="research,architect,coder,writer">Research → Architect → Coder → Writer</option>
             <option value="research,writer">Research → Writer</option>
             <option value="research">Research only</option>
           </select>
-          <select class="sel" id="project-select">
+          <select class="sel" id="project-select" aria-label="Project">
             <option value="NERVIX">NERVIX</option>
             <option value="CrawdBot">CrawdBot</option>
             <option value="MyWork AI">MyWork AI</option>
@@ -5430,7 +5430,7 @@ _refreshFleetFromSettings();_updateFleetCountBadge();
       </div>
       <div class="sync-project-selector">
         <label>Select Project</label>
-        <select class="sync-project-select" id="sync-project-select" onchange="onSyncProjectChange()">
+        <select class="sync-project-select" id="sync-project-select" aria-label="Sync project" onchange="onSyncProjectChange()">
           <option value="">— Scanning for projects... —</option>
         </select>
       </div>
