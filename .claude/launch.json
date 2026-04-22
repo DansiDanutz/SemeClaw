@@ -3,9 +3,21 @@
   "configurations": [
     {
       "name": "war-room-dashboard",
-      "runtimeExecutable": "python3.13",
-      "runtimeArgs": ["/Users/davidai/SemeClaw/war_room/dashboard/server.py"],
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "semeclaw", "war-room"],
       "port": 8765
+    },
+    {
+      "name": "cloudflare-worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--config", "cloudflare/worker/wrangler.toml"],
+      "port": 8787
+    },
+    {
+      "name": "website-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8000", "--directory", "website"],
+      "port": 8000
     }
   ]
 }

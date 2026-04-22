@@ -1596,6 +1596,97 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
   .card:hover{transform:none!important}
   @keyframes scan{0%,100%{background-position:0 0}}
 }
+
+/* ═══════════════════════════════════════════════════════
+   SEMECLAW POLISH + CONNECTION MANAGER
+   ═══════════════════════════════════════════════════════ */
+
+.sync-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: none; border-radius: 8px; color: #000; font-weight: 700;
+  font-size: 11px; font-family: var(--mono); letter-spacing: 0.5px;
+  padding: 6px 14px; cursor: pointer;
+  box-shadow: 0 0 12px rgba(245,158,11,0.45), 0 2px 8px rgba(0,0,0,0.4);
+  transition: all 0.2s ease; position: relative; overflow: hidden;
+}
+.sync-btn::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,.15) 0%,transparent 60%); border-radius:8px; pointer-events:none; }
+.sync-btn:hover { transform:translateY(-1px); box-shadow:0 0 20px rgba(245,158,11,.65),0 4px 12px rgba(0,0,0,.4); background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%); }
+.sync-btn:active { transform:translateY(0); }
+.sync-btn.spinning { animation:syncPulse 1s ease infinite; }
+@keyframes syncPulse { 0%,100%{box-shadow:0 0 12px rgba(245,158,11,.45)} 50%{box-shadow:0 0 24px rgba(245,158,11,.85)} }
+.fleet-tracked-count { font-size:8px; font-family:var(--mono); color:var(--amber); background:var(--amber-dim); border:1px solid rgba(245,158,11,.2); border-radius:4px; padding:1px 6px; margin-left:6px; }
+.tier-sep { background:linear-gradient(90deg,var(--amber-dim) 0%,transparent 100%); border-radius:4px; padding:5px 8px 4px; margin-top:8px; }
+.agent { border:1px solid transparent; transition:all .15s ease; }
+.agent:hover { background:var(--surface-2); border-color:var(--border-2); transform:translateX(1px); }
+.agent.running-glow { border-color:rgba(16,185,129,.3); box-shadow:0 0 12px rgba(16,185,129,.08); }
+.sec-label { position:relative; }
+.sec-label::after { content:''; position:absolute; bottom:-2px; left:0; width:16px; height:1px; background:var(--amber); border-radius:1px; }
+.metric { background:var(--surface); border:1px solid var(--border); border-radius:8px; transition:border-color .2s; }
+.metric:hover { border-color:var(--border-2); }
+.metric-live { border-color:rgba(16,185,129,.25); }
+.sidebar { background:linear-gradient(180deg,var(--bg-1) 0%,rgba(6,14,33,.95) 100%); }
+.meeting-card-inline { border:1px solid var(--border-2)!important; border-radius:var(--r)!important; background:linear-gradient(135deg,var(--bg-1) 0%,var(--surface) 100%)!important; }
+#activity-list .log-item { border-bottom:1px solid rgba(24,45,78,.5); }
+#activity-list .log-item:last-child { border-bottom:none; }
+.pipeline { background:linear-gradient(90deg,var(--bg-2) 0%,rgba(13,27,53,.3) 100%); border-radius:8px; padding:10px 12px; }
+
+/* CONNECTION MANAGER MODAL */
+#sync-modal-overlay { position:fixed; inset:0; z-index:9999; background:rgba(1,3,11,.85); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .25s ease; pointer-events:none; }
+#sync-modal-overlay.visible { opacity:1; pointer-events:all; }
+#sync-modal { background:var(--bg-1); border:1px solid var(--border-2); border-radius:16px; width:540px; max-height:80vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(245,158,11,.08); transform:translateY(20px) scale(.97); transition:transform .3s var(--ease-out); }
+#sync-modal-overlay.visible #sync-modal { transform:translateY(0) scale(1); }
+.sync-modal-hdr { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.sync-modal-title { font-size:15px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px; }
+.sync-modal-subtitle { font-size:10px; color:var(--text-3); font-family:var(--mono); letter-spacing:.5px; margin-top:2px; }
+.sync-modal-close { background:none; border:1px solid var(--border-2); color:var(--text-3); border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+.sync-modal-close:hover { border-color:var(--red); color:var(--red); }
+.sync-modal-body { padding:16px 24px; overflow-y:auto; flex:1; scrollbar-width:thin; scrollbar-color:var(--border-2) transparent; }
+.sync-sources { display:flex; gap:6px; margin-bottom:16px; }
+.sync-source-tab { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; border:1px solid var(--border-2); background:var(--surface); cursor:pointer; transition:all .2s; flex:1; font-size:11px; font-family:var(--mono); color:var(--text-2); }
+.sync-source-tab:hover { border-color:var(--amber); color:var(--amber); }
+.sync-source-tab.active { border-color:var(--amber); background:var(--amber-dim); color:var(--amber); font-weight:600; }
+.sync-source-tab .src-icon { font-size:16px; }
+.sync-source-tab .src-status { margin-left:auto; font-size:9px; padding:2px 6px; border-radius:4px; }
+.src-status.online { background:var(--green-dim); color:var(--green); }
+.src-status.offline { background:var(--red-dim); color:var(--red); }
+.src-status.checking { background:var(--amber-dim); color:var(--amber); }
+.sync-project-selector { margin-bottom:14px; }
+.sync-project-selector label { font-size:9px; font-family:var(--mono); letter-spacing:1.5px; color:var(--text-3); text-transform:uppercase; display:block; margin-bottom:6px; }
+.sync-project-select { width:100%; background:var(--surface); border:1px solid var(--border-2); color:var(--text); padding:8px 12px; border-radius:8px; font-family:var(--mono); font-size:12px; cursor:pointer; outline:none; transition:border-color .2s; }
+.sync-project-select:focus { border-color:var(--amber); }
+.sync-agents-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.sync-agents-label { font-size:9px; font-family:var(--mono); letter-spacing:1.5px; color:var(--text-3); text-transform:uppercase; }
+.sync-select-actions { display:flex; gap:6px; }
+.sync-select-btn { font-size:9px; font-family:var(--mono); color:var(--text-3); background:none; border:1px solid var(--border); border-radius:4px; padding:3px 8px; cursor:pointer; transition:all .15s; }
+.sync-select-btn:hover { color:var(--amber); border-color:var(--amber); }
+.sync-agents-list { display:flex; flex-direction:column; gap:4px; max-height:280px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-2) transparent; }
+.sync-agent-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); cursor:pointer; transition:all .15s; user-select:none; }
+.sync-agent-item:hover { border-color:var(--border-2); background:var(--surface-2); }
+.sync-agent-item.tracked { border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.05); }
+.sync-agent-item.tracked:hover { border-color:var(--amber); }
+.sync-agent-avatar { font-size:18px; width:28px; text-align:center; flex-shrink:0; }
+.sync-agent-info { flex:1; min-width:0; }
+.sync-agent-name { font-size:12px; font-weight:600; color:var(--text); }
+.sync-agent-role { font-size:10px; color:var(--text-3); font-family:var(--mono); }
+.sync-agent-fleet { font-size:8px; font-family:var(--mono); letter-spacing:.5px; padding:2px 6px; border-radius:3px; background:var(--cyan-dim); color:var(--cyan); text-transform:uppercase; }
+.sync-agent-toggle { width:36px; height:20px; border-radius:10px; background:var(--border-2); border:none; cursor:pointer; position:relative; transition:background .2s; flex-shrink:0; }
+.sync-agent-toggle::after { content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:var(--text-3); transition:all .2s; }
+.sync-agent-item.tracked .sync-agent-toggle { background:var(--amber); }
+.sync-agent-item.tracked .sync-agent-toggle::after { left:19px; background:#000; }
+.sync-no-agents { text-align:center; padding:30px 20px; color:var(--text-3); font-family:var(--mono); font-size:11px; }
+.sync-no-agents .sync-no-icon { font-size:32px; margin-bottom:10px; }
+.sync-scanning { text-align:center; padding:30px 20px; }
+.sync-scan-icon { font-size:32px; margin-bottom:12px; animation:syncSpin 1s linear infinite; display:inline-block; }
+@keyframes syncSpin { to { transform:rotate(360deg); } }
+.sync-scan-text { font-family:var(--mono); font-size:11px; color:var(--text-2); margin-bottom:8px; }
+.sync-scan-sub { font-family:var(--mono); font-size:9px; color:var(--text-3); }
+.sync-modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; background:rgba(6,14,33,.5); }
+.sync-footer-info { font-size:9px; font-family:var(--mono); color:var(--text-3); }
+.sync-footer-info strong { color:var(--amber); }
+.sync-apply-btn { background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); border:none; border-radius:8px; color:#000; font-weight:700; font-size:11px; font-family:var(--mono); letter-spacing:.5px; padding:8px 20px; cursor:pointer; box-shadow:0 0 12px rgba(245,158,11,.35); transition:all .2s; }
+.sync-apply-btn:hover { transform:translateY(-1px); box-shadow:0 0 20px rgba(245,158,11,.55); }
+.sync-cancel-btn { background:none; border:1px solid var(--border-2); border-radius:8px; color:var(--text-3); font-size:11px; font-family:var(--mono); padding:8px 16px; cursor:pointer; transition:all .2s; }
+.sync-cancel-btn:hover { border-color:var(--red); color:var(--red); }
 </style>
 </head>
 <body>
@@ -1663,7 +1754,14 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
         </div>
       </div>
       <div style="flex:1">
-        <div class="sync-bar"><div class="sec-label">Fleet</div><button class="sync-btn" id="sync-btn" onclick="syncAgents()">⟳ Sync</button></div>
+        <div class="sync-bar"><div class="sec-label">Fleet</div><button class="sync-btn" id="sync-btn" onclick="openSyncModal()">⚡ Sync</button></div>
+        <div id="fleet-conn-status"
+             style="display:flex;align-items:center;gap:5px;font-size:9px;
+                    font-family:var(--mono);color:var(--text-3);
+                    padding:4px 0 10px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
+          <div style="width:5px;height:5px;border-radius:50%;background:var(--amber);box-shadow:0 0 4px var(--amber)"></div>
+          <span>Checking connections...</span>
+        </div>
         <div id="agents-list"><div class="empty" style="margin-top:8px">Syncing…</div></div>
       </div>
     </div>
@@ -5249,6 +5347,116 @@ async function openTMTranscript(meetingId,title) {
 function closeTMTranscript() { _tmShowZone('history'); }
 
 init();
+
+/* ═══ CONNECTION MANAGER ═══ */
+const LOCAL_AGENTS=[
+  {id:'Dexter',name:'Dexter',role:'Senior Dev',avatar:'🔬',fleet:'Droplet',source:'local'},
+  {id:'Memo',name:'Memo',role:'PM / Strategist',avatar:'🎯',fleet:'Droplet',source:'local'},
+  {id:'Sienna',name:'Sienna',role:'Crypto',avatar:'💎',fleet:'Droplet',source:'local'},
+  {id:'Nano',name:'Nano',role:'Agent Creator',avatar:'⚡',fleet:'Droplet',source:'local'},
+  {id:'David',name:'David',role:'Orchestrator',avatar:'🏛',fleet:'Mac Studio',source:'local'},
+  {id:'GSD',name:'GSD',role:'Get Stuff Done',avatar:'📐',fleet:'Mac Studio',source:'local'},
+  {id:'Hermes',name:'Hermes',role:'Writer',avatar:'✍️',fleet:'Mac Studio',source:'local'},
+  {id:'Pi',name:'Pi',role:'Research',avatar:'🥧',fleet:'Mac Studio',source:'local'},
+  {id:'Monitor',name:'Monitor',role:'System Monitor',avatar:'📡',fleet:'Mac Studio',source:'local'},
+  {id:'Growth',name:'Growth',role:'Growth Agent',avatar:'📈',fleet:'Mac Studio',source:'local'},
+  {id:'Finance',name:'Finance',role:'Finance Agent',avatar:'💰',fleet:'Mac Studio',source:'local'},
+  {id:'KimiClaw',name:'KimiClaw',role:'Research Agent',avatar:'🤖',fleet:'Mac Studio',source:'local'},
+  {id:'Codex',name:'Codex',role:'Code Agent',avatar:'💻',fleet:'Mac Studio',source:'local'},
+];
+const _syncState={source:'paperclip',projects:{paperclip:[],moltica:[]},agents:{paperclip:[],moltica:[]},selectedProject:null,trackedAgents:JSON.parse(localStorage.getItem('sc_tracked_agents')||'{}')};
+if(Object.keys(_syncState.trackedAgents).length===0){LOCAL_AGENTS.forEach(a=>{_syncState.trackedAgents[a.id]=true;});}
+function openSyncModal(){document.getElementById('sync-modal-overlay').classList.add('visible');scanSources();}
+function closeSyncModal(){document.getElementById('sync-modal-overlay').classList.remove('visible');}
+function selectSyncSource(s){_syncState.source=s;document.getElementById('src-paperclip').classList.toggle('active',s==='paperclip');document.getElementById('src-moltica').classList.toggle('active',s==='moltica');_populateProjectSelector();renderSyncAgentList();}
+function onSyncProjectChange(){_syncState.selectedProject=document.getElementById('sync-project-select').value;renderSyncAgentList();}
+function syncSelectAll(c){getCurrentSyncAgents().forEach(a=>{_syncState.trackedAgents[a.id]=c;});renderSyncAgentList();_updateSyncFooter();}
+function toggleSyncAgent(id){_syncState.trackedAgents[id]=!_syncState.trackedAgents[id];const el=document.querySelector(`[data-sync-agent="${id}"]`);if(el)el.classList.toggle('tracked',!!_syncState.trackedAgents[id]);_updateSyncFooter();}
+function applySyncSettings(){localStorage.setItem('sc_tracked_agents',JSON.stringify(_syncState.trackedAgents));_refreshFleetFromSettings();const t=Object.values(_syncState.trackedAgents).filter(Boolean).length;addLog('✅',`Sync applied — ${t} agents tracked`);closeSyncModal();}
+async function scanSources(){
+  document.getElementById('sync-agents-list').innerHTML='<div class="sync-scanning"><div class="sync-scan-icon">🔍</div><div class="sync-scan-text">Scanning Paperclip &amp; Moltica...</div><div class="sync-scan-sub">Looking for connected projects and agents</div></div>';
+  document.getElementById('sync-project-select').innerHTML='<option value="">— Scanning... —</option>';
+  let pcOk=false,pcAgents=[],pcProjects=[];
+  try{const r=await fetch('/api/paperclip/agents');const d=await r.json();if(!d.error){pcOk=true;if(Array.isArray(d)){pcAgents=d.map(a=>({id:a.id||a.name,name:a.name||a.id,role:a.role||'Agent',avatar:(typeof AVATAR!=='undefined'?AVATAR[a.name]:null)||'🤖',fleet:a.fleet||'Droplet',source:'paperclip',project:a.project||null}));}else if(typeof d==='object'){pcAgents=Object.entries(d).map(([id,v])=>({id,name:v.name||id,role:v.role||'Agent',avatar:(typeof AVATAR!=='undefined'?AVATAR[v.name||id]:null)||'🤖',fleet:v.fleet||'Droplet',source:'paperclip',project:v.project||null}));}const pn=[...new Set(pcAgents.map(a=>a.project).filter(Boolean))];pcProjects=pn.length?pn.map(p=>({id:p,name:p})):[{id:'default',name:'Default Project'}];}}catch(e){}
+  let mtOk=false,mtAgents=[],mtProjects=[];
+  try{const r=await fetch('/api/moltica/agents');const d=await r.json();if(!d.error&&d.detail!=='Not Found'){mtOk=true;if(Array.isArray(d)){mtAgents=d.map(a=>({id:a.id||a.name,name:a.name,role:a.role||'Agent',avatar:(typeof AVATAR!=='undefined'?AVATAR[a.name]:null)||'🌀',fleet:'Droplet',source:'moltica'}));}const mp=[...new Set(mtAgents.map(a=>a.project).filter(Boolean))];mtProjects=mp.map(p=>({id:p,name:p}));}}catch(e){}
+  if(!pcOk){pcAgents=LOCAL_AGENTS;pcProjects=[{id:'danslabos',name:'DansLab OS'},{id:'nervix',name:'NERVIX'},{id:'warroom',name:'War Room Fleet'}];}
+  if(!mtOk){mtAgents=LOCAL_AGENTS.slice(0,5);mtProjects=[{id:'main',name:'Main Workspace'}];}
+  _syncState.agents.paperclip=pcAgents;_syncState.agents.moltica=mtAgents;_syncState.projects.paperclip=pcProjects;_syncState.projects.moltica=mtProjects;
+  _setStatus('pc-status',pcOk?'ONLINE':'LOCAL',pcOk?'online':'offline');_setStatus('mt-status',mtOk?'ONLINE':'LOCAL',mtOk?'online':'offline');
+  const ind=document.getElementById('fleet-conn-status');
+  if(ind){if(pcOk&&mtOk){ind.innerHTML='<div style="width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 4px var(--green)"></div><span style="color:var(--green)">Paperclip + Moltica connected</span>';}else if(pcOk||mtOk){const w=pcOk?'Paperclip':'Moltica';ind.innerHTML='<div style="width:5px;height:5px;border-radius:50%;background:var(--amber);box-shadow:0 0 4px var(--amber)"></div><span style="color:var(--amber)">'+w+' connected</span>';}else{ind.innerHTML='<div style="width:5px;height:5px;border-radius:50%;background:var(--text-3)"></div><span>Local fleet · Click ⚡ Sync to connect</span>';}}
+  _populateProjectSelector();renderSyncAgentList();_updateSyncFooter();
+}
+function renderSyncAgentList(){
+  const agents=getCurrentSyncAgents();const c=document.getElementById('sync-agents-list');if(!c)return;
+  if(!agents.length){c.innerHTML='<div class="sync-no-agents"><div class="sync-no-icon">🔌</div><div>No agents found</div></div>';return;}
+  const g={};agents.forEach(a=>{const f=a.fleet||'Other';if(!g[f])g[f]=[];g[f].push(a);});
+  let h='';Object.entries(g).forEach(([fleet,list])=>{h+='<div style="font-size:8px;font-family:var(--mono);letter-spacing:1.5px;color:var(--amber);text-transform:uppercase;padding:8px 4px 4px;opacity:.7">'+fleet+' Fleet</div>';list.forEach(a=>{const t=!!_syncState.trackedAgents[a.id];h+='<div class="sync-agent-item '+(t?'tracked':'')+'" data-sync-agent="'+a.id+'" onclick="toggleSyncAgent(\''+a.id+'\')"><div class="sync-agent-avatar">'+(a.avatar||'🤖')+'</div><div class="sync-agent-info"><div class="sync-agent-name">'+a.name+'</div><div class="sync-agent-role">'+a.role+'</div></div><div class="sync-agent-fleet">'+fleet+'</div><button class="sync-agent-toggle" onclick="event.stopPropagation();toggleSyncAgent(\''+a.id+'\')"></button></div>';});});
+  c.innerHTML=h;_updateSyncFooter();
+}
+function _refreshFleetFromSettings(){document.querySelectorAll('#agents-list .agent').forEach(el=>{const n=el.querySelector('.agent-name')||Array.from(el.querySelectorAll('div')).find(d=>!d.children.length&&d.textContent.trim().length>1);if(!n)return;const name=n.textContent.trim();const show=_syncState.trackedAgents[name]!==false;el.style.display=show?'':'none';el.dataset.tracked=show?'true':'false';});_updateFleetCountBadge();}
+function getCurrentSyncAgents(){const s=_syncState.agents[_syncState.source];return(s&&s.length)?s:LOCAL_AGENTS;}
+function _populateProjectSelector(){const p=_syncState.projects[_syncState.source]||[];const s=document.getElementById('sync-project-select');if(!s)return;s.innerHTML='<option value="">— All Projects —</option>'+p.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join('');}
+function _updateSyncFooter(){const t=Object.values(_syncState.trackedAgents).filter(Boolean).length;const n=document.getElementById('sync-tracked-n');if(n)n.textContent=t;const c=document.getElementById('sync-tracked-count');if(c)c.textContent='('+t+' tracked)';}
+function _updateFleetCountBadge(){const t=Object.values(_syncState.trackedAgents).filter(Boolean).length;const l=Array.from(document.querySelectorAll('.sec-label')).find(d=>d.textContent.includes('Fleet'));if(!l)return;let b=l.querySelector('.fleet-tracked-count');if(!b){b=document.createElement('span');b.className='fleet-tracked-count';l.appendChild(b);}b.textContent=t;}
+function _setStatus(id,text,cls){const el=document.getElementById(id);if(el){el.textContent=text;el.className='src-status '+cls;}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSyncModal();});
+setTimeout(()=>{const o=document.getElementById('sync-modal-overlay');if(o)o.addEventListener('click',e=>{if(e.target.id==='sync-modal-overlay')closeSyncModal();});},0);
+_refreshFleetFromSettings();_updateFleetCountBadge();
 </script>
+<!-- CONNECTION MANAGER MODAL -->
+<div id="sync-modal-overlay">
+  <div id="sync-modal">
+    <div class="sync-modal-hdr">
+      <div>
+        <div class="sync-modal-title"><span>⚡</span> Connection Manager</div>
+        <div class="sync-modal-subtitle">CONNECT · CONFIGURE · CONTROL</div>
+      </div>
+      <button class="sync-modal-close" onclick="closeSyncModal()">✕</button>
+    </div>
+    <div class="sync-modal-body">
+      <div class="sync-sources">
+        <div class="sync-source-tab active" id="src-paperclip" onclick="selectSyncSource('paperclip')">
+          <span class="src-icon">📎</span>
+          <div><div>Paperclip</div><div style="font-size:8px;color:var(--text-3)">Project Manager</div></div>
+          <span class="src-status checking" id="pc-status">CHECKING</span>
+        </div>
+        <div class="sync-source-tab" id="src-moltica" onclick="selectSyncSource('moltica')">
+          <span class="src-icon">🌀</span>
+          <div><div>Moltica</div><div style="font-size:8px;color:var(--text-3)">Agent Platform</div></div>
+          <span class="src-status checking" id="mt-status">CHECKING</span>
+        </div>
+      </div>
+      <div class="sync-project-selector">
+        <label>Select Project</label>
+        <select class="sync-project-select" id="sync-project-select" onchange="onSyncProjectChange()">
+          <option value="">— Scanning for projects... —</option>
+        </select>
+      </div>
+      <div class="sync-agents-header">
+        <div class="sync-agents-label">Agents <span id="sync-tracked-count" style="color:var(--amber)"></span></div>
+        <div class="sync-select-actions">
+          <button class="sync-select-btn" onclick="syncSelectAll(true)">Select All</button>
+          <button class="sync-select-btn" onclick="syncSelectAll(false)">Clear All</button>
+        </div>
+      </div>
+      <div class="sync-agents-list" id="sync-agents-list">
+        <div class="sync-scanning">
+          <div class="sync-scan-icon">🔍</div>
+          <div class="sync-scan-text">Scanning sources...</div>
+          <div class="sync-scan-sub">Looking for Paperclip &amp; Moltica connections</div>
+        </div>
+      </div>
+    </div>
+    <div class="sync-modal-footer">
+      <div class="sync-footer-info"><strong id="sync-tracked-n">0</strong> agents will appear in Fleet</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="sync-cancel-btn" onclick="closeSyncModal()">Cancel</button>
+        <button class="sync-apply-btn" onclick="applySyncSettings()">Apply &amp; Sync</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
