@@ -33,6 +33,13 @@ COPY README.md INTEGRATION.md SEMECLAW_AGENT_PLAN.md ./
 # Dashboard code lives outside the volume mount so Fly restarts don't wipe it
 COPY war_room/dashboard /app/dashboard
 
+# Pre-download Kokoro ONNX model files (so first TTS request is fast)
+RUN mkdir -p /app/war_room/dashboard/models && \
+    curl -sL -o /app/war_room/dashboard/models/kokoro-v1.0.int8.onnx \
+        https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx && \
+    curl -sL -o /app/war_room/dashboard/models/voices-v1.0.bin \
+        https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+
 # Data dirs created on first run, but pre-create for volume-mounting
 RUN mkdir -p /app/war_room/audio/meetings/saved \
              /app/war_room/audio/scripts \

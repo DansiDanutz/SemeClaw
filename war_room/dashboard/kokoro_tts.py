@@ -1,17 +1,17 @@
 """
 War Room — Kokoro TTS wrapper (open-source, Apache 2.0).
 
-Kokoro-82M delivers 9.2/10 quality speech synthesis at 210× realtime on GPU,
-3-5× on CPU. It outperforms edge-tts and rivals ElevenLabs for informational
-content — perfect for ad narration, meeting voiceovers, and announcements.
+Uses kokoro-onnx for lightweight ONNX inference — no torch, no spacy,
+no compilation needed. Perfect for Docker/Fly.io deployment.
 
-  - 54 voices across 8 languages (v1.0)
-  - 2-3 GB VRAM on GPU, runs fine on CPU
-  - Zero cost, no API key, no rate limits
-  - OpenAI-compatible voice names: af_bella, af_nicole, am_adam, bf_emma, etc.
+  - 5 voices: af_bella, af_nicole, am_adam, bf_emma, bm_george
+  - ~80MB quantized model
+  - Near real-time on CPU
+  - Zero cost, no API key
 
-This module lazily-initialises the ONNX pipeline and caches MP3s to disk using
-the same key scheme as edge-tts so all TTS backends share a single cache.
+Model files (auto-downloaded on first use):
+  - kokoro-v1.0.onnx    (~300MB, or ~80MB int8 quantized)
+  - voices-v1.0.bin     (voice embeddings)
 """
 
 from __future__ import annotations
@@ -33,21 +33,22 @@ _DASHBOARD_DIR = Path(__file__).resolve().parent
 CACHE_DIR = _DASHBOARD_DIR / "audio_cache" / "kokoro"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Model files — downloaded on first use if not present
+MODEL_DIR = _DASHBOARD_DIR / "models"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
 # ---------------------------------------------------------------------------
 # Speaker → Kokoro voice mapping
 # ---------------------------------------------------------------------------
-# kokoro v1.0 voicepacks (American, British, etc.)
-# Full list: https://github.com/hexgrad/kokoro
 VOICE_MAP: dict[str, str] = {
-    "narrator":   "af_bella",   # warm female narrator — best for long-form
-    "research":   "af_nicole",  # clear female — technical content
-    "strategist": "bf_emma",    # British female — professional
-    "writer":     "am_adam",    # American male — authoritative
-    "architect":  "bm_george",  # British male — formal
+    "narrator":   "af_bella",
+    "research":   "af_nicole",
+    "strategist": "bf_emma",
+    "writer":     "am_adam",
+    "architect":  "bm_george",
     "default":    "af_bella",
 }
 
-# Friendly aliases clients might send
 _ALIASES: dict[str, str] = {
     "bella": "af_bella",
     "nicole": "af_nicole",
@@ -59,39 +60,93 @@ _ALIASES: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# Lazy pipeline init (thread-safe)
+# Lazy model init (thread-safe)
 # ---------------------------------------------------------------------------
-_pipeline = None
+_kokoro = None
 _init_lock = threading.Lock()
 
 
-def _get_pipeline():
-    """Return the shared Kokoro KPipeline, creating it on first call."""
-    global _pipeline
-    if _pipeline is not None:
-        return _pipeline
-    with _init_lock:
-        if _pipeline is not None:
-            return _pipeline
+def _model_path() -> Path:
+    """Return path to ONNX model, downloading if needed."""
+    p = MODEL_DIR / "kokoro-v1.0.onnx"
+    if p.exists():
+        return p
+    # Try int8 quantized (smaller)
+    p_int8 = MODEL_DIR / "kokoro-v1.0.int8.onnx"
+    if p_int8.exists():
+        return p_int8
+    return p
+
+
+def _voices_path() -> Path:
+    return MODEL_DIR / "voices-v1.0.bin"
+
+
+def _download_models():
+    """Download Kokoro ONNX model + voices if missing."""
+    model = _model_path()
+    voices = _voices_path()
+
+    if voices.exists() and model.exists():
+        return
+
+    logger.info("Kokoro: downloading model files …")
+    urls = []
+    if not voices.exists():
+        urls.append((
+            "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+            voices,
+        ))
+    if not model.exists():
+        # Prefer int8 quantized (smaller, faster)
+        urls.append((
+            "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
+            MODEL_DIR / "kokoro-v1.0.int8.onnx",
+        ))
+
+    for url, dest in urls:
         try:
-            from kokoro import KPipeline
+            import urllib.request
+            logger.info("Kokoro: downloading %s → %s", url, dest.name)
+            urllib.request.urlretrieve(url, dest)
+        except Exception as exc:
+            logger.warning("Kokoro: failed to download %s: %s", url, exc)
+
+
+def _get_kokoro():
+    """Return the shared Kokoro instance, creating it on first call."""
+    global _kokoro
+    if _kokoro is not None:
+        return _kokoro
+    with _init_lock:
+        if _kokoro is not None:
+            return _kokoro
+        try:
+            from kokoro_onnx import Kokoro
         except ImportError as exc:
             raise RuntimeError(
-                "kokoro is not installed. Run: pip install kokoro soundfile"
+                "kokoro-onnx is not installed. Run: pip install kokoro-onnx soundfile"
             ) from exc
-        # lang_code 'a' = American English (most voicepacks)
-        # 'b' = British English — we pick per-voice below
-        logger.info("Kokoro: loading KPipeline (first call) …")
-        _pipeline = KPipeline(lang_code="a")
-        logger.info("Kokoro: pipeline ready")
-    return _pipeline
+
+        _download_models()
+        model = _model_path()
+        voices = _voices_path()
+
+        if not model.exists():
+            raise RuntimeError(f"Kokoro model not found: {model}")
+        if not voices.exists():
+            raise RuntimeError(f"Kokoro voices not found: {voices}")
+
+        logger.info("Kokoro: loading model=%s voices=%s", model.name, voices.name)
+        _kokoro = Kokoro(str(model), str(voices))
+        logger.info("Kokoro: ready")
+    return _kokoro
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _resolve_voice(voice: str | None, agent: str | None = None) -> str:
-    """Map a voice identifier to a Kokoro voice id."""
     if voice and re.fullmatch(r"af_[a-z]+|am_[a-z]+|bf_[a-z]+|bm_[a-z]+", voice):
         return voice
     if agent and agent in VOICE_MAP:
@@ -104,7 +159,6 @@ def _resolve_voice(voice: str | None, agent: str | None = None) -> str:
 
 
 def cache_key(text: str, voice: str) -> str:
-    """Stable SHA1 over text + voice — used as the filename."""
     payload = f"kokoro:{voice}|{text}".encode("utf-8")
     return hashlib.sha1(payload).hexdigest()
 
@@ -114,7 +168,6 @@ def cache_path(key: str) -> Path:
 
 
 def _clean_text(text: str) -> str:
-    """Strip markdown / excessive whitespace before TTS."""
     if not text:
         return ""
     text = re.sub(r"\s+", " ", text).strip()
@@ -125,7 +178,6 @@ def _clean_text(text: str) -> str:
 
 
 def _wav_to_mp3(wav_bytes: bytes) -> bytes:
-    """Convert WAV bytes → MP3 bytes using ffmpeg (already in Docker image)."""
     try:
         proc = subprocess.run(
             ["ffmpeg", "-i", "pipe:0", "-f", "mp3", "-q:a", "4", "pipe:1"],
@@ -137,7 +189,6 @@ def _wav_to_mp3(wav_bytes: bytes) -> bytes:
             return proc.stdout
     except Exception as exc:
         logger.warning("ffmpeg wav→mp3 failed: %s", exc)
-    # Fallback: return WAV wrapped in a fake container so the client can play it
     return wav_bytes
 
 
@@ -151,10 +202,7 @@ def synthesize(
     agent: str | None = None,
     speed: float = 1.0,
 ) -> Path | None:
-    """Generate MP3 audio using Kokoro TTS.
-
-    Returns the path to a cached MP3, or None if Kokoro is unavailable.
-    """
+    """Generate MP3 audio using Kokoro ONNX TTS. Returns cached MP3 path or None."""
     text = _clean_text(text)
     if not text:
         raise ValueError("synthesize() requires non-empty text")
@@ -166,44 +214,32 @@ def synthesize(
     if path.exists() and path.stat().st_size > 0:
         return path
 
-    # Lock per key so concurrent requests for same text don't race
-    lock = threading.Lock()  # Simple lock; could be keyed per key for more parallelism
+    lock = threading.Lock()
     with lock:
         if path.exists() and path.stat().st_size > 0:
             return path
 
         try:
-            pipeline = _get_pipeline()
+            kokoro = _get_kokoro()
         except Exception as exc:
-            logger.warning("Kokoro pipeline unavailable: %s", exc)
+            logger.warning("Kokoro unavailable: %s", exc)
             return None
 
         logger.info("Kokoro synth: voice=%s bytes=%d key=%s…", voice_id, len(text), key[:8])
 
         try:
-            import numpy as np
-            import soundfile as sf
-        except ImportError as exc:
-            logger.warning("Kokoro deps missing (numpy, soundfile): %s", exc)
-            return None
-
-        # Run inference — pipeline returns a generator of (graphemes, phonemes, audio)
-        try:
-            generator = pipeline(text, voice=voice_id, speed=speed)
-            chunks = []
-            for _gs, _ps, audio in generator:
-                if audio is not None and len(audio) > 0:
-                    chunks.append(audio)
-
-            if not chunks:
-                logger.warning("Kokoro returned no audio chunks")
+            samples, sample_rate = kokoro.create(
+                text, voice=voice_id, speed=speed, lang="en-us"
+            )
+            if samples is None or len(samples) == 0:
+                logger.warning("Kokoro returned no audio")
                 return None
 
-            full_audio = np.concatenate(chunks)
+            import numpy as np
+            import soundfile as sf
 
-            # Write to temp WAV then convert to MP3
             wav_buf = io.BytesIO()
-            sf.write(wav_buf, full_audio, 24000, format="WAV")
+            sf.write(wav_buf, samples, sample_rate, format="WAV")
             mp3_bytes = _wav_to_mp3(wav_buf.getvalue())
 
             tmp = path.with_suffix(path.suffix + ".tmp")
@@ -217,24 +253,23 @@ def synthesize(
 
 
 def health() -> dict:
-    """Return Kokoro health status."""
     try:
-        from kokoro import KPipeline  # noqa: F401
+        from kokoro_onnx import Kokoro  # noqa: F401
         available = True
     except ImportError:
         available = False
+    model_exists = _model_path().exists() and _voices_path().exists()
     return {
         "available": available,
-        "engine": "kokoro-82M",
+        "model_downloaded": model_exists,
+        "engine": "kokoro-onnx",
         "license": "Apache-2.0",
         "voices": list(set(VOICE_MAP.values())),
-        "cache_dir": str(CACHE_DIR),
         "cache_files": len(list(CACHE_DIR.glob("*.mp3"))),
     }
 
 
 def clear_cache() -> int:
-    """Delete all cached Kokoro MP3s. Returns count removed."""
     n = 0
     for p in CACHE_DIR.glob("*.mp3"):
         try:
