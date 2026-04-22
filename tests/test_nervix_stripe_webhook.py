@@ -27,21 +27,20 @@ def _clean_db_and_events():
     with open(db.path, "w") as f:
         json.dump(empty, f)
     _processed_stripe_events.clear()
+    client.cookies.clear()
     yield
 
 
 def test_webhook_fails_closed_without_secret():
     """When STRIPE_WEBHOOK_SECRET is unset, webhook must return 503."""
-    old = os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+    import nervix_platform.stripe_client as _sc
+    old = _sc.WEBHOOK_SECRET
     try:
-        # Re-import to pick up empty env
-        from nervix_platform.stripe_client import WEBHOOK_SECRET
-        assert not WEBHOOK_SECRET
+        _sc.WEBHOOK_SECRET = ""
         r = client.post("/api/webhooks/stripe", data=b"{}", headers={"stripe-signature": ""})
         assert r.status_code == 503
     finally:
-        if old is not None:
-            os.environ["STRIPE_WEBHOOK_SECRET"] = old
+        _sc.WEBHOOK_SECRET = old
 
 
 def test_webhook_rejects_invalid_signature():

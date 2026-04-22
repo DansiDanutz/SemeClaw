@@ -1,11 +1,17 @@
 """Regression guard for APP_VERSION resolution (no tomllib dependency)."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# Prevent dotenv (loaded by deps.py) from polluting os.environ with real secrets.
+# load_dotenv only writes keys that are *not* already present.
+os.environ.setdefault("OPENROUTER_API_KEY", "")
+os.environ.setdefault("SEMECLAW_API_KEY", "")
 
 from war_room.dashboard.routes.deps import APP_VERSION, _read_version
 

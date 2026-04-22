@@ -701,11 +701,12 @@ class TestOllamaAdapter:
     @pytest.fixture
     def offline_adapter(self, tmp_path):
         with patch("war_room.adapters.ollama.MODELS_STATE_DIR", tmp_path):
-            adapter = OllamaAdapter(ollama_url="http://127.0.0.1:59996")
-            adapter._state_file = tmp_path / "models_sync.json"
-            # Ensure OpenRouter is unreachable so we get fallback models
-            adapter._openrouter_reachable = AsyncMock(return_value=False)
-            yield adapter
+            with patch("war_room.adapters.ollama.OPENROUTER_KEY", ""):
+                adapter = OllamaAdapter(ollama_url="http://127.0.0.1:59996", openrouter_key="")
+                adapter._state_file = tmp_path / "models_sync.json"
+                # Ensure OpenRouter is unreachable so we get fallback models
+                adapter._openrouter_reachable = AsyncMock(return_value=False)
+                yield adapter
 
     @pytest.mark.asyncio
     async def test_health_offline(self, offline_adapter):

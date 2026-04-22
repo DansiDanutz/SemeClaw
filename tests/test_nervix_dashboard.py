@@ -21,13 +21,14 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _clean_db():
-    """Reset the JSON-file DB before each test."""
+    """Reset the JSON-file DB and client cookies before each test."""
     import json
 
     empty = {"members": {}, "projects": {}, "transactions": [], "ad_plays": []}
     db.path.parent.mkdir(parents=True, exist_ok=True)
     with open(db.path, "w") as f:
         json.dump(empty, f)
+    client.cookies.clear()
     yield
 
 

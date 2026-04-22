@@ -28,6 +28,7 @@ def _clean_db():
     db.path.parent.mkdir(parents=True, exist_ok=True)
     with open(db.path, "w") as f:
         json.dump(empty, f)
+    client.cookies.clear()
     yield
 
 
@@ -40,7 +41,7 @@ def test_ad_play_deducts_credit():
     db.create_project(project.model_dump())
 
     event = AdPlayEvent(project_id=project.id, session_id="s1", completed=True)
-    r = client.post("/api/ad-play", json=event.model_dump())
+    r = client.post("/api/ad-play", json=event.model_dump(mode="json"))
     assert r.status_code == 200
     assert r.json()["credits_deducted"] == 1
 
@@ -56,7 +57,7 @@ def test_ad_play_insufficient_credits():
     db.create_project(project.model_dump())
 
     event = AdPlayEvent(project_id=project.id, session_id="s1", completed=True)
-    r = client.post("/api/ad-play", json=event.model_dump())
+    r = client.post("/api/ad-play", json=event.model_dump(mode="json"))
     assert r.status_code == 402
 
 
@@ -73,7 +74,7 @@ def test_atomic_debit_concurrency():
 
     def _play():
         event = AdPlayEvent(project_id=project.id, session_id="s1", completed=True)
-        r = client.post("/api/ad-play", json=event.model_dump())
+        r = client.post("/api/ad-play", json=event.model_dump(mode="json"))
         if r.status_code == 200:
             successes.append(1)
         else:
@@ -100,7 +101,7 @@ def test_partial_play_no_charge():
     db.create_project(project.model_dump())
 
     event = AdPlayEvent(project_id=project.id, session_id="s1", completed=False)
-    r = client.post("/api/ad-play", json=event.model_dump())
+    r = client.post("/api/ad-play", json=event.model_dump(mode="json"))
     assert r.status_code == 200
     assert r.json()["credits_deducted"] == 0
     m = db.get_member(member.id)

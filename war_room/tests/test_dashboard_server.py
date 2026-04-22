@@ -25,9 +25,10 @@ def client(tmp_path):
     # Isolate research dir and state file for tests
     with patch("war_room.dashboard.server.RESEARCH_DIR", tmp_path / "research"):
         with patch("war_room.dashboard.server.STATE_FILE", tmp_path / "state.json"):
-            (tmp_path / "research").mkdir(exist_ok=True)
-            with TestClient(app) as c:
-                yield c
+            with patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""):
+                (tmp_path / "research").mkdir(exist_ok=True)
+                with TestClient(app) as c:
+                    yield c
 
 
 def test_tts_health_returns_neural_when_edge_ready(client):
