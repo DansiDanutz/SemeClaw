@@ -194,20 +194,19 @@ async def ingest_ad_play(event: AdPlayEvent):
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    # Deduct 1 credit per completed ad play, 0.1 for partial
-    cost = -1 if event.completed else -0
-    if cost < 0 and member.get("credits", 0) + cost < 0:
-        raise HTTPException(status_code=402, detail="Insufficient credits")
-
-    db.add_ad_play(event.model_dump())
-
+    # Deduct 1 credit per completed ad play; partial plays deferred (fractional credits)
+    cost = -1 if event.completed else 0
     if cost < 0:
+        if not db.try_debit_credits(member["id"], abs(cost)):
+            raise HTTPException(status_code=402, detail="Insufficient credits")
         tx = CreditTransaction(
             member_id=member["id"],
             amount=cost,
             description=f"Ad play: {project['title']}",
         )
-        db.add_transaction(tx.model_dump())
+        db.add_transaction(tx.model_dump(), update_credits=False)
+
+    db.add_ad_play(event.model_dump())
 
     return {"status": "accepted", "credits_deducted": abs(cost)}
 

@@ -44,7 +44,7 @@ body{
 /* ══ HEADER ══ */
 header{
   position:sticky;top:0;z-index:50;height:56px;
-  background:rgba(1,3,11,.95);backdrop-filter:blur(28px) saturate(1.6);
+  background:rgba(1,3,11,.95);-webkit-backdrop-filter:blur(28px) saturate(1.6);backdrop-filter:blur(28px) saturate(1.6);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;
   box-shadow:0 1px 0 rgba(255,255,255,.025);
@@ -66,7 +66,7 @@ header::after{
   color:var(--amber);
   font-family:var(--mono);font-size:11px;letter-spacing:.4px;
   padding:8px 20px;display:none;align-items:center;gap:10px;
-  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
 }
 .update-banner.show{display:flex}
 .update-banner a{color:var(--text);text-decoration:underline}
@@ -97,7 +97,7 @@ header::after{
 
 /* ══ LAYOUT ══ */
 .layout{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 56px);overflow:hidden;position:relative}
-.sidebar-overlay{display:none;position:fixed;inset:0;top:56px;z-index:39;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+.sidebar-overlay{display:none;position:fixed;inset:0;top:56px;z-index:39;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .sidebar-overlay.visible{display:block}
 
 /* ══ SIDEBAR ══ */
@@ -211,7 +211,7 @@ header::after{
 .dot-popover-ts{font-size:9px;color:var(--text-3);font-family:var(--mono);margin-top:5px}
 @keyframes pop-in{from{opacity:0;transform:scale(.9) translateY(4px)}to{opacity:1;transform:none}}
 /* ── Dot history modal ── */
-.dh-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(16px);z-index:300;align-items:center;justify-content:center}
+.dh-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);z-index:300;align-items:center;justify-content:center}
 .dh-overlay.open{display:flex}
 .dh-modal{background:var(--bg-1);border:1px solid var(--border-2);border-radius:18px;width:94%;max-width:680px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.9);animation:modal-pop .22s var(--ease-out)}
 .dh-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
@@ -331,7 +331,7 @@ header::after{
 /* ══════════════════════════════════════════════
    MEETING ROOM — Full Animated Voice Interface
 ══════════════════════════════════════════════ */
-.meeting-overlay{display:none;position:fixed;inset:0;z-index:90;background:rgba(1,3,11,.97);backdrop-filter:blur(28px);flex-direction:column;animation:fade-in .3s ease}
+.meeting-overlay{display:none;position:fixed;inset:0;z-index:90;background:rgba(1,3,11,.97);-webkit-backdrop-filter:blur(28px);backdrop-filter:blur(28px);flex-direction:column;animation:fade-in .3s ease}
 .meeting-overlay.open{display:flex}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
 .meeting-inner{display:flex;flex-direction:column;flex:1;overflow:hidden}
@@ -407,7 +407,7 @@ header::after{
 /* ══════════════════════════════════════════════
    TASK MEETING ROOM v2 — Cinematic Agent Dialogue
 ══════════════════════════════════════════════ */
-.tm-overlay{display:none;position:fixed;inset:0;z-index:95;background:rgba(1,3,11,.98);backdrop-filter:blur(32px);flex-direction:column;overflow:hidden;animation:fade-in .35s var(--ease-out)}
+.tm-overlay{display:none;position:fixed;inset:0;z-index:95;background:rgba(1,3,11,.98);-webkit-backdrop-filter:blur(32px);backdrop-filter:blur(32px);flex-direction:column;overflow:hidden;animation:fade-in .35s var(--ease-out)}
 .tm-overlay.open{display:flex}
 .tm-hdr{height:52px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(6,14,33,.9);position:relative;overflow:hidden}
 .tm-hdr::before{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--amber) 30%,var(--violet) 70%,transparent);opacity:.5}
@@ -1135,7 +1135,7 @@ header::after{
 /* ══ MODAL / TOAST ══ */
 .empty{padding:24px 18px;font-size:11px;font-family:var(--mono);color:var(--text-3);text-align:center}
 .empty::before{content:'// '}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(14px);z-index:100;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:var(--bg-1);border:1px solid var(--border-2);border-radius:16px;width:92%;max-width:800px;max-height:78vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.85);animation:modal-pop .25s var(--ease-out)}
 @keyframes modal-pop{from{opacity:0;transform:scale(.94) translateY(12px)}to{opacity:1;transform:none}}
@@ -1259,7 +1259,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 
 .tm-prompt-title{background:linear-gradient(135deg,#fff 0%,#fbbf24 50%,#22d3ee 100%)!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important;font-size:1.6rem!important;letter-spacing:.3px!important;}
 
-.tm-prompt-box{background:rgba(5,13,30,.85)!important;border:1px solid rgba(245,158,11,.12)!important;border-radius:12px!important;backdrop-filter:blur(20px)!important;transition:border-color .3s,box-shadow .3s!important;}
+.tm-prompt-box{background:rgba(5,13,30,.85)!important;border:1px solid rgba(245,158,11,.12)!important;border-radius:12px!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;transition:border-color .3s,box-shadow .3s!important;}
 .tm-prompt-box:focus-within{border-color:rgba(245,158,11,.45)!important;box-shadow:0 0 30px rgba(245,158,11,.08),0 0 60px rgba(245,158,11,.04)!important;}
 
 .tm-prompt-textarea{background:rgba(10,20,40,.6)!important;border:1px solid rgba(255,255,255,.06)!important;color:#e2e8f0!important;border-radius:10px!important;}
@@ -1279,10 +1279,10 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .tm-overlay{animation:tm-fade-in .4s ease-out!important;}
 @keyframes tm-fade-in{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 
-.tm-hdr{background:linear-gradient(180deg,rgba(5,13,30,.97),rgba(5,13,30,.88))!important;border-bottom:1px solid rgba(245,158,11,.1)!important;backdrop-filter:blur(40px) saturate(2)!important;}
+.tm-hdr{background:linear-gradient(180deg,rgba(5,13,30,.97),rgba(5,13,30,.88))!important;border-bottom:1px solid rgba(245,158,11,.1)!important;-webkit-backdrop-filter:blur(40px) saturate(2)!important;backdrop-filter:blur(40px) saturate(2)!important;}
 .tm-hdr::after{height:2px!important;background:linear-gradient(90deg,transparent,rgba(245,158,11,.95) 12%,rgba(34,211,238,.9) 40%,rgba(139,92,246,.85) 65%,transparent)!important;background-size:200% 100%!important;animation:rainbow-scan 4s linear infinite!important;}
 
-.tm-roster{background:linear-gradient(180deg,rgba(10,20,40,.92),rgba(8,15,32,.88))!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;backdrop-filter:blur(20px)!important;}
+.tm-roster{background:linear-gradient(180deg,rgba(10,20,40,.92),rgba(8,15,32,.88))!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;}
 .tm-roster::before{background:linear-gradient(180deg,rgba(245,158,11,.06),transparent)!important;}
 
 /* Agent cards in roster */
@@ -1319,18 +1319,18 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 @keyframes dialogue-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* Comment bar */
-.tm-comment-bar{background:rgba(10,20,40,.8)!important;backdrop-filter:blur(16px)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:12px!important;}
+.tm-comment-bar{background:rgba(10,20,40,.8)!important;-webkit-backdrop-filter:blur(16px)!important;backdrop-filter:blur(16px)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:12px!important;}
 .tm-comment-input{background:rgba(5,13,30,.6)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:8px!important;color:#e2e8f0!important;}
 .tm-comment-input:focus{border-color:rgba(245,158,11,.4)!important;box-shadow:0 0 0 3px rgba(245,158,11,.08)!important;outline:none!important;}
 .tm-comment-btn{background:rgba(245,158,11,.1)!important;border:1px solid rgba(245,158,11,.2)!important;color:#f59e0b!important;border-radius:8px!important;transition:all .2s!important;}
 .tm-comment-btn:hover{background:rgba(245,158,11,.2)!important;border-color:rgba(245,158,11,.4)!important;}
 
 /* Finish button */
-.tm-finish-btn{background:rgba(34,197,94,.08)!important;border:1px solid rgba(34,197,94,.2)!important;color:#22c55e!important;border-radius:8px!important;backdrop-filter:blur(10px)!important;transition:all .2s!important;}
+.tm-finish-btn{background:rgba(34,197,94,.08)!important;border:1px solid rgba(34,197,94,.2)!important;color:#22c55e!important;border-radius:8px!important;-webkit-backdrop-filter:blur(10px)!important;backdrop-filter:blur(10px)!important;transition:all .2s!important;}
 .tm-finish-btn:hover{background:rgba(34,197,94,.15)!important;border-color:rgba(34,197,94,.4)!important;box-shadow:0 0 16px rgba(34,197,94,.1)!important;}
 
 /* Question zone */
-.tm-question{background:rgba(139,92,246,.06)!important;border:1px solid rgba(139,92,246,.15)!important;border-radius:12px!important;backdrop-filter:blur(16px)!important;}
+.tm-question{background:rgba(139,92,246,.06)!important;border:1px solid rgba(139,92,246,.15)!important;border-radius:12px!important;-webkit-backdrop-filter:blur(16px)!important;backdrop-filter:blur(16px)!important;}
 </style>
 <style id="war-room-meeting-ultra-v2">
 /* WAR ROOM Meeting Ultra v1 — V2 Cinematic Theater Layout */
@@ -1361,7 +1361,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .tm-stage.v2-layout .tm-v1-btn:hover{background:rgba(245,158,11,.06)!important;color:#f59e0b!important;border-color:rgba(245,158,11,.3)!important;}
 
 /* ── V2 History Panel ── */
-.tm-hist-panel{background:rgba(5,13,30,.92)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;backdrop-filter:blur(20px)!important;}
+.tm-hist-panel{background:rgba(5,13,30,.92)!important;border:1px solid rgba(255,255,255,.06)!important;border-radius:14px!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;}
 .tm-hist-list .empty{border:2px dashed rgba(255,255,255,.08)!important;border-radius:10px!important;padding:30px!important;color:rgba(255,255,255,.2)!important;}
 
 /* ── Meeting Room Loading Screen — Laptop Device Mockup ── */
@@ -1470,7 +1470,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
   position:relative;z-index:1;
   width:min(520px,88vw);
   background:rgba(12,18,42,.65);
-  backdrop-filter:blur(28px) saturate(1.4);
+  -webkit-backdrop-filter:blur(28px) saturate(1.4);backdrop-filter:blur(28px) saturate(1.4);
   -webkit-backdrop-filter:blur(28px) saturate(1.4);
   border:1px solid rgba(255,255,255,.08);
   border-radius:16px;
@@ -1631,7 +1631,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 .pipeline { background:linear-gradient(90deg,var(--bg-2) 0%,rgba(13,27,53,.3) 100%); border-radius:8px; padding:10px 12px; }
 
 /* CONNECTION MANAGER MODAL */
-#sync-modal-overlay { position:fixed; inset:0; z-index:9999; background:rgba(1,3,11,.85); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .25s ease; pointer-events:none; }
+#sync-modal-overlay { position:fixed; inset:0; z-index:9999; background:rgba(1,3,11,.85); -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .25s ease; pointer-events:none; }
 #sync-modal-overlay.visible { opacity:1; pointer-events:all; }
 #sync-modal { background:var(--bg-1); border:1px solid var(--border-2); border-radius:16px; width:540px; max-height:80vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(245,158,11,.08); transform:translateY(20px) scale(.97); transition:transform .3s var(--ease-out); }
 #sync-modal-overlay.visible #sync-modal { transform:translateY(0) scale(1); }
@@ -1972,7 +1972,7 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
         <div class="tm-assignments" id="tm-assignments"></div>
       </div>
       <!-- Feature 1: Human chat input bar during a meeting -->
-      <div id="tm-human-bar" style="display:none;padding:10px 14px;background:rgba(10,10,20,.85);border-top:1px solid rgba(245,158,11,.18);flex-shrink:0;backdrop-filter:blur(8px)">
+      <div id="tm-human-bar" style="display:none;padding:10px 14px;background:rgba(10,10,20,.85);border-top:1px solid rgba(245,158,11,.18);flex-shrink:0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)">
         <div id="tm-replan-counter" style="font-size:10px;color:#6b7280;margin-bottom:6px;font-family:var(--mono)">💬 0/2 questions used</div>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="tm-human-input" type="text" placeholder="Ask a question or add a requirement..."

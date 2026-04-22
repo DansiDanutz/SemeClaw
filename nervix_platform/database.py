@@ -111,14 +111,14 @@ class Database:
                 txs = [t for t in txs if t["member_id"] == member_id]
             return list(reversed(txs))
 
-    def add_transaction(self, tx: dict) -> dict:
+    def add_transaction(self, tx: dict, *, update_credits: bool = True) -> dict:
         with self._lock:
             data = self._load()
             data["transactions"].append(tx)
-            # Update member credits
-            m = data["members"].get(tx["member_id"])
-            if m:
-                m["credits"] = m.get("credits", 0) + tx["amount"]
+            if update_credits:
+                m = data["members"].get(tx["member_id"])
+                if m:
+                    m["credits"] = m.get("credits", 0) + tx["amount"]
             self._save(data)
             return tx
 
@@ -135,6 +135,17 @@ class Database:
                     p["clicks"] = p.get("clicks", 0) + 1
             self._save(data)
             return event
+
+    def try_debit_credits(self, member_id: str, amount: int) -> bool:
+        """Atomically check balance and debit. Returns True if successful."""
+        with self._lock:
+            data = self._load()
+            m = data["members"].get(member_id)
+            if not m or m.get("credits", 0) < amount:
+                return False
+            m["credits"] = m.get("credits", 0) - amount
+            self._save(data)
+            return True
 
     def get_ad_plays(self, project_id: str | None = None) -> list[dict]:
         with self._lock:
