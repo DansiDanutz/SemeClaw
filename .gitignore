@@ -101,3 +101,6 @@ UPGRADE_PLAN.md
 # Wrangler cache and config
 .wrangler/
 >>>>>>> a34ebf8f9154dfd5ee53a6e045a47920bb428de5
+war_room/dashboard/audio_cache/
+war_room/dashboard/models/
+integrations/nervix/
