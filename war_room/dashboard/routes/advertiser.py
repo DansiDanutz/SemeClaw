@@ -139,6 +139,7 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
             "notes": (body.get("notes") or "").strip(),
             "ad_goal": (body.get("ad_goal") or "").strip(),
             "target_audience": (body.get("target_audience") or "").strip(),
+            "voice": (body.get("voice") or "af_bella").strip(),
         })
         return JSONResponse(rows[0] if rows else {"id": "", "name": name}, status_code=201)
     except Exception as e:
@@ -155,7 +156,7 @@ async def api_advertiser_update_project(advertiser_id: str, project_id: str, req
         if not rows:
             return JSONResponse({"error": "project not found"}, status_code=404)
         patch = {}
-        for k in ("name", "github_url", "webpage_url", "description", "notes", "ad_goal", "target_audience"):
+        for k in ("name", "github_url", "webpage_url", "description", "notes", "ad_goal", "target_audience", "voice"):
             if k in body:
                 patch[k] = (body[k] or "").strip()
         if patch:

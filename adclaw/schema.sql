@@ -163,3 +163,4 @@ alter table adclaw_slides add column if not exists last_edited_at timestamptz;
 -- -----------------------------------------------------------------------
 alter table adclaw_projects add column if not exists webpage_url text;
 alter table adclaw_projects add column if not exists notes text;
+alter table adclaw_projects add column if not exists voice text default 'af_bella';
