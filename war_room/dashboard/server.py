@@ -441,9 +441,10 @@ _RATE_LIMIT_WINDOW = 60  # seconds
 
 # Max requests per IP per window for each path prefix
 _RATE_LIMIT_BY_PREFIX: dict[str, int] = {
-    "/api/tts":             20,   # ElevenLabs costs money
+    "/api/tts":             60,   # ElevenLabs (paid) + Kokoro (free) — generous
+    "/api/stt":             30,   # Whisper — CPU heavy
     "/api/meeting/audio":  10,   # ffmpeg + TTS — heavy
-    "/api/meeting/script":  30,   # pure compute, still throttled
+    "/api/meeting/script": 30,   # pure compute, still throttled
 }
 
 # key: f"{ip}|{path_prefix}" → deque of monotonic timestamps
@@ -2425,9 +2426,16 @@ async def api_agent_manifest():
             "protected_paths": list(_PROTECTED_WRITE_PATHS) if auth_required else [],
         },
         "tts": {
-            "engine":          "elevenlabs-flash-v2.5 + edge-tts fallback",
+            "engines":         ["elevenlabs-flash-v2.5", "kokoro-82M"],
             "languages":       ["en"],
             "voice_map_size":  len(_ELEVEN_VOICES),
+            "kokoro_voices":   ["af_bella", "af_nicole", "am_adam", "bf_emma", "bm_george"],
+        },
+        "stt": {
+            "engine":          "faster-whisper",
+            "model":           "large-v3-turbo",
+            "languages":       "99+ (auto-detected)",
+            "license":         "MIT",
         },
         "retention": {
             "meetings_hours": MEETING_RETENTION_HOURS,
@@ -4668,10 +4676,81 @@ async def api_tts(request: Request, text: str, speaker: str = "", lang: str = "e
         except Exception as e:
             logger.warning(f"ElevenLabs fallback to edge-tts for {speaker}: {e}")
 
-    # ElevenLabs is the only voice engine. No robotic edge-tts fallback.
-    # Return 204 (no content) — client shows typewriter text silently.
+    # ── Kokoro open-source TTS fallback (free, Apache 2.0) ────────────────
+    try:
+        from war_room.dashboard import kokoro_tts as kt
+        mp3_path = kt.synthesize(text, voice=effective_voice_name, agent=speaker)
+        if mp3_path and mp3_path.exists():
+            return FResponse(
+                content=mp3_path.read_bytes(),
+                media_type="audio/mpeg",
+                headers={
+                    "Cache-Control": "public, max-age=3600",
+                    "X-Speaker": speaker,
+                    "X-Voice": effective_voice_name,
+                    "X-Tenant": tenant,
+                    "X-TTS-Engine": "kokoro-82M",
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Kokoro fallback failed for {speaker}: {e}")
+
+    # No TTS engine available — return 204 so client shows text silently.
     return FResponse(content=b"", media_type="audio/mpeg", status_code=204,
                      headers={"X-TTS-Engine": "none", "X-Speaker": speaker})
+
+
+@app.post("/api/stt")
+async def api_stt(request: Request, audio: str = ""):
+    """Transcribe uploaded audio using open-source Whisper (faster-whisper).
+
+    Multipart form fields:
+        file        — audio file (.mp3, .wav, .m4a, .ogg, etc.)
+        language    — optional ISO-639-1 code (e.g. 'en', 'es')
+        task        — 'transcribe' (default) or 'translate' (to English)
+
+    Returns JSON:
+        {
+            "text": "full transcript",
+            "language": "en",
+            "language_probability": 0.98,
+            "duration": 12.5,
+            "segments": [...],
+            "model": "large-v3-turbo",
+            "elapsed_seconds": 1.23
+        }
+    """
+    from fastapi.responses import Response as FResponse
+
+    _bump("stt_requests")
+    tenant = _tenant_id(request)
+
+    form = await request.form()
+    f = form.get("file")
+    if not f or not hasattr(f, "read"):
+        return JSONResponse({"error": "file field required"}, status_code=400)
+
+    audio_bytes = await f.read()
+    if not audio_bytes:
+        return JSONResponse({"error": "empty audio file"}, status_code=400)
+
+    language = (form.get("language") or "").strip() or None
+    task = (form.get("task") or "transcribe").strip()
+
+    try:
+        from war_room.dashboard import whisper_stt as wt
+        result = wt.transcribe(
+            audio_bytes,
+            language=language,
+            task=task,
+            vad_filter=True,
+            word_timestamps=False,
+        )
+        result["tenant"] = tenant
+        return JSONResponse(result)
+    except Exception as e:
+        logger.warning(f"Whisper STT failed: {e}")
+        return JSONResponse({"error": "transcription failed", "detail": str(e)}, status_code=503)
 
 
 # MOVED to routes/health.py
