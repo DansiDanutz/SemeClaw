@@ -26,6 +26,7 @@ RUN uv sync --frozen --no-install-project || uv sync --no-install-project
 # Copy source
 COPY src ./src
 COPY war_room ./war_room
+COPY adclaw ./adclaw
 COPY default_workspace ./default_workspace
 COPY install.sh setup.sh .env.example ./
 COPY README.md INTEGRATION.md SEMECLAW_AGENT_PLAN.md ./
