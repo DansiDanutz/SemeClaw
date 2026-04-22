@@ -3162,25 +3162,6 @@ async def api_meeting_inject(request: Request):
 #                                  "X-SemeClaw-Layout": v})
 #
 #
-# MOVED to routes/agents.py
-# @app.get("/api/agents")
-async def api_agents():
-    agents = {}
-    for md_file in AGENTS_DIR.glob("*.md"):
-        agent_id = md_file.stem
-        text = md_file.read_text(encoding="utf-8")
-        name = agent_id.capitalize()
-        for line in text.splitlines():
-            if line.startswith("name:"):
-                name = line.split(":", 1)[1].strip()
-                break
-        agents[agent_id] = {"id": agent_id, "name": name}
-    # Demo mode: append demo agents so they appear in the dashboard immediately
-    for demo_agent in _DEMO_AGENTS:
-        agents[demo_agent["id"]] = demo_agent
-    return JSONResponse(agents)
-
-
 @app.get("/api/demo/tasks")
 async def api_demo_tasks():
     """Return the pre-built demo tasks (only populated in DEMO_MODE)."""
@@ -5065,8 +5046,6 @@ async def api_agent_health():
 
             for agent_id, agent_runs in by_agent.items():
                 agent_name = id_to_name.get(agent_id, agent_id[:8])
-                if agent_name in supa_names:
-                    continue   # already covered by Supabase
                 # Sort oldest→newest
                 agent_runs.sort(key=lambda x: x.get("startedAt") or x.get("createdAt") or "")
                 dots = []
@@ -5123,7 +5102,23 @@ async def api_agent_health():
     supa_names   = {r["agent_name"] for r in supa_deduped}
 
     # ── 4. Merge and compute system health ────────────────────────────────────
-    result = supa_deduped + [r for r in pc_result if r["agent_name"] not in supa_names]
+    # Use the freshest data source per agent (Supabase vs Paperclip)
+    pc_by_name: dict[str, dict] = {r["agent_name"]: r for r in pc_result}
+    result: list[dict] = []
+    for r in supa_deduped:
+        name = r["agent_name"]
+        pc = pc_by_name.get(name)
+        if pc:
+            supa_last = r.get("last_run_at") or ""
+            pc_last = pc.get("last_run_at") or ""
+            if pc_last > supa_last:
+                result.append(pc)
+                continue
+        result.append(r)
+    # Add Paperclip-only agents
+    for r in pc_result:
+        if r["agent_name"] not in supa_names:
+            result.append(r)
     valid = [r for r in result if r.get("health_pct") is not None]
     system_health = (
         round(sum(float(r["health_pct"]) for r in valid) / len(valid), 1)
