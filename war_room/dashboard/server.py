@@ -47,6 +47,13 @@ try:
 except ImportError:
     pass
 
+# Import AdClaw slide serving so we can run it in-process when no external AdClaw is configured
+try:
+    from adclaw.server import get_next_slide as _adclaw_get_next_slide
+except Exception as _adclaw_import_err:
+    _adclaw_get_next_slide = None  # type: ignore
+    logger.warning("AdClaw module not available for in-process serving: %s", _adclaw_import_err)
+
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -1937,6 +1944,18 @@ async def api_meeting_loading_slides(request: Request):
                     return JSONResponse(data)
         except Exception as _ads_err:
             logger.warning("AdClaw proxy failed, falling back to local slides: %s", _ads_err)
+
+    # --- In-process AdClaw fallback (when no external AdClaw URL is set) ---
+    if _adclaw_get_next_slide:
+        try:
+            return await _adclaw_get_next_slide(
+                instance_id=SEMECLAW_INSTANCE_ID,
+                ip_hash=_hash_ip(ip),
+                tenant_id=SEMECLAW_TENANT_ID,
+                count=5,
+            )
+        except Exception as _adclaw_err:
+            logger.warning("In-process AdClaw serving failed, falling back to local slides: %s", _adclaw_err)
 
     # --- Local fallback (always available, no impression tracking) ---
     all_slides = _load_slides()
