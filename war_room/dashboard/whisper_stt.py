@@ -30,7 +30,7 @@ logger = logging.getLogger("war_room.whisper")
 # Config
 # ---------------------------------------------------------------------------
 # Model size: tiny, base, small, medium, large-v1, large-v2, large-v3, large-v3-turbo, distil-*
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "large-v3-turbo").strip() or "large-v3-turbo"
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base").strip() or "base"
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu").strip() or "cpu"  # "cpu" or "cuda"
 WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", "int8").strip() or "int8"  # int8, float16, float32
 
