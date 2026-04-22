@@ -52,16 +52,37 @@ STRIPE_PRICE_PER_MEETING = os.environ.get("STRIPE_PRICE_PER_MEETING", "").strip(
 # App version (read from pyproject.toml so it stays in sync with releases)
 # ---------------------------------------------------------------------------
 def _read_version() -> str:
+    # 1. importlib.metadata — works on Python 3.8+ regardless of packaging
+    try:
+        from importlib.metadata import version as _pkg_version
+        return _pkg_version("semeclaw")
+    except Exception:
+        pass
+    # 2. tomllib — Python 3.11+ only
     try:
         import tomllib
         pyproject = ROOT / "pyproject.toml"
         if pyproject.exists():
             with pyproject.open("rb") as f:
                 data = tomllib.load(f)
-                return data.get("project", {}).get("version", "0.7.0")
+                v = data.get("project", {}).get("version")
+                if v:
+                    return v
     except Exception:
         pass
-    return "0.7.0"
+    # 3. regex fallback — no external deps, works on 3.10
+    try:
+        pyproject = ROOT / "pyproject.toml"
+        if pyproject.exists():
+            txt = pyproject.read_text(encoding="utf-8")
+            import re as _re
+            m = _re.search(r'^version\s*=\s*"([^"]+)"', txt, _re.MULTILINE)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    # 4. visible sentinel so we know resolution failed
+    return "0.0.0"
 
 APP_VERSION = _read_version()
 

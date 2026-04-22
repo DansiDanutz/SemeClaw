@@ -192,7 +192,7 @@ async def _prune_agent_history(agent_name: str):
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-APP_VERSION = "0.7.5"
+from war_room.dashboard.routes.deps import APP_VERSION
 
 
 async def _prune_loop() -> None:
