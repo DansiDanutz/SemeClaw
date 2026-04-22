@@ -11,6 +11,7 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from itsdangerous import URLSafeSerializer, BadSignature
 
 from nervix_platform.database import db
 from nervix_platform.models import (
@@ -34,6 +35,38 @@ logger = logging.getLogger(__name__)
 
 # In-memory dedup set for Stripe webhook event ids (retries within process lifetime)
 _processed_stripe_events: set[str] = set()
+
+# Session signing — ephemeral key warns in production
+_SESSION_SECRET = os.environ.get("NERVIX_SESSION_SECRET", "")
+if not _SESSION_SECRET:
+    import secrets
+
+    _SESSION_SECRET = secrets.token_urlsafe(32)
+    logger.warning("NERVIX_SESSION_SECRET not set; using ephemeral key (sessions invalidated on restart)")
+
+_cookie_serializer = URLSafeSerializer(_SESSION_SECRET, salt="nervix-session")
+_COOKIE_SECURE = os.environ.get("NERVIX_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+
+
+def _set_member_cookie(response: JSONResponse | RedirectResponse, member_id: str) -> None:
+    response.set_cookie(
+        key="nervix_member",
+        value=_cookie_serializer.dumps(member_id),
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+    )
+
+
+def _get_member_id_from_cookie(request: Request) -> str | None:
+    cookie = request.cookies.get("nervix_member")
+    if not cookie:
+        return None
+    try:
+        return _cookie_serializer.loads(cookie)
+    except BadSignature:
+        return None
 
 # Templates and static files
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -72,20 +105,27 @@ async def signup_page(request: Request):
 
 
 @app.post("/api/members")
-async def create_member_api(email: str = Form(...), name: str = Form(...)):
-    """Create a new member."""
+async def create_member_api(request: Request, email: str = Form(...), name: str = Form(...)):
+    """Create a new member (or return existing) and mint signed session cookie."""
     existing = db.get_member_by_email(email)
     if existing:
-        return JSONResponse({"member_id": existing["id"], "message": "Member already exists"}, status_code=200)
+        response = JSONResponse({"member_id": existing["id"], "message": "Member already exists"}, status_code=200)
+        _set_member_cookie(response, existing["id"])
+        return response
 
     member = Member(email=email, name=name)
     db.create_member(member.model_dump())
-    return {"member_id": member.id, "message": "Member created"}
+    response = JSONResponse({"member_id": member.id, "message": "Member created"})
+    _set_member_cookie(response, member.id)
+    return response
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, member_id: str):
+async def dashboard(request: Request):
     """Member dashboard."""
+    member_id = _get_member_id_from_cookie(request)
+    if not member_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     member = db.get_member(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -117,12 +157,16 @@ async def dashboard(request: Request, member_id: str):
 
 @app.post("/api/projects")
 async def create_project_api(
-    member_id: str = Form(...),
+    request: Request,
     title: str = Form(...),
     description: str = Form(...),
     url: str = Form(None),
+    member_id: str = Form(None),  # ignored — prevents smuggling, but form parsers stay happy
 ):
     """Submit a new project."""
+    member_id = _get_member_id_from_cookie(request)
+    if not member_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     member = db.get_member(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -133,8 +177,11 @@ async def create_project_api(
 
 
 @app.post("/api/checkout")
-async def create_checkout(data: CheckoutSessionRequest, member_id: str):
+async def create_checkout(request: Request, data: CheckoutSessionRequest):
     """Create a Stripe checkout session."""
+    member_id = _get_member_id_from_cookie(request)
+    if not member_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     member = db.get_member(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
