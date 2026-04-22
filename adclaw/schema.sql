@@ -191,3 +191,25 @@ create index if not exists adclaw_transactions_advertiser on adclaw_transactions
 
 -- Updated RPCs that record transactions
 -- (See migration SQL for full create-or-replace statements)
+
+-- -----------------------------------------------------------------------
+-- Frequency capping (added 2026-04-22)
+-- No more than 3 views of the same ad per IP in 4 hours
+-- -----------------------------------------------------------------------
+create index if not exists adclaw_impressions_ip_slide_viewed
+  on adclaw_impressions (ip_hash, slide_id, viewed_at desc);
+
+-- RPC: return slide IDs that have reached the view cap for a given IP
+create or replace function adclaw_frequency_cap(
+  p_ip_hash    text,
+  p_hours      integer default 4,
+  p_max_views  integer default 3
+) returns table(slide_id uuid, view_count bigint)
+language sql stable as $$
+  select i.slide_id, count(*) as view_count
+  from adclaw_impressions i
+  where i.ip_hash = p_ip_hash
+    and i.viewed_at >= now() - (p_hours || ' hours')::interval
+  group by i.slide_id
+  having count(*) >= p_max_views;
+$$;

@@ -137,15 +137,19 @@ async def get_next_slide(
     The impression is written to Supabase before this response is sent.
     There is no second "confirm" step — the view is counted on fetch.
     Credits are deducted from the campaign wallet atomically.
+
+    Frequency capping: same IP cannot see the same slide more than 3 times
+    in any 4-hour rolling window.
     """
-    # Fetch enabled slides ordered by least recently served (round-robin)
+    # 1. Fetch enabled slides ordered by least recently served (round-robin)
+    #    We fetch more than count so we have candidates after capping.
     try:
         slides_raw = await _supa(
             "get",
             "adclaw_slides"
             "?status=eq.enabled"
             "&order=last_served_at.asc.nullsfirst"
-            f"&limit={max(1, min(count, 10))}",
+            f"&limit=50",
         )
     except Exception as e:
         logger.error("Slide fetch failed: %s", e)
@@ -154,28 +158,54 @@ async def get_next_slide(
     if not slides_raw:
         return JSONResponse({"slides": [], "token": None, "wait_ms": 0})
 
+    # 2. Frequency cap — exclude slides this IP has seen ≥3 times in last 4h
+    eligible_slides = slides_raw
+    if ip_hash and ip_hash != "unknown":
+        try:
+            capped_rows = await _supa(
+                "post",
+                "rpc/adclaw_frequency_cap",
+                json={
+                    "p_ip_hash": ip_hash,
+                    "p_hours": 4,
+                    "p_max_views": 3,
+                },
+            )
+            capped_ids = {r["slide_id"] for r in capped_rows}
+            if capped_ids:
+                eligible_slides = [s for s in slides_raw if s["id"] not in capped_ids]
+                logger.info(
+                    "Frequency cap excluded %d slide(s) for ip_hash=%s...",
+                    len(capped_ids),
+                    ip_hash[:8],
+                )
+        except Exception as e:
+            logger.warning("Frequency cap lookup failed: %s", e)
+            # On failure, serve all slides (fail-open for ad delivery)
+
+    # 3. Take up to count from eligible slides
+    served = eligible_slides[:max(1, min(count, 10))]
+    if not served:
+        return JSONResponse({"slides": [], "token": None, "wait_ms": 0})
+
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Log impressions + deduct credits for each served slide
-    impression_tasks = []
-    for slide in slides_raw:
-        impression_tasks.append(
-            _record_impression(
-                slide_id=slide["id"],
-                campaign_id=slide["campaign_id"],
-                instance_id=instance_id,
-                ip_hash=ip_hash,
-                tenant_id=tenant_id,
-                now_iso=now_iso,
-            )
-        )
-
-    # Fire all impression writes concurrently (best-effort, non-blocking on error)
+    # 4. Log impressions + deduct credits only for actually served slides
     import asyncio
-    await asyncio.gather(*impression_tasks, return_exceptions=True)
+    await asyncio.gather(*[
+        _record_impression(
+            slide_id=slide["id"],
+            campaign_id=slide["campaign_id"],
+            instance_id=instance_id,
+            ip_hash=ip_hash,
+            tenant_id=tenant_id,
+            now_iso=now_iso,
+        )
+        for slide in served
+    ], return_exceptions=True)
 
     # Normalise slide shape for the War Room client
-    client_slides = [_normalise_slide(s) for s in slides_raw]
+    client_slides = [_normalise_slide(s) for s in served]
 
     # Issue a signed token the War Room can echo back for extra verification
     token = _issue_token(instance_id)
