@@ -84,10 +84,7 @@ def create_checkout_session(
 def construct_event(payload: bytes, sig_header: str) -> stripe.Event:
     """Verify and construct a Stripe webhook event."""
     if not WEBHOOK_SECRET:
-        # In test mode without webhook secret, parse directly
-        import json
-
-        return stripe.Event.construct_from(json.loads(payload), stripe.api_key)
+        raise ValueError("STRIPE_WEBHOOK_SECRET not configured")
     return stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
 
 

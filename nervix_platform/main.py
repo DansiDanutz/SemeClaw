@@ -32,6 +32,9 @@ from nervix_platform.stripe_client import (
 
 logger = logging.getLogger(__name__)
 
+# In-memory dedup set for Stripe webhook event ids (retries within process lifetime)
+_processed_stripe_events: set[str] = set()
+
 # Templates and static files
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -159,9 +162,19 @@ async def stripe_webhook(request: Request):
 
     try:
         event = construct_event(payload, sig_header)
+    except ValueError as e:
+        logger.error(f"Stripe webhook configuration error: {e}")
+        raise HTTPException(status_code=503, detail="Webhook verification not configured")
     except Exception as e:
         logger.warning(f"Stripe webhook error: {e}")
         raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Idempotency: skip duplicate event ids
+    event_id = event.get("id")
+    if event_id and event_id in _processed_stripe_events:
+        return {"status": "already_processed"}
+    if event_id:
+        _processed_stripe_events.add(event_id)
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
