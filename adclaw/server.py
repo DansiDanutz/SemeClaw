@@ -138,12 +138,12 @@ async def get_next_slide(
     There is no second "confirm" step — the view is counted on fetch.
     Credits are deducted from the campaign wallet atomically.
     """
-    # Fetch active slides ordered by least recently served (round-robin)
+    # Fetch enabled slides ordered by least recently served (round-robin)
     try:
         slides_raw = await _supa(
             "get",
             "adclaw_slides"
-            "?status=eq.active"
+            "?status=eq.enabled"
             "&order=last_served_at.asc.nullsfirst"
             f"&limit={max(1, min(count, 10))}",
         )
@@ -207,9 +207,13 @@ async def _record_impression(
             "viewed_at": now_iso,
         })
         # Deduct credits from campaign wallet via RPC (atomic in Postgres)
+        # Pass slide + instance so a transaction row is recorded.
         await _supa("post", "rpc/adclaw_deduct_credits", json={
             "p_campaign_id": campaign_id,
             "p_credits": CREDITS_PER_IMPRESSION,
+            "p_slide_id": slide_id,
+            "p_instance_id": instance_id,
+            "p_description": f"View via {instance_id or 'unknown'}",
         })
         # Update last_served_at on slide (for round-robin fairness)
         await _supa(

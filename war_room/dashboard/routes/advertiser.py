@@ -285,7 +285,7 @@ async def api_advertiser_create_slide(advertiser_id: str, request: Request):
             "accent_color": body.get("accent", "#f59e0b"),
             "cta_label": (body.get("cta_label") or "").strip(),
             "cta_url": (body.get("cta_url") or "").strip(),
-            "status": "active",
+            "status": (body.get("status") or "active").strip(),
         })
         return JSONResponse(rows[0] if rows else {"ok": True}, status_code=201)
     except Exception as e:
@@ -344,6 +344,84 @@ async def api_advertiser_slide_status(advertiser_id: str, slide_id: str, request
     except Exception as e:
         logger.warning("slide status error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Credit history
+# ---------------------------------------------------------------------------
+@router.get("/api/advertiser/{advertiser_id}/history")
+async def api_advertiser_history(advertiser_id: str):
+    try:
+        # Summary stats
+        adv_rows = await _supa(
+            "get",
+            f"adclaw_advertisers?id=eq.{advertiser_id}&select=wallet_credits"
+        )
+        wallet = adv_rows[0]["wallet_credits"] if adv_rows else 0
+
+        tx_rows = await _supa(
+            "get",
+            f"adclaw_transactions?advertiser_id=eq.{advertiser_id}&select=*&order=created_at.desc&limit=200"
+        )
+
+        total_purchased = sum(t["credits"] for t in tx_rows if t["type"] in ("purchase", "subscription", "refund", "adjustment") and t["credits"] > 0)
+        total_spent = sum(-t["credits"] for t in tx_rows if t["type"] == "spend" and t["credits"] < 0)
+
+        # Enrich spend rows with slide headline + campaign name
+        slide_ids = [t["slide_id"] for t in tx_rows if t.get("slide_id")]
+        campaign_ids = [t["campaign_id"] for t in tx_rows if t.get("campaign_id")]
+
+        slide_map = {}
+        if slide_ids:
+            try:
+                s_rows = await _supa(
+                    "get",
+                    f"adclaw_slides?id=in.({','.join(slide_ids)})&select=id,headline"
+                )
+                slide_map = {s["id"]: s["headline"] for s in s_rows}
+            except Exception:
+                pass
+
+        camp_map = {}
+        if campaign_ids:
+            try:
+                c_rows = await _supa(
+                    "get",
+                    f"adclaw_campaigns?id=in.({','.join(campaign_ids)})&select=id,name"
+                )
+                camp_map = {c["id"]: c["name"] for c in c_rows}
+            except Exception:
+                pass
+
+        transactions = []
+        for t in tx_rows:
+            meta = t.get("metadata") or {}
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except Exception:
+                    meta = {}
+            transactions.append({
+                "id": t["id"],
+                "type": t["type"],
+                "credits": t["credits"],
+                "description": t["description"],
+                "slide_headline": slide_map.get(t.get("slide_id"), ""),
+                "campaign_name": camp_map.get(t.get("campaign_id"), ""),
+                "instance_id": meta.get("instance_id", ""),
+                "created_at": t["created_at"],
+            })
+
+        return JSONResponse({
+            "wallet_credits": wallet,
+            "total_purchased": total_purchased,
+            "total_spent": total_spent,
+            "transactions": transactions,
+        })
+    except Exception as e:
+        logger.warning("history error: %s", e)
+        return JSONResponse({"wallet_credits": 0, "total_purchased": 0, "total_spent": 0, "transactions": []})
 
 
 # ---------------------------------------------------------------------------

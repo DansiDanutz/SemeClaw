@@ -159,8 +159,35 @@ alter table adclaw_slides add column if not exists edits_today integer not null 
 alter table adclaw_slides add column if not exists last_edited_at timestamptz;
 
 -- -----------------------------------------------------------------------
--- Project webpage + notes (added 2026-04-21)
+-- Project webpage + notes + voice (added 2026-04-21)
 -- -----------------------------------------------------------------------
 alter table adclaw_projects add column if not exists webpage_url text;
 alter table adclaw_projects add column if not exists notes text;
 alter table adclaw_projects add column if not exists voice text default 'af_bella';
+
+-- -----------------------------------------------------------------------
+-- Expanded slide statuses + transaction history (added 2026-04-22)
+-- -----------------------------------------------------------------------
+alter table adclaw_slides drop constraint if exists adclaw_slides_status_check;
+alter table adclaw_slides add constraint adclaw_slides_status_check check (status in ('enabled','active','inactive','pending','paused'));
+
+drop index if exists adclaw_slides_active_served;
+create index if not exists adclaw_slides_enabled_served
+  on adclaw_slides (status, last_served_at asc nulls first)
+  where status = 'enabled';
+
+create table if not exists adclaw_transactions (
+  id            bigserial primary key,
+  advertiser_id uuid not null references adclaw_advertisers(id) on delete cascade,
+  type          text not null check (type in ('purchase','spend','refund','subscription','adjustment')),
+  credits       integer not null,
+  description   text,
+  slide_id      uuid references adclaw_slides(id) on delete set null,
+  campaign_id   uuid references adclaw_campaigns(id) on delete set null,
+  metadata      jsonb default '{}',
+  created_at    timestamptz not null default now()
+);
+create index if not exists adclaw_transactions_advertiser on adclaw_transactions (advertiser_id, created_at desc);
+
+-- Updated RPCs that record transactions
+-- (See migration SQL for full create-or-replace statements)
