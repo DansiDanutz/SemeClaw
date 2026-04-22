@@ -17,6 +17,7 @@ from nervix_platform.models import (
     AdPlayEvent,
     CheckoutSessionRequest,
     CreditTier,
+    CreditTransaction,
     DashboardStats,
     Member,
     Project,
@@ -170,8 +171,6 @@ async def stripe_webhook(request: Request):
         credits = int(metadata.get("credits", 0))
 
         if member_id and credits:
-            from nervix_platform.models import CreditTransaction
-
             tx = CreditTransaction(
                 member_id=member_id,
                 amount=credits,
@@ -203,8 +202,6 @@ async def ingest_ad_play(event: AdPlayEvent):
     db.add_ad_play(event.model_dump())
 
     if cost < 0:
-        from nervix_platform.models import CreditTransaction
-
         tx = CreditTransaction(
             member_id=member["id"],
             amount=cost,
