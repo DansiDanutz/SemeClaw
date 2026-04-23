@@ -18,6 +18,7 @@ from war_room.dashboard.routes.deps import (
     SUPA_HEADERS,
     STRIPE_SECRET_KEY,
     SEMECLAW_PUBLIC_URL,
+    ADCLAW_PUBLIC_URL,
 )
 
 logger = logging.getLogger("war_room.dashboard.advertiser")
@@ -47,7 +48,7 @@ async def api_advertiser_auth_config():
     return JSONResponse({
         "supabase_url": SUPA_URL or os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip(),
         "supabase_anon_key": _SUPABASE_ANON_KEY,
-        "redirect_url": f"{SEMECLAW_PUBLIC_URL}/advertiser",
+        "redirect_url": f"{ADCLAW_PUBLIC_URL}/advertiser",
         "providers": ["google", "github"],
     })
 
@@ -459,8 +460,8 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 customer=customer_id,
                 mode="subscription",
                 line_items=[{"price": price_id, "quantity": 1}],
-                success_url=f"{SEMECLAW_PUBLIC_URL}/advertiser?checkout=success",
-                cancel_url=f"{SEMECLAW_PUBLIC_URL}/advertiser?checkout=cancel",
+                success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
+                cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
             )
         else:
             # One-time credit top-up
@@ -477,8 +478,8 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                     },
                     "quantity": 1,
                 }],
-                success_url=f"{SEMECLAW_PUBLIC_URL}/advertiser?checkout=success",
-                cancel_url=f"{SEMECLAW_PUBLIC_URL}/advertiser?checkout=cancel",
+                success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
+                cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
                 metadata={"advertiser_id": advertiser_id, "credits": str(credits)},
             )
 
