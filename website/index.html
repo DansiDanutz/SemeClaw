@@ -2792,25 +2792,6 @@ function _toast(msg,ok=true){
   t.style.cssText=`position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid ${ok?'var(--border-2)':'rgba(239,68,68,.4)'};color:${ok?'var(--text)':'var(--red)'};padding:10px 16px;border-radius:10px;font-size:12px;font-family:var(--mono);box-shadow:0 8px 28px rgba(0,0,0,.5);animation:pop-in .18s var(--ease-out)`;
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
-async function runMorningBrief(){
-  _toast('⚡ Generating brief…');
-  try{
-    const r=await fetch('/api/morning-brief',{method:'POST'});
-    r.ok?_toast('✅ Brief sent to Dan!'):_toast('⚠ Brief endpoint not ready yet',false);
-  }catch(_){_toast('⚡ Brief — coming soon');}
-}
-async function alertDan(){
-  const msg=prompt('Alert message for Dan (sent via Telegram):');
-  if(!msg||!msg.trim())return;
-  try{
-    const r=await fetch('/api/alert-dan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg.trim()})});
-    if(r.ok){
-      const t=document.createElement('div');
-      t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid rgba(16,185,129,.4);color:var(--green);padding:10px 16px;border-radius:10px;font-size:12px;font-family:var(--mono);box-shadow:0 8px 28px rgba(0,0,0,.5)';
-      t.textContent='✅ Alert sent to Dan!';document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
-    }else _toast('Failed to send alert',false);
-  }catch(_){_toast('Alert feature coming soon');}
-}
 
 function renderRuns(logs) {
   document.getElementById('runs-count').textContent=logs.length;
