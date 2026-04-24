@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: uv sync --frozen || uv sync
+        run: uv sync --frozen --group dev || uv sync --group dev
 
       - name: Lint with ruff
         run: |

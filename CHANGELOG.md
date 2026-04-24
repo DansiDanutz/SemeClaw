@@ -2,6 +2,34 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.8] - 2026-04-24
+
+### Fixed — CI lint job + missing runtime dep + flaky tests
+
+- **`[dependency-groups]` dev in `pyproject.toml`** with `ruff>=0.6` and
+  `mypy>=1.11`. The v0.7.15 / v0.8.0 PR added `[tool.ruff]` config and a
+  strict `uv run ruff check` step to `ci.yml` but never declared ruff as
+  a dependency — the CI job failed in 13s with `error: Failed to spawn:
+  ruff`. CI's `Install dependencies` step now uses
+  `uv sync --frozen --group dev || uv sync --group dev`.
+- **`prometheus-client>=0.20.0`** added to `[project] dependencies`.
+  The v0.8.1 `/metrics` extension imports `prometheus_client` and
+  degrades to a stub when the library is missing; the dep was never
+  declared, so production `/metrics` responses returned
+  `# prometheus_client not installed - metrics disabled.` instead of the
+  new Counter/Gauge/Histogram registry the PR promised.
+- **`war_room/tests/test_adapters.py::test_health_no_token`** — assertion
+  updated to tolerate the new combined error string
+  `"TELEGRAM_BOT_TOKEN / SEMECLAW_BOT_TOKEN not set"` the adapter emits.
+- **`war_room/tests/test_health_deep.py`** — fixture now force-clears
+  `SUPA_URL` / `SUPA_KEY` / `STRIPE_SECRET_KEY` on the deps module after
+  reload. Previously the test relied on the env being bare, which meant
+  any dev with a local `.env` saw a false failure (`load_dotenv()`
+  repopulated the vars before `_check_supabase` read them).
+- **`war_room/tests/test_version_policy.py`** — removed unused `pytest`
+  import (ruff F401).
+- Regenerated `uv.lock` against the new dep set.
+
 ## [0.8.7] - 2026-04-24
 
 ### Added — Order-independent shared-httpx test

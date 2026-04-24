@@ -976,7 +976,8 @@ class TestTelegramAdapter:
     async def test_health_no_token(self, local_adapter):
         h = await local_adapter.health()
         assert h.reachable is False
-        assert "TELEGRAM_BOT_TOKEN not set" in h.error
+        assert "TELEGRAM_BOT_TOKEN" in h.error
+        assert "not set" in h.error
 
     @pytest.mark.asyncio
     async def test_list_agents_offline(self, local_adapter):

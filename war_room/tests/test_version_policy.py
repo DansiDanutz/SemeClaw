@@ -1,11 +1,10 @@
 """Smoke tests for the versioning policy and the CI check script."""
+
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "check_version_bumped.sh"
@@ -20,7 +19,9 @@ def test_check_script_is_executable() -> None:
 def test_bump_version_help() -> None:
     r = subprocess.run(
         ["python", str(BUMP), "--help"],
-        capture_output=True, text=True, timeout=15,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     # Either parser prints help on --help or errors usefully — both acceptable.
     out = (r.stdout + r.stderr).lower()
@@ -40,4 +41,5 @@ def test_changelog_has_recent_entry() -> None:
     text = cl.read_text(encoding="utf-8")
     # At least one versioned entry
     import re
+
     assert re.search(r"## \[\d+\.\d+\.\d+\]", text), "CHANGELOG has no versioned entries"

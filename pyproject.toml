@@ -1,6 +1,6 @@
 [project]
 name = "semeclaw"
-version = "0.8.7"
+version = "0.8.8"
 description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
@@ -39,6 +39,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "soundfile>=0.12.0",
     "onnxruntime>=1.17.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [build-system]
@@ -50,6 +51,14 @@ packages = ["src/semeclaw"]
 
 [project.scripts]
 semeclaw = "semeclaw.cli.main:app"
+
+[dependency-groups]
+# Tooling installed in CI for lint/type-check — not shipped in the wheel.
+# CI installs with: `uv sync --frozen --group dev || uv sync --group dev`.
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
 
 [tool.ruff]
 # Keep permissive to start — existing code wasn't linted strictly.
