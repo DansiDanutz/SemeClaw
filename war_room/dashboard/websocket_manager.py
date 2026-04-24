@@ -25,10 +25,17 @@ class ConnectionManager:
         self.active_connections.discard(websocket)
 
     async def broadcast(self, message: dict) -> None:
-        """Send a message to all connected clients."""
+        """Send a message to all connected clients.
+
+        Iterates over a snapshot of ``active_connections`` because each
+        ``await ws.send_text(...)`` suspends this coroutine, during which
+        another task may call :meth:`disconnect` and mutate the underlying
+        set — that would raise ``RuntimeError: Set changed size during
+        iteration``.
+        """
         data = json.dumps(message)
-        dead = set()
-        for ws in self.active_connections:
+        dead: set = set()
+        for ws in list(self.active_connections):
             try:
                 await ws.send_text(data)
             except Exception:
