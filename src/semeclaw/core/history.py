@@ -6,11 +6,10 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
-
-from pydantic import BaseModel
+from typing import Any
 
 from litellm.types.completion import ChatCompletionMessageParam as Message
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

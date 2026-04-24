@@ -19,7 +19,6 @@ Env vars:
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import json
 import logging
@@ -28,15 +27,14 @@ import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
 try:
+    import uvicorn
     from fastapi import FastAPI, Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
-    import uvicorn
 except ImportError:
     raise SystemExit("Install: pip install fastapi uvicorn httpx")
 
@@ -52,8 +50,8 @@ _ADCLAW_SECRET = os.environ.get("ADCLAW_SECRET", secrets.token_hex(32))
 CREDITS_PER_IMPRESSION: int = int(os.environ.get("ADCLAW_CREDITS_PER_IMPRESSION", "1"))
 
 # Credit pricing tiers
-CREDITS_PER_USD_STANDARD = 10       # $1 = 10 credits
-CREDITS_PER_USD_SUB = 15            # $50/mo subscription: 750 credits (15/USD)
+CREDITS_PER_USD_STANDARD = 10  # $1 = 10 credits
+CREDITS_PER_USD_SUB = 15  # $50/mo subscription: 750 credits (15/USD)
 SUBSCRIPTION_PRICE_USD = 50
 SUBSCRIPTION_CREDITS = SUBSCRIPTION_PRICE_USD * CREDITS_PER_USD_SUB  # 750
 
@@ -68,6 +66,7 @@ _SUPA_HEADERS = {
 # Supabase helper
 # ---------------------------------------------------------------------------
 
+
 async def _supa(method: str, path: str, **kwargs):
     if not _SUPA_URL or not _SUPA_KEY:
         raise RuntimeError("Supabase not configured")
@@ -75,6 +74,7 @@ async def _supa(method: str, path: str, **kwargs):
         r = await getattr(c, method)(f"/rest/v1/{path}", headers=_SUPA_HEADERS, **kwargs)
         r.raise_for_status()
         return r.json() if r.content else []
+
 
 # ---------------------------------------------------------------------------
 # App
@@ -91,6 +91,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Instance registry
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/instances/register")
 async def register_instance(request: Request):
@@ -121,9 +122,11 @@ async def register_instance(request: Request):
 
     return JSONResponse({"ok": True, "instance_id": instance_id})
 
+
 # ---------------------------------------------------------------------------
 # Slide serving — impression logged atomically on fetch
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/slides/next")
 async def get_next_slide(
@@ -146,10 +149,7 @@ async def get_next_slide(
     try:
         slides_raw = await _supa(
             "get",
-            "adclaw_slides"
-            "?status=eq.enabled"
-            "&order=priority_boost.desc,last_served_at.asc.nullsfirst"
-            f"&limit=50",
+            "adclaw_slides?status=eq.enabled&order=priority_boost.desc,last_served_at.asc.nullsfirst&limit=50",
         )
     except Exception as e:
         logger.error("Slide fetch failed: %s", e)
@@ -184,7 +184,7 @@ async def get_next_slide(
             # On failure, serve all slides (fail-open for ad delivery)
 
     # 3. Take up to count from eligible slides
-    served = eligible_slides[:max(1, min(count, 10))]
+    served = eligible_slides[: max(1, min(count, 10))]
     if not served:
         return JSONResponse({"slides": [], "token": None, "wait_ms": 0})
 
@@ -192,17 +192,21 @@ async def get_next_slide(
 
     # 4. Log impressions + deduct credits only for actually served slides
     import asyncio
-    await asyncio.gather(*[
-        _record_impression(
-            slide_id=slide["id"],
-            campaign_id=slide["campaign_id"],
-            instance_id=instance_id,
-            ip_hash=ip_hash,
-            tenant_id=tenant_id,
-            now_iso=now_iso,
-        )
-        for slide in served
-    ], return_exceptions=True)
+
+    await asyncio.gather(
+        *[
+            _record_impression(
+                slide_id=slide["id"],
+                campaign_id=slide["campaign_id"],
+                instance_id=instance_id,
+                ip_hash=ip_hash,
+                tenant_id=tenant_id,
+                now_iso=now_iso,
+            )
+            for slide in served
+        ],
+        return_exceptions=True,
+    )
 
     # Normalise slide shape for the War Room client
     client_slides = [_normalise_slide(s) for s in served]
@@ -210,12 +214,14 @@ async def get_next_slide(
     # Issue a signed token the War Room can echo back for extra verification
     token = _issue_token(instance_id)
 
-    return JSONResponse({
-        "tier": "free",
-        "slides": client_slides,
-        "token": token,
-        "source": "adclaw",
-    })
+    return JSONResponse(
+        {
+            "tier": "free",
+            "slides": client_slides,
+            "token": token,
+            "source": "adclaw",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -235,11 +241,8 @@ async def get_next_slide(
 #      the audit trail.
 # ---------------------------------------------------------------------------
 import asyncio
-from pathlib import Path
 
-_IMPRESSION_DLQ_PATH = Path(
-    os.environ.get("ADCLAW_DLQ_PATH", "/app/data/adclaw_dlq.jsonl")
-).expanduser()
+_IMPRESSION_DLQ_PATH = Path(os.environ.get("ADCLAW_DLQ_PATH", "/app/data/adclaw_dlq.jsonl")).expanduser()
 _IMPRESSION_MAX_ATTEMPTS = int(os.environ.get("ADCLAW_IMPRESSION_RETRIES", "3"))
 _IMPRESSION_BACKOFF_BASE_S = 0.1
 _IMPRESSION_BACKOFF_CAP_S = 2.0
@@ -255,7 +258,7 @@ async def _supa_with_retry(method: str, path: str, attempts: int = _IMPRESSION_M
             last_exc = exc
             if i == attempts - 1:
                 break
-            delay = min(_IMPRESSION_BACKOFF_CAP_S, _IMPRESSION_BACKOFF_BASE_S * (2 ** i))
+            delay = min(_IMPRESSION_BACKOFF_CAP_S, _IMPRESSION_BACKOFF_BASE_S * (2**i))
             await asyncio.sleep(delay)
     assert last_exc is not None  # for type-checkers
     raise last_exc
@@ -344,9 +347,11 @@ def _normalise_slide(row: dict) -> dict:
         "cta_url": row.get("cta_url"),
     }
 
+
 # ---------------------------------------------------------------------------
 # Advertiser wallet endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/advertiser/{advertiser_id}/wallet")
 async def get_wallet(advertiser_id: str):
@@ -367,10 +372,14 @@ async def topup_wallet(advertiser_id: str, request: Request):
     if credits <= 0:
         return JSONResponse({"error": "credits must be > 0"}, status_code=400)
     try:
-        await _supa("post", "rpc/adclaw_topup_credits", json={
-            "p_advertiser_id": advertiser_id,
-            "p_credits": credits,
-        })
+        await _supa(
+            "post",
+            "rpc/adclaw_topup_credits",
+            json={
+                "p_advertiser_id": advertiser_id,
+                "p_credits": credits,
+            },
+        )
         return JSONResponse({"ok": True, "credits_added": credits})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -388,16 +397,20 @@ async def campaign_stats(campaign_id: str):
             "get",
             f"adclaw_campaigns?id=eq.{campaign_id}&select=id,name,budget_credits,spent_credits,status",
         )
-        return JSONResponse({
-            "total_views": len(rows),
-            "campaign": credit_rows[0] if credit_rows else None,
-        })
+        return JSONResponse(
+            {
+                "total_views": len(rows),
+                "campaign": credit_rows[0] if credit_rows else None,
+            }
+        )
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
 
 # ---------------------------------------------------------------------------
 # Token signing (so War Room can verify slide response came from AdClaw)
 # ---------------------------------------------------------------------------
+
 
 def _issue_token(instance_id: str) -> str:
     wall = int(time.time())
@@ -405,9 +418,11 @@ def _issue_token(instance_id: str) -> str:
     sig = hmac.new(_ADCLAW_SECRET.encode(), msg, "sha256").hexdigest()[:20]
     return f"{wall}.{sig}"
 
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
+
 
 @app.get("/health")
 async def health():

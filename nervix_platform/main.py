@@ -11,24 +11,22 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from itsdangerous import URLSafeSerializer, BadSignature
+from itsdangerous import BadSignature, URLSafeSerializer
 
 from nervix_platform.database import db
 from nervix_platform.models import (
     AdPlayEvent,
     CheckoutSessionRequest,
-    CreditTier,
     CreditTransaction,
     DashboardStats,
     Member,
     Project,
 )
 from nervix_platform.stripe_client import (
+    construct_event,
     create_checkout_session,
     create_customer,
     get_publishable_key,
-    get_tier_credits,
-    construct_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +65,7 @@ def _get_member_id_from_cookie(request: Request) -> str | None:
         return _cookie_serializer.loads(cookie)
     except BadSignature:
         return None
+
 
 # Templates and static files
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))

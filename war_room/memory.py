@@ -22,7 +22,6 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("war_room.memory")
 
@@ -64,12 +63,12 @@ class WarRoomMemory:
     ) -> dict:
         """Save a new memory entry. Returns the saved entry."""
         entry = {
-            "topic":    topic,
+            "topic": topic,
             "keywords": self._extract_keywords(topic + " " + summary),
-            "summary":  summary[:800],
-            "run_id":   run_id,
-            "file":     file,
-            "date":     datetime.now(timezone.utc).isoformat(),
+            "summary": summary[:800],
+            "run_id": run_id,
+            "file": file,
+            "date": datetime.now(timezone.utc).isoformat(),
         }
 
         entries = self._load_index()
@@ -110,7 +109,9 @@ class WarRoomMemory:
 
         logger.debug(
             "Memory: %d/%d entries relevant to task '%s'",
-            len(top), len(entries), task[:50],
+            len(top),
+            len(entries),
+            task[:50],
         )
         return top
 
@@ -160,16 +161,92 @@ class WarRoomMemory:
         Lowercases, strips punctuation, removes stop words, deduplicates.
         """
         STOP_WORDS = {
-            "a", "an", "the", "and", "or", "but", "in", "on", "at", "to",
-            "for", "of", "with", "by", "from", "is", "are", "was", "were",
-            "be", "been", "being", "have", "has", "had", "do", "does", "did",
-            "will", "would", "could", "should", "may", "might", "shall", "can",
-            "that", "this", "these", "those", "it", "its", "we", "our", "you",
-            "your", "they", "their", "how", "what", "when", "where", "which",
-            "who", "why", "all", "any", "each", "not", "as", "if", "so", "up",
-            "out", "about", "into", "than", "then", "also", "just", "now",
-            "new", "use", "used", "using", "get", "one", "two", "three",
-            "task", "agent", "output", "context", "run", "research", "based",
+            "a",
+            "an",
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "shall",
+            "can",
+            "that",
+            "this",
+            "these",
+            "those",
+            "it",
+            "its",
+            "we",
+            "our",
+            "you",
+            "your",
+            "they",
+            "their",
+            "how",
+            "what",
+            "when",
+            "where",
+            "which",
+            "who",
+            "why",
+            "all",
+            "any",
+            "each",
+            "not",
+            "as",
+            "if",
+            "so",
+            "up",
+            "out",
+            "about",
+            "into",
+            "than",
+            "then",
+            "also",
+            "just",
+            "now",
+            "new",
+            "use",
+            "used",
+            "using",
+            "get",
+            "one",
+            "two",
+            "three",
+            "task",
+            "agent",
+            "output",
+            "context",
+            "run",
+            "research",
+            "based",
         }
         # Tokenise
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower())

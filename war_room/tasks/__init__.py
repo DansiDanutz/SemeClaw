@@ -6,6 +6,7 @@ Phase A: read-only foundation.
 - dialog     Per-agent line generation + weave into a meeting-room script.
 - retention  100-task soft cap with archival + over-cap suggestions.
 """
+
 from __future__ import annotations
 
-from . import _db, sources, dialog, retention, intervene, writeback  # noqa: F401
+from . import _db, dialog, intervene, retention, sources, writeback  # noqa: F401

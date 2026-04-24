@@ -15,7 +15,6 @@ meeting recordings, etc.) — not real-time streaming.
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import tempfile
@@ -68,12 +67,12 @@ def _get_model():
         try:
             from faster_whisper import WhisperModel
         except ImportError as exc:
-            raise RuntimeError(
-                "faster-whisper is not installed. Run: pip install faster-whisper"
-            ) from exc
+            raise RuntimeError("faster-whisper is not installed. Run: pip install faster-whisper") from exc
         logger.info(
             "Whisper: loading model='%s' device='%s' compute='%s' …",
-            WHISPER_MODEL, WHISPER_DEVICE, WHISPER_COMPUTE,
+            WHISPER_MODEL,
+            WHISPER_DEVICE,
+            WHISPER_COMPUTE,
         )
         t0 = time.time()
         _model = WhisperModel(
@@ -95,11 +94,21 @@ def _ensure_wav(input_bytes: bytes) -> bytes:
         raise TypeError("_ensure_wav requires bytes input")
     try:
         import subprocess as sp
+
         proc = sp.run(
             [
-                "ffmpeg", "-i", "pipe:0",
-                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
-                "-f", "wav", "pipe:1",
+                "ffmpeg",
+                "-i",
+                "pipe:0",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
+                "-f",
+                "wav",
+                "pipe:1",
             ],
             input=input_bytes,
             capture_output=True,
@@ -203,8 +212,11 @@ def transcribe(
 
         logger.info(
             "Whisper transcribe: lang=%s prob=%.2f segments=%d dur=%.1fs elapsed=%.2fs",
-            info.language, info.language_probability, len(segments),
-            info.duration, elapsed,
+            info.language,
+            info.language_probability,
+            len(segments),
+            info.duration,
+            elapsed,
         )
 
         return {
@@ -229,6 +241,7 @@ def health() -> dict:
     """Return Whisper health status."""
     try:
         from faster_whisper import WhisperModel  # noqa: F401
+
         available = True
     except ImportError:
         available = False

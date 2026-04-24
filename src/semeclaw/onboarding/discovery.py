@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import platform
 import socket
 import subprocess
@@ -33,21 +32,23 @@ HOME = Path.home()
 # Dataclass for a discovered agent / tool
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DiscoveredAgent:
     id: str
     name: str
-    kind: str          # "agent" | "tool" | "platform"
+    kind: str  # "agent" | "tool" | "platform"
     version: str | None = None
     path: str | None = None
     url: str | None = None
-    status: str = "unknown"   # "running" | "installed" | "config_only" | "unknown"
+    status: str = "unknown"  # "running" | "installed" | "config_only" | "unknown"
     meta: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _check_tcp_port(host: str, port: int, timeout: float = 2.0) -> bool:
     try:
@@ -101,20 +102,23 @@ def _find_dirs(parent: Path, pattern: str, max_depth: int = 2) -> list[Path]:
 # OpenClaw
 # ---------------------------------------------------------------------------
 
+
 def discover_openclaw() -> list[DiscoveredAgent]:
     found: list[DiscoveredAgent] = []
 
     # 1. Dot-dir ~/.openclaw
     dot_dir = HOME / ".openclaw"
     if dot_dir.exists():
-        found.append(DiscoveredAgent(
-            id="openclaw",
-            name="OpenClaw",
-            kind="agent",
-            path=str(dot_dir),
-            status="installed",
-            meta={"source": "dot-dir"},
-        ))
+        found.append(
+            DiscoveredAgent(
+                id="openclaw",
+                name="OpenClaw",
+                kind="agent",
+                path=str(dot_dir),
+                status="installed",
+                meta={"source": "dot-dir"},
+            )
+        )
 
     # 2. Logger package
     logger_dir = HOME / "openclaw-logger"
@@ -124,15 +128,17 @@ def discover_openclaw() -> list[DiscoveredAgent]:
         if pkg_json.exists():
             data = _read_json(pkg_json)
             version = data.get("version") if data else None
-        found.append(DiscoveredAgent(
-            id="openclaw-logger",
-            name="OpenClaw Logger",
-            kind="tool",
-            path=str(logger_dir),
-            version=version,
-            status="installed",
-            meta={"source": "logger-package"},
-        ))
+        found.append(
+            DiscoveredAgent(
+                id="openclaw-logger",
+                name="OpenClaw Logger",
+                kind="tool",
+                path=str(logger_dir),
+                version=version,
+                status="installed",
+                meta={"source": "logger-package"},
+            )
+        )
 
     # 3. Source directory (common dev layout)
     source_candidates = [
@@ -148,15 +154,17 @@ def discover_openclaw() -> list[DiscoveredAgent]:
             if pkg.exists():
                 data = _read_json(pkg)
                 ver = data.get("version") if data else None
-            found.append(DiscoveredAgent(
-                id="openclaw-source",
-                name="OpenClaw (source)",
-                kind="agent",
-                path=str(src),
-                version=ver,
-                status="installed",
-                meta={"source": "source-dir"},
-            ))
+            found.append(
+                DiscoveredAgent(
+                    id="openclaw-source",
+                    name="OpenClaw (source)",
+                    kind="agent",
+                    path=str(src),
+                    version=ver,
+                    status="installed",
+                    meta={"source": "source-dir"},
+                )
+            )
             break
 
     return found
@@ -165,6 +173,7 @@ def discover_openclaw() -> list[DiscoveredAgent]:
 # ---------------------------------------------------------------------------
 # Paperclip
 # ---------------------------------------------------------------------------
+
 
 def discover_paperclip() -> list[DiscoveredAgent]:
     found: list[DiscoveredAgent] = []
@@ -192,15 +201,17 @@ def discover_paperclip() -> list[DiscoveredAgent]:
                 meta["config"] = data
         if has_mock:
             meta["mock_state"] = str(mock_state)
-        found.append(DiscoveredAgent(
-            id="paperclip",
-            name="Paperclip",
-            kind="platform",
-            path=str(cfg) if has_config else (str(mock_state) if has_mock else None),
-            url=url,
-            status="running" if running else ("mock" if has_mock else "config_only"),
-            meta=meta,
-        ))
+        found.append(
+            DiscoveredAgent(
+                id="paperclip",
+                name="Paperclip",
+                kind="platform",
+                path=str(cfg) if has_config else (str(mock_state) if has_mock else None),
+                url=url,
+                status="running" if running else ("mock" if has_mock else "config_only"),
+                meta=meta,
+            )
+        )
 
     return found
 
@@ -208,6 +219,7 @@ def discover_paperclip() -> list[DiscoveredAgent]:
 # ---------------------------------------------------------------------------
 # Hermes
 # ---------------------------------------------------------------------------
+
 
 def discover_hermes() -> list[DiscoveredAgent]:
     found: list[DiscoveredAgent] = []
@@ -226,15 +238,17 @@ def discover_hermes() -> list[DiscoveredAgent]:
             if pkg.exists():
                 data = _read_json(pkg)
                 version = data.get("version") if data else None
-            found.append(DiscoveredAgent(
-                id="hermes",
-                name="Hermes",
-                kind="agent",
-                path=str(cand),
-                version=version,
-                status="installed",
-                meta={"source": "directory"},
-            ))
+            found.append(
+                DiscoveredAgent(
+                    id="hermes",
+                    name="Hermes",
+                    kind="agent",
+                    path=str(cand),
+                    version=version,
+                    status="installed",
+                    meta={"source": "directory"},
+                )
+            )
             break
 
     # Also check for a `hermes` executable on PATH
@@ -245,14 +259,16 @@ def discover_hermes() -> list[DiscoveredAgent]:
     if out:
         # If we didn't already find a directory entry, add one
         if not any(a.id == "hermes" for a in found):
-            found.append(DiscoveredAgent(
-                id="hermes",
-                name="Hermes",
-                kind="agent",
-                path=out.splitlines()[0],
-                status="installed",
-                meta={"source": "PATH"},
-            ))
+            found.append(
+                DiscoveredAgent(
+                    id="hermes",
+                    name="Hermes",
+                    kind="agent",
+                    path=out.splitlines()[0],
+                    status="installed",
+                    meta={"source": "PATH"},
+                )
+            )
 
     return found
 
@@ -260,6 +276,7 @@ def discover_hermes() -> list[DiscoveredAgent]:
 # ---------------------------------------------------------------------------
 # Multica
 # ---------------------------------------------------------------------------
+
 
 def discover_multica() -> list[DiscoveredAgent]:
     found: list[DiscoveredAgent] = []
@@ -297,16 +314,18 @@ def discover_multica() -> list[DiscoveredAgent]:
                     if line.startswith("version"):
                         version = line.split("=")[-1].strip().strip('"').strip("'")
                         break
-        found.append(DiscoveredAgent(
-            id="multica",
-            name="Multica",
-            kind="platform",
-            path=str(src_dir) if src_dir else (str(multica_dir) if has_dir else None),
-            url=url,
-            version=version,
-            status="running" if running else "installed",
-            meta={"source": "directory" if src_dir else "local-state"},
-        ))
+        found.append(
+            DiscoveredAgent(
+                id="multica",
+                name="Multica",
+                kind="platform",
+                path=str(src_dir) if src_dir else (str(multica_dir) if has_dir else None),
+                url=url,
+                version=version,
+                status="running" if running else "installed",
+                meta={"source": "directory" if src_dir else "local-state"},
+            )
+        )
 
     return found
 
@@ -357,15 +376,17 @@ def discover_generic_agents() -> list[DiscoveredAgent]:
                     name = data.get("name") or data.get("agent_name") or agent_dir.name
                     agent_id = data.get("id") or data.get("agent_id") or agent_dir.name.lower().replace(" ", "-")
 
-                    found.append(DiscoveredAgent(
-                        id=agent_id,
-                        name=name,
-                        kind="agent",
-                        path=str(agent_dir),
-                        version=data.get("version"),
-                        status="installed",
-                        meta={"manifest": str(p), "source": "generic-scan"},
-                    ))
+                    found.append(
+                        DiscoveredAgent(
+                            id=agent_id,
+                            name=name,
+                            kind="agent",
+                            path=str(agent_dir),
+                            version=data.get("version"),
+                            status="installed",
+                            meta={"manifest": str(p), "source": "generic-scan"},
+                        )
+                    )
         except PermissionError:
             pass
 
@@ -375,6 +396,7 @@ def discover_generic_agents() -> list[DiscoveredAgent]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def discover_all() -> list[DiscoveredAgent]:
     """Run every discovery scanner and return a unified list."""

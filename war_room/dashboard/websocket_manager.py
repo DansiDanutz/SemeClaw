@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Set
+from typing import Any
 
 try:
     from fastapi import WebSocket
@@ -21,7 +21,7 @@ class ConnectionManager:
     """Manages WebSocket connections for live dashboard updates."""
 
     def __init__(self) -> None:
-        self.active_connections: Set[WebSocket] = set()
+        self.active_connections: set[WebSocket] = set()
         self._before_broadcast: Any = None
 
     def set_before_broadcast_hook(self, hook: Any) -> None:
@@ -51,8 +51,10 @@ class ConnectionManager:
                 await hook(message)
             except Exception as exc:  # noqa: BLE001 — hook must never break broadcast
                 import logging
+
                 logging.getLogger("war_room.websocket").error(
-                    "before_broadcast hook failed: %s", exc,
+                    "before_broadcast hook failed: %s",
+                    exc,
                 )
         data = json.dumps(message)
         dead: set = set()

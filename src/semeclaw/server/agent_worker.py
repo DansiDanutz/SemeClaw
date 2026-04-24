@@ -6,18 +6,18 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from semeclaw.server.worker import SubscriberWorker
-from semeclaw.core.events import (
-    InboundEvent,
-    DispatchEvent,
-    OutboundEvent,
-    DispatchResultEvent,
-)
 from semeclaw.core.agent import Agent
+from semeclaw.core.events import (
+    DispatchEvent,
+    DispatchResultEvent,
+    InboundEvent,
+    OutboundEvent,
+)
+from semeclaw.server.worker import SubscriberWorker
 
 if TYPE_CHECKING:
-    from semeclaw.core.eventbus import EventBus
     from semeclaw.core.agent_loader import AgentLoader
+    from semeclaw.core.eventbus import EventBus
     from semeclaw.utils.config import Config
 
 
@@ -64,10 +64,7 @@ class AgentWorker(SubscriberWorker):
             event: The inbound event.
         """
         try:
-            self.logger.info(
-                f"Processing inbound event (session={event.session_id}, "
-                f"source={event.source})"
-            )
+            self.logger.info(f"Processing inbound event (session={event.session_id}, source={event.source})")
 
             # Load agent — cron events may specify a target_agent
             target = getattr(event, "target_agent", None) or self.config.default_agent
@@ -92,8 +89,7 @@ class AgentWorker(SubscriberWorker):
         """
         try:
             self.logger.info(
-                f"Processing dispatch event (session={event.session_id}, "
-                f"parent={event.parent_session_id})"
+                f"Processing dispatch event (session={event.session_id}, parent={event.parent_session_id})"
             )
 
             # Load the agent to dispatch to (from the source agent_id if available)
@@ -142,9 +138,7 @@ class AgentWorker(SubscriberWorker):
         await self.publish(event)
         self.logger.warning(f"Emitted error for session={source_event.session_id}: {error}")
 
-    async def _emit_dispatch_result(
-        self, source_event: DispatchEvent, response: str
-    ) -> None:
+    async def _emit_dispatch_result(self, source_event: DispatchEvent, response: str) -> None:
         """Emit a result to a dispatch event.
 
         Args:

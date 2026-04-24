@@ -3,15 +3,14 @@
 Covers strict mode, audit mode, demo-id bypass, bearer extraction, and the
 JWT sub==advertiser_id invariant.
 """
+
 from __future__ import annotations
 
-import os
 import importlib
 
 import jwt
 import pytest
 from fastapi import HTTPException
-
 
 SECRET = "test-secret-do-not-use-in-prod"
 
@@ -22,6 +21,7 @@ def _make_token(sub: str, *, audience: str = "authenticated", secret: str = SECR
 
 class _Req:
     """Minimal request with a .headers dict mirror."""
+
     def __init__(self, **headers: str) -> None:
         self.headers = {k.lower(): v for k, v in headers.items()}
 
@@ -33,6 +33,7 @@ def deps(monkeypatch):
     monkeypatch.setenv("SEMECLAW_ADVERTISER_AUTH_STRICT", "1")
     monkeypatch.setenv("SEMECLAW_ADVERTISER_DEMO_ID", "demo")
     from war_room.dashboard.routes import deps as mod
+
     importlib.reload(mod)
     yield mod
     # Restore default after test
@@ -83,6 +84,7 @@ async def test_audit_mode_never_raises(monkeypatch) -> None:
     monkeypatch.setenv("SUPABASE_JWT_SECRET", SECRET)
     monkeypatch.setenv("SEMECLAW_ADVERTISER_AUTH_STRICT", "0")
     from war_room.dashboard.routes import deps as mod
+
     importlib.reload(mod)
     req = _Req(authorization=f"Bearer {_make_token('other-user')}")
     # Mismatch must NOT raise in audit mode.
@@ -94,6 +96,7 @@ async def test_strict_without_secret_degrades_to_audit(monkeypatch) -> None:
     monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
     monkeypatch.setenv("SEMECLAW_ADVERTISER_AUTH_STRICT", "1")
     from war_room.dashboard.routes import deps as mod
+
     importlib.reload(mod)
     req = _Req()  # no bearer
     # Should NOT raise: module auto-degrades to audit when secret missing.

@@ -41,12 +41,12 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 # Speaker → Kokoro voice mapping
 # ---------------------------------------------------------------------------
 VOICE_MAP: dict[str, str] = {
-    "narrator":   "af_bella",
-    "research":   "af_nicole",
+    "narrator": "af_bella",
+    "research": "af_nicole",
     "strategist": "bf_emma",
-    "writer":     "am_adam",
-    "architect":  "bm_george",
-    "default":    "af_bella",
+    "writer": "am_adam",
+    "architect": "bm_george",
+    "default": "af_bella",
 }
 
 _ALIASES: dict[str, str] = {
@@ -93,20 +93,25 @@ def _download_models():
     logger.info("Kokoro: downloading model files …")
     urls = []
     if not voices.exists():
-        urls.append((
-            "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
-            voices,
-        ))
+        urls.append(
+            (
+                "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+                voices,
+            )
+        )
     if not model.exists():
         # Prefer int8 quantized (smaller, faster)
-        urls.append((
-            "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
-            MODEL_DIR / "kokoro-v1.0.int8.onnx",
-        ))
+        urls.append(
+            (
+                "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
+                MODEL_DIR / "kokoro-v1.0.int8.onnx",
+            )
+        )
 
     for url, dest in urls:
         try:
             import urllib.request
+
             logger.info("Kokoro: downloading %s → %s", url, dest.name)
             urllib.request.urlretrieve(url, dest)
         except Exception as exc:
@@ -124,9 +129,7 @@ def _get_kokoro():
         try:
             from kokoro_onnx import Kokoro
         except ImportError as exc:
-            raise RuntimeError(
-                "kokoro-onnx is not installed. Run: pip install kokoro-onnx soundfile"
-            ) from exc
+            raise RuntimeError("kokoro-onnx is not installed. Run: pip install kokoro-onnx soundfile") from exc
 
         _download_models()
         model = _model_path()
@@ -159,7 +162,7 @@ def _resolve_voice(voice: str | None, agent: str | None = None) -> str:
 
 
 def cache_key(text: str, voice: str) -> str:
-    payload = f"kokoro:{voice}|{text}".encode("utf-8")
+    payload = f"kokoro:{voice}|{text}".encode()
     return hashlib.sha1(payload).hexdigest()
 
 
@@ -228,14 +231,11 @@ def synthesize(
         logger.info("Kokoro synth: voice=%s bytes=%d key=%s…", voice_id, len(text), key[:8])
 
         try:
-            samples, sample_rate = kokoro.create(
-                text, voice=voice_id, speed=speed, lang="en-us"
-            )
+            samples, sample_rate = kokoro.create(text, voice=voice_id, speed=speed, lang="en-us")
             if samples is None or len(samples) == 0:
                 logger.warning("Kokoro returned no audio")
                 return None
 
-            import numpy as np
             import soundfile as sf
 
             wav_buf = io.BytesIO()
@@ -255,6 +255,7 @@ def synthesize(
 def health() -> dict:
     try:
         from kokoro_onnx import Kokoro  # noqa: F401
+
         available = True
     except ImportError:
         available = False

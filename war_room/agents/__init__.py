@@ -7,8 +7,9 @@ Public surface:
     await browser_search.search(q)
     await scraper.scrape_url(url)
 """
-from . import _registry as registry
+
 from . import _browser_search as browser_search
+from . import _registry as registry
 from . import _scraper as scraper
 
 __all__ = ["registry", "browser_search", "scraper"]

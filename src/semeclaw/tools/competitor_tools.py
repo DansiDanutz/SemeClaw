@@ -27,12 +27,8 @@ def _get_supabase_client(config: Any):
     try:
         from supabase import create_client
 
-        supabase_url = getattr(config, "supabase_url", None) or getattr(
-            config, "SUPABASE_URL", None
-        )
-        supabase_key = getattr(config, "supabase_key", None) or getattr(
-            config, "SUPABASE_KEY", None
-        )
+        supabase_url = getattr(config, "supabase_url", None) or getattr(config, "SUPABASE_URL", None)
+        supabase_key = getattr(config, "supabase_key", None) or getattr(config, "SUPABASE_KEY", None)
 
         if not supabase_url or not supabase_key:
             return None
@@ -175,9 +171,7 @@ class AddCompetitorTool(BaseTool):
 
         if client:
             try:
-                result = client.table("yt_competitors").upsert(
-                    competitor_data, on_conflict="channel_url"
-                ).execute()
+                result = client.table("yt_competitors").upsert(competitor_data, on_conflict="channel_url").execute()
                 return f"✓ Added competitor: {channel_id} ({args.get('niche', 'no niche')})"
             except Exception as e:
                 logger.error(f"Supabase error adding competitor: {e}")
@@ -296,12 +290,7 @@ class FetchCompetitorVideosTool(BaseTool):
         client = _get_supabase_client(self.config)
         if client:
             try:
-                result = (
-                    client.table("yt_competitors")
-                    .select("channel_url")
-                    .eq("enabled", True)
-                    .execute()
-                )
+                result = client.table("yt_competitors").select("channel_url").eq("enabled", True).execute()
                 return [r["channel_url"] for r in result.data]
             except Exception:
                 pass
@@ -356,9 +345,7 @@ class FetchCompetitorVideosTool(BaseTool):
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(
-                    f"{channel_url}/videos", download=False
-                )
+                info = ydl.extract_info(f"{channel_url}/videos", download=False)
 
                 if not info or "entries" not in info:
                     return []
@@ -383,16 +370,12 @@ class FetchCompetitorVideosTool(BaseTool):
 
                     # Convert timestamp to ISO format
                     if video_data["published_at"]:
-                        video_data["published_at"] = datetime.fromtimestamp(
-                            video_data["published_at"]
-                        ).isoformat()
+                        video_data["published_at"] = datetime.fromtimestamp(video_data["published_at"]).isoformat()
                     else:
                         video_data["published_at"] = None
 
                     # Classify patterns
-                    video_data["title_pattern"] = _classify_title_pattern(
-                        video_data["title"]
-                    )
+                    video_data["title_pattern"] = _classify_title_pattern(video_data["title"])
                     video_data["thumbnail_style"] = _classify_thumbnail_style(
                         video_data["thumbnail_url"], video_data["title"]
                     )
@@ -401,9 +384,7 @@ class FetchCompetitorVideosTool(BaseTool):
                     views = video_data["view_count"] or 1
                     likes = video_data["like_count"] or 0
                     comments = video_data["comment_count"] or 0
-                    video_data["engagement_rate"] = round(
-                        (likes + comments) / views * 100, 2
-                    )
+                    video_data["engagement_rate"] = round((likes + comments) / views * 100, 2)
 
                     videos.append(video_data)
 
@@ -431,10 +412,12 @@ class FetchCompetitorVideosTool(BaseTool):
             client = _get_supabase_client(self.config)
             if client and channel_info:
                 try:
-                    client.table("yt_competitors").update({
-                        **channel_info,
-                        "last_fetched_at": datetime.now().isoformat(),
-                    }).eq("channel_url", url).execute()
+                    client.table("yt_competitors").update(
+                        {
+                            **channel_info,
+                            "last_fetched_at": datetime.now().isoformat(),
+                        }
+                    ).eq("channel_url", url).execute()
                 except Exception as e:
                     logger.error(f"Error updating channel info: {e}")
 
@@ -443,12 +426,7 @@ class FetchCompetitorVideosTool(BaseTool):
                 for video in videos:
                     try:
                         # Get competitor_id
-                        comp_result = (
-                            client.table("yt_competitors")
-                            .select("id")
-                            .eq("channel_url", url)
-                            .execute()
-                        )
+                        comp_result = client.table("yt_competitors").select("id").eq("channel_url", url).execute()
                         if comp_result.data:
                             video["competitor_id"] = comp_result.data[0]["id"]
                             client.table("yt_competitor_videos").upsert(
@@ -457,13 +435,15 @@ class FetchCompetitorVideosTool(BaseTool):
                     except Exception as e:
                         logger.error(f"Error saving video: {e}")
 
-            all_results.append({
-                "channel": channel_info.get("channel_name", url),
-                "videos_found": len(videos),
-            })
+            all_results.append(
+                {
+                    "channel": channel_info.get("channel_name", url),
+                    "videos_found": len(videos),
+                }
+            )
 
         # Format results
-        lines = [f"## Competitor Video Fetch Results\n"]
+        lines = ["## Competitor Video Fetch Results\n"]
         for r in all_results:
             lines.append(f"- **{r['channel']}**: {r['videos_found']} videos fetched")
 
@@ -515,16 +495,9 @@ class GetCompetitorInsightsTool(BaseTool):
                 )
                 if channel_url:
                     # Get competitor_id first
-                    comp_result = (
-                        client.table("yt_competitors")
-                        .select("id")
-                        .eq("channel_url", channel_url)
-                        .execute()
-                    )
+                    comp_result = client.table("yt_competitors").select("id").eq("channel_url", channel_url).execute()
                     if comp_result.data:
-                        query = query.eq(
-                            "competitor_id", comp_result.data[0]["id"]
-                        )
+                        query = query.eq("competitor_id", comp_result.data[0]["id"])
 
                 result = query.execute()
                 return result.data
@@ -545,10 +518,7 @@ class GetCompetitorInsightsTool(BaseTool):
 
         videos = self._get_videos(workspace, channel_url, days)
         if not videos:
-            return (
-                f"No video data found for the last {days} days. "
-                "Run fetch_competitor_videos first to collect data."
-            )
+            return f"No video data found for the last {days} days. Run fetch_competitor_videos first to collect data."
 
         # Analyze patterns
         title_patterns = Counter(v.get("title_pattern", "other") for v in videos)
@@ -615,10 +585,7 @@ class GetCompetitorInsightsTool(BaseTool):
         lines.append("\n### 🔥 Top Performing Videos")
         for i, v in enumerate(top_videos[:5], 1):
             lines.append(f"{i}. **{v.get('title', 'Unknown')}**")
-            lines.append(
-                f"   Views: {v.get('view_count', 0):,} | "
-                f"Engagement: {v.get('engagement_rate', 0)}%"
-            )
+            lines.append(f"   Views: {v.get('view_count', 0):,} | Engagement: {v.get('engagement_rate', 0)}%")
 
         if top_tags:
             lines.append("\n### 🏷️ Trending Tags")
@@ -679,12 +646,7 @@ class CompetitorReportTool(BaseTool):
         client = _get_supabase_client(self.config)
         if client:
             try:
-                result = (
-                    client.table("yt_competitors")
-                    .select("*")
-                    .eq("enabled", True)
-                    .execute()
-                )
+                result = client.table("yt_competitors").select("*").eq("enabled", True).execute()
                 return result.data
             except Exception:
                 pass
@@ -702,10 +664,7 @@ class CompetitorReportTool(BaseTool):
         competitors = self._get_competitors(workspace)
 
         if not videos:
-            return (
-                "No competitor video data available. "
-                "Run fetch_competitor_videos first, then try again."
-            )
+            return "No competitor video data available. Run fetch_competitor_videos first, then try again."
 
         # Group by competitor
         by_competitor = defaultdict(list)
@@ -724,7 +683,7 @@ class CompetitorReportTool(BaseTool):
 
         # Build Telegram-friendly report
         lines = [
-            f"🕵️ *Weekly Competitor Intelligence Report*",
+            "🕵️ *Weekly Competitor Intelligence Report*",
             f"📅 Last {days} days | {len(videos)} videos from {len(competitors)} channels",
             "",
         ]
@@ -740,9 +699,14 @@ class CompetitorReportTool(BaseTool):
         lines.append("*📊 Title Pattern Breakdown:*")
         for pattern, count in title_patterns.most_common():
             emoji = {
-                "how_to": "📖", "list": "📋", "question": "❓",
-                "comparison": "⚖️", "shocking": "😱", "tutorial": "🎓",
-                "review": "⭐", "personal_experiment": "🧪",
+                "how_to": "📖",
+                "list": "📋",
+                "question": "❓",
+                "comparison": "⚖️",
+                "shocking": "😱",
+                "tutorial": "🎓",
+                "review": "⭐",
+                "personal_experiment": "🧪",
             }.get(pattern, "📌")
             lines.append(f"{emoji} {pattern.replace('_', ' ').title()}: {count}")
         lines.append("")
@@ -772,6 +736,7 @@ class CompetitorReportTool(BaseTool):
         # Send via telegram_notify if available
         try:
             from semeclaw.tools.experiment_tools import TelegramNotifyTool
+
             notify_tool = TelegramNotifyTool(workspace)
             await notify_tool.execute({"message": report_text}, session)
         except Exception as e:
@@ -785,10 +750,7 @@ class CompetitorReportTool(BaseTool):
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
             "summary": report_text,
-            "top_videos": [
-                {"title": v.get("title"), "views": v.get("view_count")}
-                for v in top_videos
-            ],
+            "top_videos": [{"title": v.get("title"), "views": v.get("view_count")} for v in top_videos],
             "title_patterns": dict(title_patterns),
         }
 

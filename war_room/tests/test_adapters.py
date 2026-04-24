@@ -1,31 +1,27 @@
 """Tests for all War Room adapters."""
 
-import asyncio
-import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from war_room.adapters import (
-    PaperclipAdapter,
-    MulticaAdapter,
     GitHubAdapter,
+    MulticaAdapter,
     ObsidianAdapter,
     OllamaAdapter,
+    PaperclipAdapter,
     TelegramAdapter,
 )
-from war_room.adapters.base import AdapterHealth
-
 
 # ===================================================================
 # PaperclipAdapter
 # ===================================================================
+
 
 class TestPaperclipAdapter:
     @pytest.fixture
@@ -83,11 +79,14 @@ class TestPaperclipAdapter:
 
     @pytest.mark.asyncio
     async def test_sync_from_war_room_mock(self, mock_adapter):
-        ok = await mock_adapter.sync_from_war_room([
-            {"type": "create_issue", "payload": {
-                "title": "From WR", "description": "x", "project": "NERVIX", "assignee": "Dexter"
-            }},
-        ])
+        ok = await mock_adapter.sync_from_war_room(
+            [
+                {
+                    "type": "create_issue",
+                    "payload": {"title": "From WR", "description": "x", "project": "NERVIX", "assignee": "Dexter"},
+                },
+            ]
+        )
         assert ok is True
         tasks = await mock_adapter.list_tasks()
         assert any(t["title"] == "From WR" for t in tasks)
@@ -120,6 +119,7 @@ class TestPaperclipAdapter:
 # ===================================================================
 # MulticaAdapter
 # ===================================================================
+
 
 class TestMulticaAdapter:
     @pytest.fixture
@@ -181,9 +181,11 @@ class TestMulticaAdapter:
 
     @pytest.mark.asyncio
     async def test_sync_from_war_room_local(self, local_adapter):
-        ok = await local_adapter.sync_from_war_room([
-            {"type": "create_task", "payload": {"title": "From WR", "description": "x"}},
-        ])
+        ok = await local_adapter.sync_from_war_room(
+            [
+                {"type": "create_task", "payload": {"title": "From WR", "description": "x"}},
+            ]
+        )
         assert ok is True
         assert any(t["title"] == "From WR" for t in local_adapter._local_tasks)
 
@@ -242,9 +244,11 @@ class TestMulticaAdapter:
         local_adapter._local_issues = [
             {"id": "MC-0001", "title": "A", "status": "open", "assignee": "alpha"},
         ]
-        ok = await local_adapter.sync_from_war_room([
-            {"type": "move_issue", "issue_id": "MC-0001", "status": "done"},
-        ])
+        ok = await local_adapter.sync_from_war_room(
+            [
+                {"type": "move_issue", "issue_id": "MC-0001", "status": "done"},
+            ]
+        )
         assert ok is True
         assert local_adapter._local_issues[0]["status"] == "done"
 
@@ -413,6 +417,7 @@ class TestMulticaAdapterRealMode:
 # GitHubAdapter
 # ===================================================================
 
+
 class TestGitHubAdapter:
     @pytest.fixture
     def local_adapter(self, tmp_path):
@@ -476,9 +481,11 @@ class TestGitHubAdapter:
 
     @pytest.mark.asyncio
     async def test_sync_from_war_room_create(self, local_adapter):
-        ok = await local_adapter.sync_from_war_room([
-            {"type": "create_issue", "payload": {"title": "From WR", "body": "x"}},
-        ])
+        ok = await local_adapter.sync_from_war_room(
+            [
+                {"type": "create_issue", "payload": {"title": "From WR", "body": "x"}},
+            ]
+        )
         assert ok is True
         assert any(i["title"] == "From WR" for i in local_adapter._local_issues)
 
@@ -546,7 +553,15 @@ class TestGitHubAdapterRealMode:
             mock_resp = MagicMock()
             mock_resp.json.return_value = [
                 {"id": 1, "number": 42, "title": "Fix bug", "state": "open", "labels": [], "assignee": None},
-                {"id": 2, "number": 43, "title": "PR title", "state": "open", "labels": [], "assignee": None, "pull_request": {}},
+                {
+                    "id": 2,
+                    "number": 43,
+                    "title": "PR title",
+                    "state": "open",
+                    "labels": [],
+                    "assignee": None,
+                    "pull_request": {},
+                },
             ]
             mock_resp.raise_for_status = MagicMock()
 
@@ -609,6 +624,7 @@ class TestGitHubAdapterRealMode:
 # ===================================================================
 # ObsidianAdapter
 # ===================================================================
+
 
 class TestObsidianAdapter:
     @pytest.fixture
@@ -673,9 +689,11 @@ class TestObsidianAdapter:
 
     @pytest.mark.asyncio
     async def test_sync_from_war_room(self, mirror_adapter):
-        ok = await mirror_adapter.sync_from_war_room([
-            {"type": "create_note", "payload": {"title": "From WR", "content": "x", "tags": ["task"]}},
-        ])
+        ok = await mirror_adapter.sync_from_war_room(
+            [
+                {"type": "create_note", "payload": {"title": "From WR", "content": "x", "tags": ["task"]}},
+            ]
+        )
         assert ok is True
         notes = await mirror_adapter.list_notes()
         assert any(n["title"] == "From WR" for n in notes)
@@ -696,6 +714,7 @@ class TestObsidianAdapter:
 # ===================================================================
 # OllamaAdapter (Multi-source models)
 # ===================================================================
+
 
 class TestOllamaAdapter:
     @pytest.fixture
@@ -761,9 +780,7 @@ class TestOllamaAdapter:
 
     @pytest.mark.asyncio
     async def test_generate_openrouter_no_key(self, offline_adapter):
-        result = await offline_adapter.generate(
-            model="openrouter/anthropic/claude-3.5-sonnet", prompt="Hello"
-        )
+        result = await offline_adapter.generate(model="openrouter/anthropic/claude-3.5-sonnet", prompt="Hello")
         assert "OpenRouter key missing" in result
 
 
@@ -808,8 +825,16 @@ class TestOllamaAdapterRealMode:
             or_resp = MagicMock()
             or_resp.json.return_value = {
                 "data": [
-                    {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "pricing": {"prompt": "0", "completion": "0"}},
-                    {"id": "google/gemini-pro", "name": "Gemini Pro", "pricing": {"prompt": "0.001", "completion": "0.002"}},
+                    {
+                        "id": "anthropic/claude-3.5-sonnet",
+                        "name": "Claude 3.5 Sonnet",
+                        "pricing": {"prompt": "0", "completion": "0"},
+                    },
+                    {
+                        "id": "google/gemini-pro",
+                        "name": "Gemini Pro",
+                        "pricing": {"prompt": "0.001", "completion": "0.002"},
+                    },
                 ]
             }
             or_resp.raise_for_status = MagicMock()
@@ -867,9 +892,7 @@ class TestOllamaAdapterRealMode:
     @pytest.mark.asyncio
     async def test_generate_openrouter_real(self, real_adapter):
         or_resp = MagicMock()
-        or_resp.json.return_value = {
-            "choices": [{"message": {"content": "Cloud response"}}]
-        }
+        or_resp.json.return_value = {"choices": [{"message": {"content": "Cloud response"}}]}
         or_resp.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -877,13 +900,9 @@ class TestOllamaAdapterRealMode:
         real_adapter._openrouter_client = mock_client
 
         # Mark model as openrouter in cache
-        real_adapter._cached_models = [
-            {"id": "anthropic/claude-3.5-sonnet", "source": "openrouter"}
-        ]
+        real_adapter._cached_models = [{"id": "anthropic/claude-3.5-sonnet", "source": "openrouter"}]
 
-        result = await real_adapter.generate(
-            model="anthropic/claude-3.5-sonnet", prompt="Hello", system="Be nice"
-        )
+        result = await real_adapter.generate(model="anthropic/claude-3.5-sonnet", prompt="Hello", system="Be nice")
         assert result == "Cloud response"
         args, kwargs = mock_client.post.call_args
         assert args[0] == "/chat/completions"
@@ -936,6 +955,7 @@ class TestOllamaAdapterRealMode:
 # ===================================================================
 # TelegramAdapter
 # ===================================================================
+
 
 class TestTelegramAdapter:
     @pytest.fixture
@@ -1041,9 +1061,11 @@ class TestTelegramAdapter:
 
     @pytest.mark.asyncio
     async def test_sync_from_war_room(self, local_adapter):
-        ok = await local_adapter.sync_from_war_room([
-            {"type": "send_message", "chat_id": 12345, "text": "Hello"},
-        ])
+        ok = await local_adapter.sync_from_war_room(
+            [
+                {"type": "send_message", "chat_id": 12345, "text": "Hello"},
+            ]
+        )
         assert ok is True
         assert len(local_adapter._outbox) == 1
 
@@ -1052,10 +1074,12 @@ class TestTelegramAdapter:
         with patch("war_room.adapters.telegram.TELEGRAM_STATE_DIR", tmp_path):
             adapter = TelegramAdapter(token="")
             adapter._state_file = tmp_path / "telegram_sync.json"
-            await adapter.handle_update({
-                "update_id": 1,
-                "message": {"chat": {"id": 111}, "text": "/run X"},
-            })
+            await adapter.handle_update(
+                {
+                    "update_id": 1,
+                    "message": {"chat": {"id": 111}, "text": "/run X"},
+                }
+            )
             adapter._save_local_state()
 
             adapter2 = TelegramAdapter(token="")
@@ -1075,7 +1099,10 @@ class TestTelegramAdapterRealMode:
     @pytest.mark.asyncio
     async def test_health_real(self, real_adapter):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"ok": True, "result": {"id": 1, "username": "war_room_bot", "first_name": "War Room"}}
+        mock_resp.json.return_value = {
+            "ok": True,
+            "result": {"id": 1, "username": "war_room_bot", "first_name": "War Room"},
+        }
         mock_resp.raise_for_status = MagicMock()
 
         mock_client = MagicMock()

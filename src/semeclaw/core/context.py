@@ -6,15 +6,15 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from semeclaw.utils.config import Config
-    from semeclaw.provider.history import HistoryStore
+    from semeclaw.channel.base import Channel
     from semeclaw.core.agent_loader import AgentLoader
     from semeclaw.core.commands import CommandRegistry
-    from semeclaw.core.routing import RoutingTable
     from semeclaw.core.cron_loader import CronLoader
     from semeclaw.core.eventbus import EventBus
+    from semeclaw.core.routing import RoutingTable
+    from semeclaw.provider.history import HistoryStore
     from semeclaw.server.websocket_worker import WebSocketWorker
-    from semeclaw.channel.base import Channel
+    from semeclaw.utils.config import Config
 
 
 class SharedContext:

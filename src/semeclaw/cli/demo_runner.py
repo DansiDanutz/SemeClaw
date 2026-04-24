@@ -25,12 +25,14 @@ def _print_scenario_card(scenario: dict) -> None:
     attendees = card.get("attendees", [])
 
     console.print()
-    console.print(Panel(
-        f"[bold cyan]{card.get('title', scenario['title'])}[/bold cyan]\n"
-        f"[dim]{card.get('agenda', scenario.get('task', ''))}[/dim]",
-        border_style="cyan",
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]{card.get('title', scenario['title'])}[/bold cyan]\n"
+            f"[dim]{card.get('agenda', scenario.get('task', ''))}[/dim]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
 
     if attendees:
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
@@ -58,7 +60,13 @@ def _print_turn(turn: dict, index: int) -> None:
     delay = turn.get("delay_ms", 0)
 
     emoji = {"narrator": "🎙", "research": "🔬", "strategist": "🎯", "writer": "✍️", "architect": "🏗"}.get(agent, "💬")
-    name = {"narrator": "Orchestrator", "research": "Dexter", "strategist": "Memo", "writer": "Hermes", "architect": "David"}.get(agent, agent)
+    name = {
+        "narrator": "Orchestrator",
+        "research": "Dexter",
+        "strategist": "Memo",
+        "writer": "Hermes",
+        "architect": "David",
+    }.get(agent, agent)
 
     if kind == "intro":
         console.print(f"\n[bold yellow]{emoji} {name}[/bold yellow] [dim](intro)[/dim]")

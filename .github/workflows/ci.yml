@@ -51,8 +51,8 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          uv run ruff check src/ war_room/ || true
-          uv run ruff format --check src/ war_room/ || true
+          uv run ruff check src/ war_room/ adclaw/ nervix_platform/
+          uv run ruff format --check src/ war_room/ adclaw/ nervix_platform/
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg

@@ -17,6 +17,7 @@ Message grammar (everything case-insensitive on the command):
 Each intervention reply is summarised back into the chat. On turn 3
 the orchestrator decision + new dialog version are included.
 """
+
 from __future__ import annotations
 
 import html
@@ -29,7 +30,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from war_room.adapters.telegram import TelegramAdapter
 from war_room.dashboard.routes.deps import _tenant_id
 from war_room.dashboard.routes.meetings import create_legacy_meeting
-from war_room.tasks import _db, intervene as _intervene
+from war_room.tasks import _db
+from war_room.tasks import intervene as _intervene
 
 logger = logging.getLogger("war_room.dashboard.telegram")
 router = APIRouter(tags=["telegram"])
@@ -58,8 +60,8 @@ async def _resolve_task_id(prefix: str) -> str | None:
         return None
     try:
         from war_room.tasks._db import supa
-        rows = await supa("get",
-            f"semeclaw_tasks?id=ilike.{p}*&select=id&limit=2")
+
+        rows = await supa("get", f"semeclaw_tasks?id=ilike.{p}*&select=id&limit=2")
         if len(rows) == 1:
             return rows[0]["id"]
     except Exception as e:
@@ -82,9 +84,7 @@ def _format_replies(result: dict) -> str:
         parts.append(html.escape(decision.get("rationale", "")))
         patch = decision.get("task_patch", {}) or {}
         if patch:
-            kv = ", ".join(
-                f"{k}={v!r}" for k, v in patch.items() if k != "description"
-            )
+            kv = ", ".join(f"{k}={v!r}" for k, v in patch.items() if k != "description")
             if kv:
                 parts.append(f"<i>patch:</i> {html.escape(kv)}")
     nd = result.get("new_dialog")
@@ -92,11 +92,10 @@ def _format_replies(result: dict) -> str:
         parts.append(f"📝 dialog v{nd.get('version')} composed")
     wb = result.get("writeback") or {}
     if wb.get("ok"):
-        parts.append(f"⏪ writeback → {html.escape(str(wb.get('source','?')))} ok")
+        parts.append(f"⏪ writeback → {html.escape(str(wb.get('source', '?')))} ok")
     elif wb:
         parts.append(
-            f"⚠️ writeback → {html.escape(str(wb.get('source','?')))}: "
-            f"{html.escape(str(wb.get('error','')))}"
+            f"⚠️ writeback → {html.escape(str(wb.get('source', '?')))}: {html.escape(str(wb.get('error', '')))}"
         )
     return "\n".join(parts)
 
@@ -107,7 +106,7 @@ def _format_meeting(task: dict, dialog: dict) -> str:
         f"Agents: {', '.join(html.escape(a) for a in (task.get('assigned_agents') or [])) or 'writer'}",
         "",
     ]
-    for line in (dialog.get("lines") or []):
+    for line in dialog.get("lines") or []:
         text = (line.get("text") or "").strip()
         if not text:
             continue
@@ -159,8 +158,7 @@ async def _handle_text(tg: TelegramAdapter, chat_id: int | str, text: str, reque
             return
         lines = ["<b>Recent tasks</b>"]
         for t in rows:
-            lines.append(f"<code>{t['id'][:8]}</code> {t.get('status','?')} — "
-                         f"{(t.get('title') or '')[:50]}")
+            lines.append(f"<code>{t['id'][:8]}</code> {t.get('status', '?')} — {(t.get('title') or '')[:50]}")
         await tg.send_message(chat_id, "\n".join(lines))
         return
 
@@ -169,8 +167,7 @@ async def _handle_text(tg: TelegramAdapter, chat_id: int | str, text: str, reque
     if low.startswith("/comment"):
         parts = raw.split(None, 2)
         if len(parts) < 3:
-            await tg.send_message(chat_id,
-                "Usage: <code>/comment &lt;task_id&gt; &lt;text&gt;</code>")
+            await tg.send_message(chat_id, "Usage: <code>/comment &lt;task_id&gt; &lt;text&gt;</code>")
             return
         task_prefix, comment = parts[1], parts[2]
     elif ":" in raw:
@@ -189,9 +186,11 @@ async def _handle_text(tg: TelegramAdapter, chat_id: int | str, text: str, reque
         if not low.startswith("/comment"):
             await _start_meeting(tg, chat_id, request, raw)
             return
-        await tg.send_message(chat_id,
+        await tg.send_message(
+            chat_id,
             f"⚠️ Could not resolve task <code>{task_prefix}</code>. "
-            "Use 8+ chars of the id, or <code>/list</code> to find it.")
+            "Use 8+ chars of the id, or <code>/list</code> to find it.",
+        )
         return
 
     try:
@@ -201,8 +200,7 @@ async def _handle_text(tg: TelegramAdapter, chat_id: int | str, text: str, reque
         return
 
     if not result.get("ok"):
-        await tg.send_message(chat_id,
-            f"⚠️ {result.get('error','intervene failed')}")
+        await tg.send_message(chat_id, f"⚠️ {result.get('error', 'intervene failed')}")
         return
 
     await tg.send_message(chat_id, _format_replies(result))
@@ -211,9 +209,7 @@ async def _handle_text(tg: TelegramAdapter, chat_id: int | str, text: str, reque
 @router.get("/api/telegram/webhook")
 async def telegram_webhook_probe():
     """Plain probe so you can curl the URL and confirm it's live."""
-    has_token = bool(
-        os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("SEMECLAW_BOT_TOKEN")
-    )
+    has_token = bool(os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("SEMECLAW_BOT_TOKEN"))
     has_secret = bool(os.environ.get("TELEGRAM_WEBHOOK_SECRET"))
     return {"ok": True, "bot_configured": has_token, "secret_configured": has_secret}
 

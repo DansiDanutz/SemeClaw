@@ -2,6 +2,25 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.7.15] - 2026-04-24
+
+### Changed — lint/format tree-wide + CI ruff enforcement
+
+- `pyproject.toml`: added `[tool.ruff]`, `[tool.ruff.lint]`, `[tool.mypy]`,
+  and `[tool.pytest.ini_options]` config blocks.
+- Applied `ruff check --fix` (247 auto-fixes: unused imports, import sort,
+  `UP` modernisations, quoted annotations, f-string placeholders) and
+  `ruff format` across `src/`, `war_room/`, `adclaw/`, `nervix_platform/`
+  (102 files reformatted, 58 already clean).
+- 11 pre-existing rule categories ignored in config with a comment pointing
+  at the ratchet path. No strict-new-code rules were weakened.
+- CI: `ruff check` and `ruff format --check` now fail the build if new
+  code regresses. Previously both were run with `|| true`.
+
+### Tests
+
+- 395 passing, 4 pre-existing sandbox failures, 1 skipped (no regressions).
+
 ## [0.7.14] - 2026-04-24
 
 ### Added — Tasks system (Phases A → D)

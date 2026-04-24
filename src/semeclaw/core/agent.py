@@ -10,22 +10,22 @@ from typing import TYPE_CHECKING
 
 from litellm.types.completion import ChatCompletionMessageParam as Message
 
-from semeclaw.provider.llm import LLMProvider
-from semeclaw.core.session_state import SessionState
 from semeclaw.core.commands import CommandRegistry
 from semeclaw.core.plugin_loader import PluginLoader
+from semeclaw.core.session_state import SessionState
+from semeclaw.provider.llm import LLMProvider
 from semeclaw.tools import ToolRegistry
 
 if TYPE_CHECKING:
     from semeclaw.core.agent_loader import AgentDef
-    from semeclaw.utils.config import Config
     from semeclaw.core.history import HistoryStore
+    from semeclaw.utils.config import Config
 
 
 class Agent:
     """A configured agent that creates and manages conversation sessions."""
 
-    def __init__(self, agent_def: "AgentDef", config: "Config") -> None:
+    def __init__(self, agent_def: AgentDef, config: Config) -> None:
         self.agent_def = agent_def
         self.config = config
         self.llm = LLMProvider.from_config(agent_def.llm)
@@ -38,16 +38,19 @@ class Agent:
 
         # Memory tools — remember, recall, search, reflect, learning journal
         from semeclaw.tools.memory_tools import create_memory_tools
+
         for memory_tool in create_memory_tools(self.config.workspace):
             registry.register(memory_tool)
 
         # Experiment & notification tools — research tracker + Telegram notify
         from semeclaw.tools.experiment_tools import create_experiment_tools
+
         for exp_tool in create_experiment_tools(self.config.workspace):
             registry.register(exp_tool)
 
         # Competitor intelligence tools — YouTube competitor analysis
         from semeclaw.tools.competitor_tools import create_competitor_tools
+
         for comp_tool in create_competitor_tools(self.config):
             registry.register(comp_tool)
 
@@ -64,7 +67,7 @@ class Agent:
 
         return registry
 
-    def new_session(self, session_id: str | None = None) -> "AgentSession":
+    def new_session(self, session_id: str | None = None) -> AgentSession:
         """Create a new conversation session."""
         session_id = session_id or str(uuid.uuid4())
 

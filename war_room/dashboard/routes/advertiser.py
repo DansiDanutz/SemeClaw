@@ -1,34 +1,32 @@
 """Advertiser console API — projects, library, card generation, wallet, checkout."""
+
 from __future__ import annotations
 
-import os
 import ipaddress
 import logging
-import secrets
+import os
 import socket
 from datetime import datetime, timezone
-from typing import Optional
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-import httpx
-
 from war_room.dashboard.routes.deps import (
-    SUPA_URL,
-    SUPA_KEY,
-    SUPA_HEADERS,
+    ADCLAW_PUBLIC_URL,
     STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET,
-    SEMECLAW_PUBLIC_URL,
-    ADCLAW_PUBLIC_URL,
+    SUPA_HEADERS,
+    SUPA_KEY,
+    SUPA_URL,
     require_advertiser_owner,
 )
 
 logger = logging.getLogger("war_room.dashboard.advertiser")
 
 router = APIRouter(tags=["advertiser"])
+
 
 # ---------------------------------------------------------------------------
 # Supabase helper
@@ -46,19 +44,21 @@ async def _supa(method: str, path: str, **kwargs):
 # Auth config (public — no bearer required)
 # ---------------------------------------------------------------------------
 _SUPABASE_ANON_KEY = (
-    os.environ.get("SUPABASE_ANON_KEY", "").strip()
-    or os.environ.get("DLS_TEAM_SUPABASE_ANON_KEY", "").strip()
+    os.environ.get("SUPABASE_ANON_KEY", "").strip() or os.environ.get("DLS_TEAM_SUPABASE_ANON_KEY", "").strip()
 )
+
 
 @router.get("/api/advertiser/auth/config")
 async def api_advertiser_auth_config():
     """Return Supabase auth configuration so the frontend can initialise the JS client."""
-    return JSONResponse({
-        "supabase_url": SUPA_URL or os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip(),
-        "supabase_anon_key": _SUPABASE_ANON_KEY,
-        "redirect_url": f"{ADCLAW_PUBLIC_URL}/advertiser",
-        "providers": ["google", "github"],
-    })
+    return JSONResponse(
+        {
+            "supabase_url": SUPA_URL or os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip(),
+            "supabase_anon_key": _SUPABASE_ANON_KEY,
+            "redirect_url": f"{ADCLAW_PUBLIC_URL}/advertiser",
+            "providers": ["google", "github"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -67,10 +67,14 @@ async def api_advertiser_auth_config():
 async def _ensure_advertiser(advertiser_id: str, email: str = "") -> None:
     """Idempotently create an advertiser row with the 10-credit welcome grant."""
     try:
-        await _supa("post", "rpc/adclaw_ensure_wallet", json={
-            "p_advertiser_id": advertiser_id,
-            "p_email": email or "",
-        })
+        await _supa(
+            "post",
+            "rpc/adclaw_ensure_wallet",
+            json={
+                "p_advertiser_id": advertiser_id,
+                "p_email": email or "",
+            },
+        )
     except Exception as e:
         logger.warning("ensure_advertiser failed: %s", e)
 
@@ -85,17 +89,30 @@ async def api_advertiser_wallet(advertiser_id: str, request: Request):
         await _ensure_advertiser(advertiser_id)
         # Daily login bonus — RPC is idempotent per UTC day, safe to call on every fetch.
         try:
-            await _supa("post", "rpc/adclaw_daily_login_bonus",
-                        json={"p_advertiser_id": advertiser_id})
+            await _supa("post", "rpc/adclaw_daily_login_bonus", json={"p_advertiser_id": advertiser_id})
         except Exception as e:
             logger.debug("daily_login_bonus skipped: %s", e)
-        rows = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=id,email,wallet_credits,is_subscribed,sub_expires_at,tier")
+        rows = await _supa(
+            "get",
+            f"adclaw_advertisers?id=eq.{advertiser_id}&select=id,email,wallet_credits,is_subscribed,sub_expires_at,tier",
+        )
         if not rows:
-            return JSONResponse({"id": advertiser_id, "wallet_credits": 0, "is_subscribed": False, "sub_expires_at": None, "tier": "free"}, status_code=200)
+            return JSONResponse(
+                {
+                    "id": advertiser_id,
+                    "wallet_credits": 0,
+                    "is_subscribed": False,
+                    "sub_expires_at": None,
+                    "tier": "free",
+                },
+                status_code=200,
+            )
         return JSONResponse(rows[0])
     except Exception as e:
         logger.warning("wallet error: %s", e)
-        return JSONResponse({"id": advertiser_id, "wallet_credits": 0, "is_subscribed": False, "error": str(e)}, status_code=200)
+        return JSONResponse(
+            {"id": advertiser_id, "wallet_credits": 0, "is_subscribed": False, "error": str(e)}, status_code=200
+        )
 
 
 @router.post("/api/advertiser/{advertiser_id}/topup")
@@ -107,10 +124,14 @@ async def api_advertiser_topup(advertiser_id: str, request: Request):
     if credits <= 0:
         return JSONResponse({"error": "credits must be > 0"}, status_code=400)
     try:
-        await _supa("post", "rpc/adclaw_topup_credits", json={
-            "p_advertiser_id": advertiser_id,
-            "p_credits": credits,
-        })
+        await _supa(
+            "post",
+            "rpc/adclaw_topup_credits",
+            json={
+                "p_advertiser_id": advertiser_id,
+                "p_credits": credits,
+            },
+        )
         return JSONResponse({"ok": True, "credits_added": credits})
     except Exception as e:
         logger.warning("topup error: %s", e)
@@ -145,19 +166,23 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
         return JSONResponse({"error": "name required"}, status_code=400)
     try:
         await _ensure_advertiser(advertiser_id)
-        rows = await _supa("post", "adclaw_projects", json={
-            "advertiser_id": advertiser_id,
-            "name": name,
-            "github_url": (body.get("github_url") or "").strip(),
-            "webpage_url": (body.get("webpage_url") or "").strip(),
-            "description": (body.get("description") or "").strip(),
-            "notes": (body.get("notes") or "").strip(),
-            "ad_goal": (body.get("ad_goal") or "").strip(),
-            "target_audience": (body.get("target_audience") or "").strip(),
-            "problem_solved": (body.get("problem_solved") or "").strip(),
-            "tagline": (body.get("tagline") or "").strip(),
-            "voice": (body.get("voice") or "af_bella").strip(),
-        })
+        rows = await _supa(
+            "post",
+            "adclaw_projects",
+            json={
+                "advertiser_id": advertiser_id,
+                "name": name,
+                "github_url": (body.get("github_url") or "").strip(),
+                "webpage_url": (body.get("webpage_url") or "").strip(),
+                "description": (body.get("description") or "").strip(),
+                "notes": (body.get("notes") or "").strip(),
+                "ad_goal": (body.get("ad_goal") or "").strip(),
+                "target_audience": (body.get("target_audience") or "").strip(),
+                "problem_solved": (body.get("problem_solved") or "").strip(),
+                "tagline": (body.get("tagline") or "").strip(),
+                "voice": (body.get("voice") or "af_bella").strip(),
+            },
+        )
         return JSONResponse(rows[0] if rows else {"id": "", "name": name}, status_code=201)
     except Exception as e:
         logger.warning("create project error: %s", e)
@@ -174,7 +199,18 @@ async def api_advertiser_update_project(advertiser_id: str, project_id: str, req
         if not rows:
             return JSONResponse({"error": "project not found"}, status_code=404)
         patch = {}
-        for k in ("name", "github_url", "webpage_url", "description", "notes", "ad_goal", "target_audience", "problem_solved", "tagline", "voice"):
+        for k in (
+            "name",
+            "github_url",
+            "webpage_url",
+            "description",
+            "notes",
+            "ad_goal",
+            "target_audience",
+            "problem_solved",
+            "tagline",
+            "voice",
+        ):
             if k in body:
                 patch[k] = (body[k] or "").strip()
         if patch:
@@ -260,6 +296,7 @@ def _compose_draft(project: dict) -> dict:
 
 GENERATE_CARD_COST = 10  # credits to generate one ad card
 
+
 @router.post("/api/advertiser/{advertiser_id}/projects/{project_id}/generate-card")
 async def api_advertiser_generate_card(advertiser_id: str, project_id: str, request: Request):
     await require_advertiser_owner(request, advertiser_id)
@@ -270,18 +307,25 @@ async def api_advertiser_generate_card(advertiser_id: str, project_id: str, requ
 
         # Deduct credits atomically (RPC checks balance and rejects if insufficient)
         try:
-            result = await _supa("post", "rpc/adclaw_deduct_credits", json={
-                "p_advertiser_id": advertiser_id,
-                "p_credits":       GENERATE_CARD_COST,
-                "p_description":   f"Generated ad card for project {project_id[:8]}",
-            })
+            result = await _supa(
+                "post",
+                "rpc/adclaw_deduct_credits",
+                json={
+                    "p_advertiser_id": advertiser_id,
+                    "p_credits": GENERATE_CARD_COST,
+                    "p_description": f"Generated ad card for project {project_id[:8]}",
+                },
+            )
             rd = result if isinstance(result, dict) else (result[0] if result else {})
             if rd.get("ok") is False:
-                return JSONResponse({
-                    "error": rd.get("error", "insufficient credits"),
-                    "cost":  GENERATE_CARD_COST,
-                    "wallet_credits": rd.get("wallet_credits", 0),
-                }, status_code=402)
+                return JSONResponse(
+                    {
+                        "error": rd.get("error", "insufficient credits"),
+                        "cost": GENERATE_CARD_COST,
+                        "wallet_credits": rd.get("wallet_credits", 0),
+                    },
+                    status_code=402,
+                )
         except Exception as e:
             logger.warning("deduct_credits failed, continuing: %s", e)
 
@@ -303,31 +347,41 @@ async def api_advertiser_create_slide(advertiser_id: str, request: Request):
     try:
         await _ensure_advertiser(advertiser_id)
         # Ensure a campaign exists for this advertiser
-        camp_rows = await _supa("get", f"adclaw_campaigns?advertiser_id=eq.{advertiser_id}&name=eq.{campaign}&select=id")
+        camp_rows = await _supa(
+            "get", f"adclaw_campaigns?advertiser_id=eq.{advertiser_id}&name=eq.{campaign}&select=id"
+        )
         if camp_rows:
             campaign_id = camp_rows[0]["id"]
         else:
-            camp_rows = await _supa("post", "adclaw_campaigns", json={
-                "advertiser_id": advertiser_id,
-                "name": campaign,
-                "status": "active",
-            })
+            camp_rows = await _supa(
+                "post",
+                "adclaw_campaigns",
+                json={
+                    "advertiser_id": advertiser_id,
+                    "name": campaign,
+                    "status": "active",
+                },
+            )
             campaign_id = camp_rows[0]["id"] if camp_rows else None
 
         if not campaign_id:
             raise RuntimeError("could not create campaign")
 
-        rows = await _supa("post", "adclaw_slides", json={
-            "campaign_id": campaign_id,
-            "slide_type": body.get("slide_type", "feature"),
-            "headline": (body.get("headline") or "").strip(),
-            "body": (body.get("body") or "").strip(),
-            "badge": (body.get("badge") or "Featured").strip(),
-            "accent_color": body.get("accent", "#f59e0b"),
-            "cta_label": (body.get("cta_label") or "").strip(),
-            "cta_url": (body.get("cta_url") or "").strip(),
-            "status": (body.get("status") or "active").strip(),
-        })
+        rows = await _supa(
+            "post",
+            "adclaw_slides",
+            json={
+                "campaign_id": campaign_id,
+                "slide_type": body.get("slide_type", "feature"),
+                "headline": (body.get("headline") or "").strip(),
+                "body": (body.get("body") or "").strip(),
+                "badge": (body.get("badge") or "Featured").strip(),
+                "accent_color": body.get("accent", "#f59e0b"),
+                "cta_label": (body.get("cta_label") or "").strip(),
+                "cta_url": (body.get("cta_url") or "").strip(),
+                "status": (body.get("status") or "active").strip(),
+            },
+        )
         return JSONResponse(rows[0] if rows else {"ok": True}, status_code=201)
     except Exception as e:
         logger.warning("create slide error: %s", e)
@@ -340,10 +394,7 @@ async def api_advertiser_edit_slide(advertiser_id: str, slide_id: str, request: 
     body = await request.json()
     try:
         # Verify ownership via campaign → advertiser
-        rows = await _supa(
-            "get",
-            f"adclaw_slides?id=eq.{slide_id}&select=*,campaign:adclaw_campaigns(advertiser_id)"
-        )
+        rows = await _supa("get", f"adclaw_slides?id=eq.{slide_id}&select=*,campaign:adclaw_campaigns(advertiser_id)")
         if not rows:
             return JSONResponse({"error": "slide not found"}, status_code=404)
         owner = rows[0].get("campaign", {}).get("advertiser_id")
@@ -373,10 +424,7 @@ async def api_advertiser_slide_status(advertiser_id: str, slide_id: str, request
     if status not in ("enabled", "active", "inactive", "pending", "paused"):
         return JSONResponse({"error": "invalid status"}, status_code=400)
     try:
-        rows = await _supa(
-            "get",
-            f"adclaw_slides?id=eq.{slide_id}&select=*,campaign:adclaw_campaigns(advertiser_id)"
-        )
+        rows = await _supa("get", f"adclaw_slides?id=eq.{slide_id}&select=*,campaign:adclaw_campaigns(advertiser_id)")
         if not rows:
             return JSONResponse({"error": "slide not found"}, status_code=404)
         owner = rows[0].get("campaign", {}).get("advertiser_id")
@@ -388,16 +436,18 @@ async def api_advertiser_slide_status(advertiser_id: str, slide_id: str, request
         prev_status = rows[0].get("status")
         promoting = status in ("enabled", "active") and prev_status not in ("enabled", "active")
         if promoting:
-            chk = await _supa("post", "rpc/adclaw_can_activate_slide",
-                              json={"p_advertiser_id": advertiser_id})
+            chk = await _supa("post", "rpc/adclaw_can_activate_slide", json={"p_advertiser_id": advertiser_id})
             chk_d = chk if isinstance(chk, dict) else (chk[0] if chk else {})
             if not chk_d.get("ok", True):
-                return JSONResponse({
-                    "error": chk_d.get("error", "active card cap reached"),
-                    "tier":  chk_d.get("tier"),
-                    "cap":   chk_d.get("cap"),
-                    "active": chk_d.get("active"),
-                }, status_code=409)
+                return JSONResponse(
+                    {
+                        "error": chk_d.get("error", "active card cap reached"),
+                        "tier": chk_d.get("tier"),
+                        "cap": chk_d.get("cap"),
+                        "active": chk_d.get("active"),
+                    },
+                    status_code=409,
+                )
 
         await _supa("patch", f"adclaw_slides?id=eq.{slide_id}", json={"status": status})
         return JSONResponse({"ok": True, "slide_id": slide_id, "status": status})
@@ -414,18 +464,19 @@ async def api_advertiser_history(advertiser_id: str, request: Request):
     await require_advertiser_owner(request, advertiser_id)
     try:
         # Summary stats
-        adv_rows = await _supa(
-            "get",
-            f"adclaw_advertisers?id=eq.{advertiser_id}&select=wallet_credits"
-        )
+        adv_rows = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=wallet_credits")
         wallet = adv_rows[0]["wallet_credits"] if adv_rows else 0
 
         tx_rows = await _supa(
             "get",
-            f"adclaw_credit_transactions?advertiser_id=eq.{advertiser_id}&select=*&order=created_at.desc&limit=200"
+            f"adclaw_credit_transactions?advertiser_id=eq.{advertiser_id}&select=*&order=created_at.desc&limit=200",
         )
 
-        total_purchased = sum(t["credits"] for t in tx_rows if t["type"] in ("purchase", "subscription", "refund", "adjustment") and t["credits"] > 0)
+        total_purchased = sum(
+            t["credits"]
+            for t in tx_rows
+            if t["type"] in ("purchase", "subscription", "refund", "adjustment") and t["credits"] > 0
+        )
         total_spent = sum(-t["credits"] for t in tx_rows if t["type"] == "spend" and t["credits"] < 0)
 
         # Enrich spend rows with slide headline + campaign name
@@ -435,10 +486,7 @@ async def api_advertiser_history(advertiser_id: str, request: Request):
         slide_map = {}
         if slide_ids:
             try:
-                s_rows = await _supa(
-                    "get",
-                    f"adclaw_slides?id=in.({','.join(slide_ids)})&select=id,headline"
-                )
+                s_rows = await _supa("get", f"adclaw_slides?id=in.({','.join(slide_ids)})&select=id,headline")
                 slide_map = {s["id"]: s["headline"] for s in s_rows}
             except Exception:
                 pass
@@ -446,10 +494,7 @@ async def api_advertiser_history(advertiser_id: str, request: Request):
         camp_map = {}
         if campaign_ids:
             try:
-                c_rows = await _supa(
-                    "get",
-                    f"adclaw_campaigns?id=in.({','.join(campaign_ids)})&select=id,name"
-                )
+                c_rows = await _supa("get", f"adclaw_campaigns?id=in.({','.join(campaign_ids)})&select=id,name")
                 camp_map = {c["id"]: c["name"] for c in c_rows}
             except Exception:
                 pass
@@ -460,26 +505,31 @@ async def api_advertiser_history(advertiser_id: str, request: Request):
             if isinstance(meta, str):
                 try:
                     import json
+
                     meta = json.loads(meta)
                 except Exception:
                     meta = {}
-            transactions.append({
-                "id": t["id"],
-                "type": t["type"],
-                "credits": t["credits"],
-                "description": t["description"],
-                "slide_headline": slide_map.get(t.get("slide_id"), ""),
-                "campaign_name": camp_map.get(t.get("campaign_id"), ""),
-                "instance_id": meta.get("instance_id", ""),
-                "created_at": t["created_at"],
-            })
+            transactions.append(
+                {
+                    "id": t["id"],
+                    "type": t["type"],
+                    "credits": t["credits"],
+                    "description": t["description"],
+                    "slide_headline": slide_map.get(t.get("slide_id"), ""),
+                    "campaign_name": camp_map.get(t.get("campaign_id"), ""),
+                    "instance_id": meta.get("instance_id", ""),
+                    "created_at": t["created_at"],
+                }
+            )
 
-        return JSONResponse({
-            "wallet_credits": wallet,
-            "total_purchased": total_purchased,
-            "total_spent": total_spent,
-            "transactions": transactions,
-        })
+        return JSONResponse(
+            {
+                "wallet_credits": wallet,
+                "total_purchased": total_purchased,
+                "total_spent": total_spent,
+                "transactions": transactions,
+            }
+        )
     except Exception as e:
         logger.warning("history error: %s", e)
         return JSONResponse({"wallet_credits": 0, "total_purchased": 0, "total_spent": 0, "transactions": []})
@@ -498,6 +548,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
     try:
         await _ensure_advertiser(advertiser_id)
         import stripe
+
         stripe.api_key = STRIPE_SECRET_KEY
 
         # Lookup or create Stripe customer
@@ -516,15 +567,18 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
         # Map tier label → Stripe Price ID.
         # Accepts: "gold", "diamond", "25", "50" (legacy), "subscription" (legacy → diamond).
         _tier_price_env = {
-            "gold":    "ADCLAW_PRICE_USD_25",
-            "25":      "ADCLAW_PRICE_USD_25",
+            "gold": "ADCLAW_PRICE_USD_25",
+            "25": "ADCLAW_PRICE_USD_25",
             "diamond": "ADCLAW_PRICE_USD_50",
-            "50":      "ADCLAW_PRICE_USD_50",
+            "50": "ADCLAW_PRICE_USD_50",
             "subscription": "ADCLAW_PRICE_USD_50",
         }
         _tier_canonical = {
-            "gold": "gold", "25": "gold",
-            "diamond": "diamond", "50": "diamond", "subscription": "diamond",
+            "gold": "gold",
+            "25": "gold",
+            "diamond": "diamond",
+            "50": "diamond",
+            "subscription": "diamond",
         }
         if tier in _tier_price_env:
             price_env = _tier_price_env[tier]
@@ -549,14 +603,16 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 mode="payment",
-                line_items=[{
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {"name": f"{credits} Ad Credits"},
-                        "unit_amount": unit_amount,
-                    },
-                    "quantity": 1,
-                }],
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "usd",
+                            "product_data": {"name": f"{credits} Ad Credits"},
+                            "unit_amount": unit_amount,
+                        },
+                        "quantity": 1,
+                    }
+                ],
                 success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
                 metadata={"advertiser_id": advertiser_id, "credits": str(credits)},
@@ -589,6 +645,7 @@ async def api_advertiser_stripe_webhook(request: Request):
 
     try:
         import stripe
+
         stripe.api_key = STRIPE_SECRET_KEY
         event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
     except Exception as e:
@@ -596,10 +653,10 @@ async def api_advertiser_stripe_webhook(request: Request):
         return JSONResponse({"error": "invalid signature"}, status_code=400)
 
     etype = event.get("type", "")
-    obj   = event.get("data", {}).get("object", {}) or {}
+    obj = event.get("data", {}).get("object", {}) or {}
 
     # Resolve advertiser_id — from subscription metadata, else lookup by customer.
-    async def _adv_from_customer(customer_id: str) -> Optional[str]:
+    async def _adv_from_customer(customer_id: str) -> str | None:
         if not customer_id:
             return None
         rows = await _supa("get", f"adclaw_advertisers?stripe_customer_id=eq.{customer_id}&select=id")
@@ -628,8 +685,9 @@ async def api_advertiser_stripe_webhook(request: Request):
                 patch["sub_expires_at"] = expires_iso
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json=patch)
             # Grant subscription credits: Gold 300 (250+50), Diamond 750 (500+250)
-            await _supa("post", "rpc/adclaw_grant_subscription_credits",
-                        json={"p_advertiser_id": advertiser_id, "p_tier": tier})
+            await _supa(
+                "post", "rpc/adclaw_grant_subscription_credits", json={"p_advertiser_id": advertiser_id, "p_tier": tier}
+            )
 
         elif etype == "checkout.session.completed":
             # One-time credit top-up: $1 = 10 credits. Amount comes from metadata.credits
@@ -642,18 +700,21 @@ async def api_advertiser_stripe_webhook(request: Request):
                 except Exception:
                     credits = 0
                 if advertiser_id and credits > 0:
-                    await _supa("post", "rpc/adclaw_record_topup", json={
-                        "p_advertiser_id": advertiser_id,
-                        "p_credits":       credits,
-                        "p_stripe_id":     obj.get("id"),
-                    })
+                    await _supa(
+                        "post",
+                        "rpc/adclaw_record_topup",
+                        json={
+                            "p_advertiser_id": advertiser_id,
+                            "p_credits": credits,
+                            "p_stripe_id": obj.get("id"),
+                        },
+                    )
 
         elif etype in ("invoice.payment_failed", "customer.subscription.deleted"):
             customer_id = obj.get("customer")
             advertiser_id = await _adv_from_customer(customer_id)
             if advertiser_id:
-                await _supa("post", "rpc/adclaw_downgrade_to_free",
-                            json={"p_advertiser_id": advertiser_id})
+                await _supa("post", "rpc/adclaw_downgrade_to_free", json={"p_advertiser_id": advertiser_id})
 
     except Exception as e:
         logger.warning("stripe webhook handler error (%s): %s", etype, e)
@@ -666,43 +727,46 @@ async def api_advertiser_stripe_webhook(request: Request):
 # SPECIAL — revenue features (priority boost, targeting, referrals, analytics)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @router.get("/api/advertiser/{advertiser_id}/special")
 async def api_advertiser_special(advertiser_id: str):
     """Bundled fetch for the Special tab: referral info + slide analytics."""
     try:
-        adv = await _supa("get",
-            f"adclaw_advertisers?id=eq.{advertiser_id}"
-            f"&select=id,referral_code,referred_by,wallet_credits,tier")
+        adv = await _supa(
+            "get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=id,referral_code,referred_by,wallet_credits,tier"
+        )
         if not adv:
             return JSONResponse({"error": "not found"}, status_code=404)
         # Referral tree — list of referred users with week_spent + total earned
         try:
-            tree = await _supa("post", "rpc/adclaw_referral_tree",
-                               json={"p_advertiser_id": advertiser_id})
+            tree = await _supa("post", "rpc/adclaw_referral_tree", json={"p_advertiser_id": advertiser_id})
         except Exception as e:
             logger.warning("referral_tree rpc failed: %s", e)
             tree = []
         # Total bonus this advertiser has received from referrals
         try:
-            paid_rows = await _supa("get",
+            paid_rows = await _supa(
+                "get",
                 f"adclaw_credit_transactions?advertiser_id=eq.{advertiser_id}"
-                f"&description=like.Weekly%20referral%20bonus%25&select=credits")
+                f"&description=like.Weekly%20referral%20bonus%25&select=credits",
+            )
             weekly_bonus_paid = sum(int(r.get("credits") or 0) for r in (paid_rows or []))
         except Exception:
             weekly_bonus_paid = 0
-        analytics = await _supa("post", "rpc/adclaw_slide_analytics",
-                                json={"p_advertiser_id": advertiser_id})
-        return JSONResponse({
-            "referral_code":     adv[0].get("referral_code"),
-            "referred_count":    len(tree or []),
-            "referred_by":       adv[0].get("referred_by"),
-            "referred_users":    tree or [],
-            "weekly_bonus_paid": weekly_bonus_paid,
-            "referred_earned":   weekly_bonus_paid,
-            "tier":              adv[0].get("tier", "free"),
-            "wallet_credits":    adv[0].get("wallet_credits", 0),
-            "slides":            analytics or [],
-        })
+        analytics = await _supa("post", "rpc/adclaw_slide_analytics", json={"p_advertiser_id": advertiser_id})
+        return JSONResponse(
+            {
+                "referral_code": adv[0].get("referral_code"),
+                "referred_count": len(tree or []),
+                "referred_by": adv[0].get("referred_by"),
+                "referred_users": tree or [],
+                "weekly_bonus_paid": weekly_bonus_paid,
+                "referred_earned": weekly_bonus_paid,
+                "tier": adv[0].get("tier", "free"),
+                "wallet_credits": adv[0].get("wallet_credits", 0),
+                "slides": analytics or [],
+            }
+        )
     except Exception as e:
         logger.warning("special fetch error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -715,8 +779,9 @@ async def api_advertiser_apply_referral(advertiser_id: str, request: Request):
     if not code:
         return JSONResponse({"error": "code required"}, status_code=400)
     try:
-        res = await _supa("post", "rpc/adclaw_apply_referral",
-                          json={"p_advertiser_id": advertiser_id, "p_ref_code": code})
+        res = await _supa(
+            "post", "rpc/adclaw_apply_referral", json={"p_advertiser_id": advertiser_id, "p_ref_code": code}
+        )
         rd = res if isinstance(res, dict) else (res[0] if res else {})
         status = 200 if rd.get("ok") else 400
         return JSONResponse(rd, status_code=status)
@@ -735,16 +800,12 @@ async def api_advertiser_slide_boost(advertiser_id: str, slide_id: str, request:
         adv = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=tier")
         tier = (adv[0].get("tier") if adv else "free") or "free"
         if enabled and tier != "diamond":
-            return JSONResponse({"error": "Priority boost is a Diamond-tier perk",
-                                 "tier": tier}, status_code=403)
+            return JSONResponse({"error": "Priority boost is a Diamond-tier perk", "tier": tier}, status_code=403)
         # Ownership check
-        rows = await _supa("get",
-            f"adclaw_slides?id=eq.{slide_id}"
-            f"&select=id,campaign:adclaw_campaigns(advertiser_id)")
+        rows = await _supa("get", f"adclaw_slides?id=eq.{slide_id}&select=id,campaign:adclaw_campaigns(advertiser_id)")
         if not rows or rows[0].get("campaign", {}).get("advertiser_id") != advertiser_id:
             return JSONResponse({"error": "not found"}, status_code=404)
-        await _supa("patch", f"adclaw_slides?id=eq.{slide_id}",
-                    json={"priority_boost": enabled})
+        await _supa("patch", f"adclaw_slides?id=eq.{slide_id}", json={"priority_boost": enabled})
         return JSONResponse({"ok": True, "priority_boost": enabled})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -765,15 +826,11 @@ async def api_advertiser_slide_targeting(advertiser_id: str, slide_id: str, requ
         adv = await _supa("get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=tier")
         tier = (adv[0].get("tier") if adv else "free") or "free"
         if tier == "free":
-            return JSONResponse({"error": "Targeting requires Gold or Diamond",
-                                 "tier": tier}, status_code=403)
-        rows = await _supa("get",
-            f"adclaw_slides?id=eq.{slide_id}"
-            f"&select=id,campaign:adclaw_campaigns(advertiser_id)")
+            return JSONResponse({"error": "Targeting requires Gold or Diamond", "tier": tier}, status_code=403)
+        rows = await _supa("get", f"adclaw_slides?id=eq.{slide_id}&select=id,campaign:adclaw_campaigns(advertiser_id)")
         if not rows or rows[0].get("campaign", {}).get("advertiser_id") != advertiser_id:
             return JSONResponse({"error": "not found"}, status_code=404)
-        await _supa("patch", f"adclaw_slides?id=eq.{slide_id}",
-                    json={"target_keywords": kws})
+        await _supa("patch", f"adclaw_slides?id=eq.{slide_id}", json={"target_keywords": kws})
         return JSONResponse({"ok": True, "keywords": kws})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -787,12 +844,15 @@ async def api_spotlight_click(request: Request):
     if not slide_id:
         return JSONResponse({"error": "slide_id required"}, status_code=400)
     try:
-        ip = (request.headers.get("x-forwarded-for") or
-              (request.client.host if request.client else "")).split(",")[0].strip()
+        ip = (
+            (request.headers.get("x-forwarded-for") or (request.client.host if request.client else ""))
+            .split(",")[0]
+            .strip()
+        )
         import hashlib
+
         ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:32] if ip else ""
-        res = await _supa("post", "rpc/adclaw_record_click",
-                          json={"p_slide_id": slide_id, "p_ip_hash": ip_hash})
+        res = await _supa("post", "rpc/adclaw_record_click", json={"p_slide_id": slide_id, "p_ip_hash": ip_hash})
         return JSONResponse(res if isinstance(res, dict) else (res[0] if res else {"ok": True}))
     except Exception as e:
         logger.warning("click record failed: %s", e)
@@ -833,7 +893,7 @@ def _is_public_ip(ip: str) -> bool:
     return True
 
 
-def _resolve_and_check(host: str) -> Optional[str]:
+def _resolve_and_check(host: str) -> str | None:
     """Resolve host and reject if any resolved IP is not publicly routable.
 
     Note: does not defeat DNS rebinding. For defence-in-depth, requests should

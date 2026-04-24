@@ -40,14 +40,17 @@ REPORTS_DIR = DATA_DIR / "competitor_reports"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
+
 def get_supabase_client():
     if not SUPABASE_URL or not SUPABASE_KEY:
         return None
     try:
         from supabase import create_client
+
         return create_client(SUPABASE_URL, SUPABASE_KEY)
     except ImportError:
         return None
+
 
 def load_competitors():
     """Load competitor data from Supabase or local file."""
@@ -62,6 +65,7 @@ def load_competitors():
     if COMPETITORS_FILE.exists():
         return json.loads(COMPETITORS_FILE.read_text())
     return []
+
 
 def load_videos(days=90):
     """Load video data from Supabase or local file."""
@@ -87,6 +91,7 @@ def load_videos(days=90):
         return [v for v in videos if v.get("published_at", "") >= cutoff]
     return []
 
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -96,11 +101,13 @@ app = Flask(__name__)
 # API Endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.route("/api/competitors")
 def api_competitors():
     """Get all tracked competitors."""
     competitors = load_competitors()
     return jsonify(competitors)
+
 
 @app.route("/api/videos")
 def api_videos():
@@ -114,6 +121,7 @@ def api_videos():
 
     return jsonify(videos)
 
+
 @app.route("/api/insights")
 def api_insights():
     """Get analyzed insights for the dashboard."""
@@ -122,17 +130,19 @@ def api_insights():
     competitors = load_competitors()
 
     if not videos:
-        return jsonify({
-            "total_videos": 0,
-            "total_competitors": len(competitors),
-            "title_patterns": {},
-            "thumbnail_styles": {},
-            "posting_by_day": {},
-            "top_videos": [],
-            "avg_engagement_by_pattern": {},
-            "trending_tags": [],
-            "competitor_activity": {},
-        })
+        return jsonify(
+            {
+                "total_videos": 0,
+                "total_competitors": len(competitors),
+                "title_patterns": {},
+                "thumbnail_styles": {},
+                "posting_by_day": {},
+                "top_videos": [],
+                "avg_engagement_by_pattern": {},
+                "trending_tags": [],
+                "competitor_activity": {},
+            }
+        )
 
     # Title patterns
     title_patterns = Counter(v.get("title_pattern", "other") for v in videos)
@@ -154,9 +164,7 @@ def api_insights():
                 pass
 
     # Top videos
-    top_videos = sorted(
-        videos, key=lambda v: v.get("view_count", 0), reverse=True
-    )[:15]
+    top_videos = sorted(videos, key=lambda v: v.get("view_count", 0), reverse=True)[:15]
 
     # Engagement by pattern
     engagement_by_pattern = defaultdict(list)
@@ -190,27 +198,30 @@ def api_insights():
                 break
         competitor_activity[name] = len(vids)
 
-    return jsonify({
-        "total_videos": len(videos),
-        "total_competitors": len(competitors),
-        "title_patterns": dict(title_patterns),
-        "thumbnail_styles": dict(thumbnail_styles),
-        "posting_by_day": dict(day_counts),
-        "top_videos": [
-            {
-                "title": v.get("title", ""),
-                "views": v.get("view_count", 0),
-                "engagement_rate": v.get("engagement_rate", 0),
-                "published_at": v.get("published_at", ""),
-                "thumbnail_url": v.get("thumbnail_url", ""),
-                "competitor_id": v.get("competitor_id", ""),
-            }
-            for v in top_videos
-        ],
-        "avg_engagement_by_pattern": avg_engagement,
-        "trending_tags": top_tags,
-        "competitor_activity": competitor_activity,
-    })
+    return jsonify(
+        {
+            "total_videos": len(videos),
+            "total_competitors": len(competitors),
+            "title_patterns": dict(title_patterns),
+            "thumbnail_styles": dict(thumbnail_styles),
+            "posting_by_day": dict(day_counts),
+            "top_videos": [
+                {
+                    "title": v.get("title", ""),
+                    "views": v.get("view_count", 0),
+                    "engagement_rate": v.get("engagement_rate", 0),
+                    "published_at": v.get("published_at", ""),
+                    "thumbnail_url": v.get("thumbnail_url", ""),
+                    "competitor_id": v.get("competitor_id", ""),
+                }
+                for v in top_videos
+            ],
+            "avg_engagement_by_pattern": avg_engagement,
+            "trending_tags": top_tags,
+            "competitor_activity": competitor_activity,
+        }
+    )
+
 
 @app.route("/api/heatmap")
 def api_heatmap():
@@ -233,6 +244,7 @@ def api_heatmap():
                 pass
 
     return jsonify(heatmap)
+
 
 # ---------------------------------------------------------------------------
 # Dashboard HTML
@@ -916,6 +928,7 @@ DASHBOARD_HTML = """
 </body>
 </html>
 """
+
 
 @app.route("/")
 def dashboard():

@@ -132,6 +132,7 @@ def demo(
         semeclaw demo --task "Build a telemetry pipeline" --mock
     """
     import asyncio
+
     from semeclaw.cli.demo_runner import run_demo
 
     console.print()
@@ -142,7 +143,7 @@ def demo(
     try:
         result = asyncio.run(run_demo(task, mock=mock))
         if result:
-            console.print(f"\n[green]✓ Demo complete[/green]")
+            console.print("\n[green]✓ Demo complete[/green]")
             if result.get("output_file"):
                 console.print(f"[dim]Report:[/dim] {result['output_file']}")
     except Exception as e:
@@ -189,7 +190,7 @@ def meeting(
 
     try:
         result = asyncio.run(room.generate_context(mock=mock))
-        console.print(f"\n[green]Meeting complete![/green]")
+        console.print("\n[green]Meeting complete![/green]")
         console.print(f"[dim]Report:[/dim] {result}")
     except Exception as e:
         console.print(f"[red]Meeting failed:[/red] {e}")
@@ -216,7 +217,6 @@ def war_room(
         semeclaw war-room
         semeclaw war-room --port 8080
     """
-    import subprocess
     import sys
 
     # Resolution order: Docker path → repo path → install path
@@ -244,8 +244,10 @@ def war_room(
     console.print()
 
     # Run the dashboard server directly
-    import uvicorn
     import importlib.util
+
+    import uvicorn
+
     spec = importlib.util.spec_from_file_location("dashboard_server", str(dashboard_script))
     if spec is None:
         console.print(f"[red]Could not load dashboard server from {dashboard_script}[/red]")
@@ -287,9 +289,9 @@ def server(
     try:
         config = ctx.obj["config"]
 
+        from semeclaw.channel.base import Channel
         from semeclaw.core.agent_loader import AgentLoader
         from semeclaw.core.cron_loader import CronLoader
-        from semeclaw.channel.base import Channel
         from semeclaw.server.server import Server
 
         agent_loader = AgentLoader(config)
@@ -332,7 +334,8 @@ def _bootstrap_repo_cli():
     """Make the repo-root `cli/` package importable from this module."""
     import sys as _sys
     from pathlib import Path as _P
-    repo_root = _P(__file__).resolve().parents[3]   # .../SemeClaw
+
+    repo_root = _P(__file__).resolve().parents[3]  # .../SemeClaw
     if str(repo_root) not in _sys.path:
         _sys.path.insert(0, str(repo_root))
 
@@ -342,6 +345,7 @@ def agents_cmd() -> None:
     """List every registered agent (5 core + 4 adapters) with model + tool info."""
     _bootstrap_repo_cli()
     from cli import agents as _a
+
     raise typer.Exit(_a.run())
 
 
@@ -350,6 +354,7 @@ def status_cmd() -> None:
     """Checklist: Python, deps, OpenRouter, Ollama, search backends, agents, demo."""
     _bootstrap_repo_cli()
     from cli import status as _s
+
     raise typer.Exit(_s.run())
 
 
@@ -358,6 +363,7 @@ def doctor_cmd() -> None:
     """End-to-end connectivity probe — DNS, dashboard, Supabase, OpenRouter, adapters."""
     _bootstrap_repo_cli()
     from cli import doctor as _d
+
     raise typer.Exit(_d.run())
 
 
@@ -366,6 +372,7 @@ def setup_cmd() -> None:
     """Interactive onboarding: API key, smoke test, save ~/.semeclaw/env."""
     _bootstrap_repo_cli()
     from cli import setup as _su
+
     raise typer.Exit(_su.run())
 
 
@@ -374,6 +381,7 @@ def live_demo_cmd() -> None:
     """Run the saved 4-agent live demo (Browser → Scraping → Research → Writer → Coder)."""
     _bootstrap_repo_cli()
     from cli import demo as _d
+
     raise typer.Exit(_d.run())
 
 
@@ -387,6 +395,7 @@ def tasks_cmd(
     """Task ingest, dialog generation, retention. Hits a running War Room server."""
     _bootstrap_repo_cli()
     from cli import tasks as _t
+
     raise typer.Exit(_t.run(list(args or [])))
 
 

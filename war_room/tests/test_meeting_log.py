@@ -1,8 +1,7 @@
 """Tests for durable meeting transcript log + backfill."""
+
 from __future__ import annotations
 
-import asyncio
-import json
 from pathlib import Path
 
 import pytest

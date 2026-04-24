@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import socket
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,8 +47,18 @@ FALLBACK_MODELS = [
     {"id": "codellama", "name": "CodeLlama", "source": "fallback", "parameter_size": "7B"},
     {"id": "mistral", "name": "Mistral", "source": "fallback", "parameter_size": "7B"},
     {"id": "phi4", "name": "Phi-4", "source": "fallback", "parameter_size": "14B"},
-    {"id": "openrouter/anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "source": "fallback", "parameter_size": "cloud"},
-    {"id": "openrouter/google/gemini-2.0-flash-exp", "name": "Gemini 2.0 Flash", "source": "fallback", "parameter_size": "cloud"},
+    {
+        "id": "openrouter/anthropic/claude-3.5-sonnet",
+        "name": "Claude 3.5 Sonnet",
+        "source": "fallback",
+        "parameter_size": "cloud",
+    },
+    {
+        "id": "openrouter/google/gemini-2.0-flash-exp",
+        "name": "Gemini 2.0 Flash",
+        "source": "fallback",
+        "parameter_size": "cloud",
+    },
 ]
 
 
@@ -102,9 +111,7 @@ class OllamaAdapter(Adapter):
             headers: dict[str, str] = {"HTTP-Referer": "https://semeclaw.local", "X-Title": "SemeClaw"}
             if self.openrouter_key:
                 headers["Authorization"] = f"Bearer {self.openrouter_key}"
-            self._openrouter_client = httpx.AsyncClient(
-                base_url=self.openrouter_url, timeout=60.0, headers=headers
-            )
+            self._openrouter_client = httpx.AsyncClient(base_url=self.openrouter_url, timeout=60.0, headers=headers)
         return self._openrouter_client
 
     async def close(self) -> None:

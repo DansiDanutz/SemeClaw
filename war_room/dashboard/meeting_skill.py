@@ -13,39 +13,39 @@ Output: list of {speaker, text, pause_ms_after} segments ready for TTS playback
 
 Pure logic — no FastAPI / httpx deps. Tested via unit-style calls.
 """
+
 from __future__ import annotations
 
 import random
 import re
-from dataclasses import dataclass, asdict, field
-from typing import Iterable
-
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field
 
 # ---------------------------------------------------------------------------
 # Speaker routing
 # ---------------------------------------------------------------------------
 
-HOST_SPEAKER = "Narrator"          # meeting announcer — neutral formal voice
-ORCHESTRATOR_SPEAKER = "David"     # runs the meeting
-DAN_SPEAKER = "Dan"                # the boss
+HOST_SPEAKER = "Narrator"  # meeting announcer — neutral formal voice
+ORCHESTRATOR_SPEAKER = "David"  # runs the meeting
+DAN_SPEAKER = "Dan"  # the boss
 
 # Section-heading keyword → speaker (must match _ELEVEN_VOICES in server.py)
 _SECTION_ROUTES: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"research", re.I),       "Autoresearch"),
-    (re.compile(r"discovery", re.I),      "Discovery"),
+    (re.compile(r"research", re.I), "Autoresearch"),
+    (re.compile(r"discovery", re.I), "Discovery"),
     (re.compile(r"strategist|strategy", re.I), "GSD"),
-    (re.compile(r"writer", re.I),         "Hermes"),
-    (re.compile(r"architect", re.I),      "David"),
+    (re.compile(r"writer", re.I), "Hermes"),
+    (re.compile(r"architect", re.I), "David"),
     (re.compile(r"coder|engineer", re.I), "Dexter"),
-    (re.compile(r"doctor", re.I),         "Doctor"),
-    (re.compile(r"monitor", re.I),        "Monitor"),
-    (re.compile(r"finance", re.I),        "Finance"),
-    (re.compile(r"growth", re.I),         "Growth"),
+    (re.compile(r"doctor", re.I), "Doctor"),
+    (re.compile(r"monitor", re.I), "Monitor"),
+    (re.compile(r"finance", re.I), "Finance"),
+    (re.compile(r"growth", re.I), "Growth"),
     (re.compile(r"learning|teacher", re.I), "Learning"),
     (re.compile(r"n8n|automation", re.I), "N8N"),
     (re.compile(r"obsidian|knowledge", re.I), "Obsidian"),
-    (re.compile(r"codex", re.I),          "Codex"),
-    (re.compile(r"claude", re.I),         "Claude Code"),
+    (re.compile(r"codex", re.I), "Codex"),
+    (re.compile(r"claude", re.I), "Claude Code"),
 ]
 
 
@@ -120,8 +120,8 @@ _DAN_CLOSERS = [
 class Segment:
     speaker: str
     text: str
-    pause_ms_after: int = 200     # silence between speakers
-    role: str = ""                # "host" | "orchestrator" | "agent" | "dan"
+    pause_ms_after: int = 200  # silence between speakers
+    role: str = ""  # "host" | "orchestrator" | "agent" | "dan"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -137,9 +137,9 @@ class MeetingScript:
     def to_dict(self) -> dict:
         return {
             "meeting_id": self.meeting_id,
-            "subject":    self.subject,
-            "attendees":  self.attendees,
-            "segments":   [s.to_dict() for s in self.segments],
+            "subject": self.subject,
+            "attendees": self.attendees,
+            "segments": [s.to_dict() for s in self.segments],
         }
 
 
@@ -240,8 +240,7 @@ def build_script(
 
     # 1. Host announcement
     host_line = (
-        f"This meeting is number {short_id}. Subject: {task}. "
-        f"In this meeting are: {attendee_str}. Have a nice meeting."
+        f"This meeting is number {short_id}. Subject: {task}. In this meeting are: {attendee_str}. Have a nice meeting."
     )
     segments.append(Segment(speaker=HOST_SPEAKER, text=host_line, role="host", pause_ms_after=450))
 
@@ -266,20 +265,24 @@ def build_script(
         segments.append(Segment(speaker=speaker, text=text, role="agent", pause_ms_after=300))
 
     # 4. Orchestrator closes
-    segments.append(Segment(
-        speaker=ORCHESTRATOR_SPEAKER,
-        text=rng.choice(_ORCHESTRATOR_CLOSERS),
-        role="orchestrator",
-        pause_ms_after=200,
-    ))
+    segments.append(
+        Segment(
+            speaker=ORCHESTRATOR_SPEAKER,
+            text=rng.choice(_ORCHESTRATOR_CLOSERS),
+            role="orchestrator",
+            pause_ms_after=200,
+        )
+    )
 
     # 5. Dan adjourns
-    segments.append(Segment(
-        speaker=DAN_SPEAKER,
-        text=rng.choice(_DAN_CLOSERS),
-        role="dan",
-        pause_ms_after=0,
-    ))
+    segments.append(
+        Segment(
+            speaker=DAN_SPEAKER,
+            text=rng.choice(_DAN_CLOSERS),
+            role="dan",
+            pause_ms_after=0,
+        )
+    )
 
     return MeetingScript(
         meeting_id=short_id,

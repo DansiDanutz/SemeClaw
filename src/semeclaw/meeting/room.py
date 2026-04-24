@@ -9,7 +9,6 @@ from typing import Any
 
 from semeclaw.core.agent import Agent
 from semeclaw.core.agent_loader import AgentLoader
-from semeclaw.core.events import DispatchEvent
 from semeclaw.meeting.audio import play_background, play_jingle, stop_all
 from semeclaw.utils.config import Config
 
@@ -38,14 +37,17 @@ class MeetingRoom:
         try:
             from rich.console import Console
             from rich.panel import Panel
+
             console = Console()
             console.print()
-            console.print(Panel(
-                "[bold #0098EA]NERVIX[/bold #0098EA] — The AI Agent Marketplace\n"
-                "[dim]Discover · Buy · Deploy AI Agents  |  nervix.ai[/dim]",
-                border_style="#0098EA",
-                padding=(1, 2),
-            ))
+            console.print(
+                Panel(
+                    "[bold #0098EA]NERVIX[/bold #0098EA] — The AI Agent Marketplace\n"
+                    "[dim]Discover · Buy · Deploy AI Agents  |  nervix.ai[/dim]",
+                    border_style="#0098EA",
+                    padding=(1, 2),
+                )
+            )
             console.print()
         except Exception:
             print("\n=== NERVIX — The AI Agent Marketplace ===\n")
@@ -154,15 +156,18 @@ class MeetingRoom:
             "2. Key Points & Insights (bullet points)\n"
             "3. Action Items (with owners in parentheses)\n"
             "4. Open Questions\n\n"
-            "---\n\n"
-            + "\n".join(parts)
+            "---\n\n" + "\n".join(parts)
         )
 
         # Call LLM directly via litellm — bypass agent framework to avoid tool interference
         try:
             import litellm
+
             messages = [
-                {"role": "system", "content": "You are a professional meeting summarizer. Respond with markdown only. Do not use tools or function calls."},
+                {
+                    "role": "system",
+                    "content": "You are a professional meeting summarizer. Respond with markdown only. Do not use tools or function calls.",
+                },
                 {"role": "user", "content": synthesis_prompt},
             ]
             llm = self.config.llm

@@ -27,8 +27,9 @@ WAR_ROOM_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(WAR_ROOM_DIR))
 
-from paperclip_bridge import load_bridge
 from memory import WarRoomMemory
+from paperclip_bridge import load_bridge
+
 from war_room import WarRoomPipeline
 
 logging.basicConfig(
@@ -39,9 +40,9 @@ logging.basicConfig(
 logger = logging.getLogger("auto_scheduler")
 
 SCHEDULER_LOG = WAR_ROOM_DIR / "logs" / "auto_scheduler.jsonl"
-SKIP_LABELS   = {"skip-war-room", "wip", "blocked", "on-hold"}
-MAX_TASK_AGE_DAYS = 30     # ignore tasks older than this
-DEFAULT_PROJECT   = "NERVIX"
+SKIP_LABELS = {"skip-war-room", "wip", "blocked", "on-hold"}
+MAX_TASK_AGE_DAYS = 30  # ignore tasks older than this
+DEFAULT_PROJECT = "NERVIX"
 
 
 def _log_run(entry: dict) -> None:
@@ -83,8 +84,7 @@ async def pick_task(project: str, bridge) -> dict | None:
     open_issues = []
     for issue in issues:
         status = (issue.get("status") or issue.get("state") or "").lower()
-        labels = {(l.lower() if isinstance(l, str) else l.get("name","").lower())
-                  for l in issue.get("labels", [])}
+        labels = {(l.lower() if isinstance(l, str) else l.get("name", "").lower()) for l in issue.get("labels", [])}
         if status in ("done", "closed", "completed", "cancelled"):
             continue
         if labels & SKIP_LABELS:
@@ -97,9 +97,7 @@ async def pick_task(project: str, bridge) -> dict | None:
 
     # Sort by priority
     priority_map = {p: i for i, p in enumerate(PRIORITY_ORDER)}
-    open_issues.sort(
-        key=lambda x: priority_map.get((x.get("priority") or "medium").lower(), 99)
-    )
+    open_issues.sort(key=lambda x: priority_map.get((x.get("priority") or "medium").lower(), 99))
 
     chosen = open_issues[0]
     logger.info(
@@ -127,8 +125,8 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
         return
 
     task_title = task_issue.get("title", "")
-    task_desc  = task_issue.get("description", "")
-    issue_id   = task_issue.get("id", "?")
+    task_desc = task_issue.get("description", "")
+    issue_id = task_issue.get("id", "?")
 
     # Build a rich task prompt for the pipeline
     task_prompt = task_title
@@ -138,13 +136,15 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
     # Check if already processed
     if _already_processed(task_title, memory):
         logger.info("⏭  Task already in memory — skipping: %s", task_title[:60])
-        _log_run({
-            "date": datetime.now(timezone.utc).isoformat(),
-            "project": project,
-            "issue_id": issue_id,
-            "result": "already_processed",
-            "task": task_title,
-        })
+        _log_run(
+            {
+                "date": datetime.now(timezone.utc).isoformat(),
+                "project": project,
+                "issue_id": issue_id,
+                "result": "already_processed",
+                "task": task_title,
+            }
+        )
         return
 
     if dry_run:
@@ -171,35 +171,38 @@ async def run(project: str = DEFAULT_PROJECT, dry_run: bool = False) -> None:
             project=project,
             notify_telegram=True,
         )
-        logger.info("✅ Pipeline complete | run_id=%s | report=%s",
-                    result["run_id"], Path(result["output_file"]).name)
-        _log_run({
-            "date":       datetime.now(timezone.utc).isoformat(),
-            "project":    project,
-            "issue_id":   issue_id,
-            "run_id":     result["run_id"],
-            "agents":     agents,
-            "result":     "success",
-            "task":       task_title,
-            "report":     result["output_file"],
-        })
+        logger.info("✅ Pipeline complete | run_id=%s | report=%s", result["run_id"], Path(result["output_file"]).name)
+        _log_run(
+            {
+                "date": datetime.now(timezone.utc).isoformat(),
+                "project": project,
+                "issue_id": issue_id,
+                "run_id": result["run_id"],
+                "agents": agents,
+                "result": "success",
+                "task": task_title,
+                "report": result["output_file"],
+            }
+        )
     except Exception as e:
         logger.error("❌ Pipeline failed: %s", e)
-        _log_run({
-            "date":     datetime.now(timezone.utc).isoformat(),
-            "project":  project,
-            "issue_id": issue_id,
-            "result":   "failed",
-            "error":    str(e),
-            "task":     task_title,
-        })
+        _log_run(
+            {
+                "date": datetime.now(timezone.utc).isoformat(),
+                "project": project,
+                "issue_id": issue_id,
+                "result": "failed",
+                "error": str(e),
+                "task": task_title,
+            }
+        )
         raise
 
 
 def main() -> None:
     args = sys.argv[1:]
-    project  = DEFAULT_PROJECT
-    dry_run  = False
+    project = DEFAULT_PROJECT
+    dry_run = False
     for a in args:
         if a.startswith("--project="):
             project = a.split("=", 1)[1]

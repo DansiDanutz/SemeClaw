@@ -1,4 +1,5 @@
 """Tests for the Range-aware audio response helper."""
+
 from __future__ import annotations
 
 import importlib
@@ -13,6 +14,7 @@ def server():
     os.environ.setdefault("SEMECLAW_API_KEY", "")
     # Import via a dotted name so FastAPI init doesn't fail on missing config
     import war_room.dashboard.server as mod  # noqa: WPS433
+
     importlib.reload(mod)
     return mod
 

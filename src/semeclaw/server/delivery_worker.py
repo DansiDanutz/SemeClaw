@@ -6,8 +6,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from semeclaw.core.events import EventSource, OutboundEvent
 from semeclaw.server.worker import SubscriberWorker
-from semeclaw.core.events import OutboundEvent, EventSource
 
 if TYPE_CHECKING:
     from semeclaw.channel.base import Channel
@@ -107,10 +107,8 @@ class DeliveryWorker(SubscriberWorker):
                 return
             except Exception as e:
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff
-                    self.logger.warning(
-                        f"Delivery attempt {attempt + 1} failed, retrying in {wait_time}s: {e}"
-                    )
+                    wait_time = 2**attempt  # Exponential backoff
+                    self.logger.warning(f"Delivery attempt {attempt + 1} failed, retrying in {wait_time}s: {e}")
                     await asyncio.sleep(wait_time)
                 else:
                     self.logger.error(f"Failed to deliver after {max_retries} attempts: {e}")
@@ -148,7 +146,5 @@ class DeliveryWorker(SubscriberWorker):
         if current_chunk:
             chunks.append(current_chunk)
 
-        self.logger.debug(
-            f"Split message into {len(chunks)} chunks for {platform_name} (limit={limit})"
-        )
+        self.logger.debug(f"Split message into {len(chunks)} chunks for {platform_name} (limit={limit})")
         return chunks

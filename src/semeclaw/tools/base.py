@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import inspect
-import json
 from abc import ABC, abstractmethod
-from typing import Any, Callable, get_args, get_origin
-
-from litellm.types.completion import ChatCompletionMessageParam as Message
+from collections.abc import Callable
+from typing import Any, get_origin
 
 
 class BaseTool(ABC):

@@ -7,13 +7,13 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from semeclaw.core.events import AgentEventSource, DispatchEvent, DispatchResultEvent
 from semeclaw.tools.base import BaseTool
-from semeclaw.core.events import DispatchEvent, DispatchResultEvent, AgentEventSource
 
 if TYPE_CHECKING:
-    from semeclaw.core.eventbus import EventBus
-    from semeclaw.core.agent import Agent, AgentSession
+    from semeclaw.core.agent import AgentSession
     from semeclaw.core.agent_loader import AgentLoader
+    from semeclaw.core.eventbus import EventBus
 
 
 class SubagentDispatchTool(BaseTool):
@@ -23,7 +23,7 @@ class SubagentDispatchTool(BaseTool):
         self,
         current_agent_id: str,
         eventbus: EventBus,
-        agent_loader: "AgentLoader",
+        agent_loader: AgentLoader,
     ):
         """Initialize SubagentDispatchTool.
 
@@ -59,7 +59,7 @@ class SubagentDispatchTool(BaseTool):
             },
         )
 
-    async def execute(self, args: dict[str, Any], session: "AgentSession") -> str:
+    async def execute(self, args: dict[str, Any], session: AgentSession) -> str:
         """Execute the subagent_dispatch tool.
 
         Args:
@@ -74,23 +74,17 @@ class SubagentDispatchTool(BaseTool):
         context = args.get("context", "")
 
         if not agent_id or not task:
-            return json.dumps(
-                {"error": "agent_id and task are required"}
-            )
+            return json.dumps({"error": "agent_id and task are required"})
 
         # Prevent self-dispatch
         if agent_id == self.current_agent_id:
-            return json.dumps(
-                {"error": f"Cannot dispatch to self (current agent: {self.current_agent_id})"}
-            )
+            return json.dumps({"error": f"Cannot dispatch to self (current agent: {self.current_agent_id})"})
 
         # Verify agent exists
         try:
             target_agent_def = self.agent_loader.load(agent_id)
         except Exception as e:
-            return json.dumps(
-                {"error": f"Target agent '{agent_id}' not found: {str(e)}"}
-            )
+            return json.dumps({"error": f"Target agent '{agent_id}' not found: {str(e)}"})
 
         # Create a new session for the dispatched agent
         child_session_id = str(uuid.uuid4())
@@ -120,25 +114,31 @@ class SubagentDispatchTool(BaseTool):
             # Wait for result with timeout
             result_event = await asyncio.wait_for(result_future, timeout=30.0)
 
-            return json.dumps({
-                "success": result_event.error is None,
-                "result": result_event.content,
-                "error": result_event.error,
-                "session_id": child_session_id,
-            })
+            return json.dumps(
+                {
+                    "success": result_event.error is None,
+                    "result": result_event.content,
+                    "error": result_event.error,
+                    "session_id": child_session_id,
+                }
+            )
 
         except asyncio.TimeoutError:
-            return json.dumps({
-                "success": False,
-                "error": f"Dispatch to {agent_id} timed out after 30 seconds",
-                "session_id": child_session_id,
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Dispatch to {agent_id} timed out after 30 seconds",
+                    "session_id": child_session_id,
+                }
+            )
         except Exception as e:
-            return json.dumps({
-                "success": False,
-                "error": f"Dispatch failed: {str(e)}",
-                "session_id": child_session_id,
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Dispatch failed: {str(e)}",
+                    "session_id": child_session_id,
+                }
+            )
         finally:
             # Clean up handler
             self.eventbus.unsubscribe(result_handler)

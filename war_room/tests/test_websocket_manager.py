@@ -6,10 +6,10 @@ suspends, during which another task may call ``disconnect``. Before the
 fix (iterating the set directly), concurrent churn raised
 ``RuntimeError: Set changed size during iteration``.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 import pytest
 
@@ -19,8 +19,7 @@ from war_room.dashboard.websocket_manager import ConnectionManager
 class _FakeWebSocket:
     """Minimal stand-in for a FastAPI WebSocket used in broadcast tests."""
 
-    def __init__(self, manager: ConnectionManager | None = None,
-                 disconnect_during_send: bool = False) -> None:
+    def __init__(self, manager: ConnectionManager | None = None, disconnect_during_send: bool = False) -> None:
         self._manager = manager
         self._disconnect_during_send = disconnect_during_send
         self.sent: list[str] = []

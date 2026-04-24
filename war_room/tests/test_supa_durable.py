@@ -1,4 +1,5 @@
 """Tests for the shared supa-durable helper + tasks DLQ wiring."""
+
 from __future__ import annotations
 
 import importlib
@@ -7,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from war_room.utils.supa_durable import with_retry, dlq_append
+from war_room.utils.supa_durable import dlq_append, with_retry
 
 
 @pytest.mark.asyncio
@@ -57,6 +58,7 @@ async def test_tasks_supa_writes_dlq_on_failure(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("DLS_TEAM_SUPABASE_URL", "https://example.invalid")
     monkeypatch.setenv("DLS_TEAM_SUPABASE_SERVICE_KEY", "stub")
     from war_room.tasks import _db
+
     importlib.reload(_db)
 
     async def always_fail(*a, **kw):

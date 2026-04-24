@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, Field
@@ -38,7 +38,7 @@ class PluginLoader:
         self._discover()
 
     @classmethod
-    def from_workspace(cls, workspace: Path) -> "PluginLoader":
+    def from_workspace(cls, workspace: Path) -> PluginLoader:
         repo_root = Path(__file__).resolve().parents[3]
         roots = [
             workspace / "integrations",
@@ -81,9 +81,9 @@ class PluginLoader:
                     seen.add(resolved)
         return results
 
-    def create_tools(self, config: "Config") -> list["BaseTool"]:
+    def create_tools(self, config: Config) -> list[BaseTool]:
         """Instantiate tools from plugin factories."""
-        tools: list["BaseTool"] = []
+        tools: list[BaseTool] = []
         for plugin, _plugin_dir in self._plugins:
             if not plugin.tool_factory:
                 continue

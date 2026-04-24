@@ -6,7 +6,6 @@ and maintain a learning journal — making it a truly evolving intelligence.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -174,7 +173,9 @@ class MemorySearchTool(BaseTool):
                     pass
 
         if research_results:
-            return f"No memories found, but found {len(research_results)} research files:\n\n" + "\n".join(research_results)
+            return f"No memories found, but found {len(research_results)} research files:\n\n" + "\n".join(
+                research_results
+            )
 
         return f"No memories or research found for '{args['query']}'. This might be new territory — consider researching it!"
 
@@ -185,10 +186,7 @@ class MemoryListTool(BaseTool):
     def __init__(self, workspace_path: Path):
         super().__init__(
             name="memory_list",
-            description=(
-                "List all stored memories organized by axis. "
-                "Use this to see what knowledge is available."
-            ),
+            description=("List all stored memories organized by axis. Use this to see what knowledge is available."),
             parameters={
                 "type": "object",
                 "properties": {

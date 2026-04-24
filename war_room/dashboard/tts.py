@@ -58,9 +58,10 @@ def _lock_for(key: str) -> threading.Lock:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def cache_key(text: str, voice: str, *, rate: str = "+0%", pitch: str = "+0Hz") -> str:
     """Stable SHA1 over text + voice + prosody — used as the filename."""
-    payload = f"{voice}|{rate}|{pitch}|{text}".encode("utf-8")
+    payload = f"{voice}|{rate}|{pitch}|{text}".encode()
     return hashlib.sha1(payload).hexdigest()
 
 
@@ -93,10 +94,7 @@ async def _synthesize_async(
     try:
         import edge_tts  # type: ignore
     except ImportError as e:
-        raise RuntimeError(
-            "edge-tts is not installed. On the user's machine run: "
-            "pip install edge-tts"
-        ) from e
+        raise RuntimeError("edge-tts is not installed. On the user's machine run: pip install edge-tts") from e
 
     communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     # Write to a temp sibling then rename atomically
@@ -139,6 +137,7 @@ def synthesize(
     # --- Try ElevenLabs first (premium, fast) ---
     try:
         import elevenlabs_tts as el
+
         el_path = el.synthesize(text, voice=voice, agent=agent, rate=rate, pitch=pitch)
         if el_path is not None:
             return el_path
@@ -188,6 +187,7 @@ def synthesize(
     # --- Tier 3: Kokoro ONNX (local, offline, no API key) ------------------
     try:
         from war_room.dashboard import kokoro_tts as kt
+
         kokoro_path = kt.synthesize(text, voice=voice, agent=agent)
         if kokoro_path is not None and kokoro_path.exists() and kokoro_path.stat().st_size > 0:
             logger.info("TTS served by kokoro fallback for key=%s", key[:8])
@@ -198,9 +198,7 @@ def synthesize(
     # Re-raise the original edge-tts error if we got here with nothing.
     if edge_err is not None:
         raise edge_err
-    raise RuntimeError(
-        f"TTS failed: no engine produced audio for voice={voice}"
-    )
+    raise RuntimeError(f"TTS failed: no engine produced audio for voice={voice}")
 
 
 def clear_cache() -> int:

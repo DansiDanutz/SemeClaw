@@ -18,10 +18,11 @@ import logging
 import os
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 logger = logging.getLogger("war_room.state")
 
@@ -55,6 +56,7 @@ def utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 # Atomic I/O
 # ---------------------------------------------------------------------------
+
 
 def atomic_write_json(path: Path, data: Any, *, indent: int = 2) -> None:
     """Write JSON atomically: write to a temp file in the same directory, then rename.
@@ -97,7 +99,9 @@ def safe_read_json(path: Path, default: Any | None = None) -> Any:
             path.rename(backup)
             logger.error(
                 "Corrupt JSON in %s (%s). Moved to %s. Returning default.",
-                path.name, e, backup.name,
+                path.name,
+                e,
+                backup.name,
             )
         except OSError:
             logger.error("Corrupt JSON in %s (%s). Returning default.", path.name, e)
@@ -107,6 +111,7 @@ def safe_read_json(path: Path, default: Any | None = None) -> Any:
 # ---------------------------------------------------------------------------
 # Cross-platform file locking
 # ---------------------------------------------------------------------------
+
 
 @contextmanager
 def file_lock(path: Path, *, timeout: float = 10.0, poll: float = 0.05) -> Iterator[None]:
@@ -131,7 +136,9 @@ def file_lock(path: Path, *, timeout: float = 10.0, poll: float = 0.05) -> Itera
                 continue
             if age > max(timeout * 2, 30):
                 logger.warning(
-                    "Taking over stale lock file %s (age=%.1fs)", lock_path.name, age,
+                    "Taking over stale lock file %s (age=%.1fs)",
+                    lock_path.name,
+                    age,
                 )
                 try:
                     lock_path.unlink(missing_ok=True)
@@ -171,6 +178,7 @@ def file_lock(path: Path, *, timeout: float = 10.0, poll: float = 0.05) -> Itera
 # High-level state operations
 # ---------------------------------------------------------------------------
 
+
 def load_state(path: Path) -> dict[str, Any]:
     """Load shared state, applying defaults for any missing keys."""
     state = safe_read_json(path, default={})
@@ -203,15 +211,17 @@ def record_completed_task(
     """Append a completed task entry and update metrics — locked + atomic."""
     with file_lock(path):
         state = load_state(path)
-        state["completed_tasks"].append({
-            "run_id":           run_id,
-            "task":             task,
-            "agents":           agents,
-            "issue_id":         issue_id,
-            "multica_issue_id": multica_issue_id,
-            "succeeded":        succeeded,
-            "completed_at":     utc_now_iso(),
-        })
+        state["completed_tasks"].append(
+            {
+                "run_id": run_id,
+                "task": task,
+                "agents": agents,
+                "issue_id": issue_id,
+                "multica_issue_id": multica_issue_id,
+                "succeeded": succeeded,
+                "completed_at": utc_now_iso(),
+            }
+        )
         metrics = state["metrics"]
         metrics["tasks_run"] = metrics.get("tasks_run", 0) + 1
         if succeeded:

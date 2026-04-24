@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from semeclaw.utils.config import Config
 
 
-def create_github_tools(config: "Config") -> list[BaseTool]:
+def create_github_tools(config: Config) -> list[BaseTool]:
     """Create gh-backed GitHub PR tools."""
 
     class GitHubPrStatusTool(BaseTool):

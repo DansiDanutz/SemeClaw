@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Set
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from semeclaw.core.events import OutboundEvent
 from semeclaw.server.worker import SubscriberWorker
-from semeclaw.core.events import OutboundEvent, InboundEvent
 
 if TYPE_CHECKING:
     from semeclaw.core.eventbus import EventBus
@@ -50,9 +50,7 @@ class WebSocketWorker(SubscriberWorker):
         except asyncio.CancelledError:
             raise
 
-    def register_connection(
-        self, user_id: str, session_id: str, queue: asyncio.Queue
-    ) -> None:
+    def register_connection(self, user_id: str, session_id: str, queue: asyncio.Queue) -> None:
         """Register a new WebSocket connection.
 
         Args:

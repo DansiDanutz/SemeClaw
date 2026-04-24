@@ -9,6 +9,7 @@ The file format is JSON Lines (one object per line). Each line is the full
 broadcast payload as it went out to WebSocket clients, so the backfill
 response is semantically identical to having been online the whole time.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +17,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Iterable, Optional
 
 logger = logging.getLogger("war_room.meeting_log")
 
@@ -24,15 +24,17 @@ logger = logging.getLogger("war_room.meeting_log")
 DEFAULT_DIR = Path(os.environ.get("MEETING_LOG_DIR", "/app/data/meetings"))
 
 # Message types that represent meeting events worth persisting.
-_PERSISTABLE_TYPES = frozenset({
-    "meeting_message",
-    "meeting_task_start",
-    "meeting_task_chunk",
-    "meeting_task_user_question",
-    "meeting_task_complete",
-    "meeting_agent_turn",
-    "meeting_slide",
-})
+_PERSISTABLE_TYPES = frozenset(
+    {
+        "meeting_message",
+        "meeting_task_start",
+        "meeting_task_chunk",
+        "meeting_task_user_question",
+        "meeting_task_complete",
+        "meeting_agent_turn",
+        "meeting_slide",
+    }
+)
 
 # Max bytes per meeting file — safety valve against runaway growth.
 _MAX_BYTES = int(os.environ.get("MEETING_LOG_MAX_BYTES", str(50 * 1024 * 1024)))  # 50 MiB

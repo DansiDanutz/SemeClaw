@@ -1,9 +1,11 @@
 """Embed widget routes (JS SDK + iframe)."""
+
 import json
 from pathlib import Path
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse, Response as FResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import Response as FResponse
 
 from war_room.dashboard.routes.deps import SEMECLAW_PUBLIC_URL
 
@@ -65,18 +67,20 @@ async def api_embed_js():
 
 @router.get("/embed/manifest.json")
 async def api_embed_manifest():
-    return JSONResponse({
-        "widget": "semeclaw-war-room",
-        "script_url": f"{SEMECLAW_PUBLIC_URL}/embed.js",
-        "iframe_url": f"{SEMECLAW_PUBLIC_URL}/embed",
-        "min_width":  320,
-        "min_height": 420,
-        "attributes": [
-            {"name": "data-semeclaw-meeting", "required": False, "desc": "Report filename to play"},
-            {"name": "data-semeclaw-v",       "required": False, "desc": "Layout version: 1 | 2 (orbital)"},
-            {"name": "data-semeclaw-theme",   "required": False, "desc": "dark | light (dark only for now)"},
-        ],
-    })
+    return JSONResponse(
+        {
+            "widget": "semeclaw-war-room",
+            "script_url": f"{SEMECLAW_PUBLIC_URL}/embed.js",
+            "iframe_url": f"{SEMECLAW_PUBLIC_URL}/embed",
+            "min_width": 320,
+            "min_height": 420,
+            "attributes": [
+                {"name": "data-semeclaw-meeting", "required": False, "desc": "Report filename to play"},
+                {"name": "data-semeclaw-v", "required": False, "desc": "Layout version: 1 | 2 (orbital)"},
+                {"name": "data-semeclaw-theme", "required": False, "desc": "dark | light (dark only for now)"},
+            ],
+        }
+    )
 
 
 @router.get("/embed")
@@ -86,7 +90,8 @@ async def embed_page(meeting: str = "", v: str = "1", theme: str = "dark"):
     index = Path(__file__).parent.parent / "index.html"
     if not index.exists():
         return JSONResponse({"error": "index not found"}, status_code=500)
-    return FileResponse(index, media_type="text/html",
-                        headers={"X-SemeClaw-Embed": "1",
-                                 "X-SemeClaw-Meeting": meeting or "",
-                                 "X-SemeClaw-Layout": v})
+    return FileResponse(
+        index,
+        media_type="text/html",
+        headers={"X-SemeClaw-Embed": "1", "X-SemeClaw-Meeting": meeting or "", "X-SemeClaw-Layout": v},
+    )

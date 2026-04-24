@@ -1,9 +1,9 @@
 """Tests for impression recording: retry + dead-letter queue on exhaustion."""
+
 from __future__ import annotations
 
 import importlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -17,6 +17,7 @@ def server(tmp_path, monkeypatch):
     monkeypatch.setenv("DLS_TEAM_SUPABASE_URL", "https://example.invalid")
     monkeypatch.setenv("DLS_TEAM_SUPABASE_SERVICE_KEY", "stub")
     import adclaw.server as mod
+
     importlib.reload(mod)
     yield mod, dlq
 

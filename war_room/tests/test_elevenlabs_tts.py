@@ -1,13 +1,10 @@
 """Tests for the ElevenLabs TTS wrapper and fallback logic."""
 
-import os
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 # Ensure the dashboard modules are importable
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "dashboard"))
 
 import elevenlabs_tts as el
@@ -22,6 +19,7 @@ class FakeResponse:
     def raise_for_status(self):
         if self.status_code >= 400:
             from httpx import HTTPStatusError
+
             raise HTTPStatusError("err", request=MagicMock(), response=self)
 
     def json(self):
@@ -50,11 +48,14 @@ def test_health_ok():
     with patch.object(el, "ELEVENLABS_API_KEY", "good-key"):
         with patch("httpx.Client") as mock_client:
             inst = MagicMock()
-            inst.get.return_value = FakeResponse(200, {
-                "tier": "starter",
-                "character_limit": 10000,
-                "character_count": 1234,
-            })
+            inst.get.return_value = FakeResponse(
+                200,
+                {
+                    "tier": "starter",
+                    "character_limit": 10000,
+                    "character_count": 1234,
+                },
+            )
             mock_client.return_value.__enter__ = lambda s: inst
             mock_client.return_value.__exit__ = lambda *a: None
             h = el.health()

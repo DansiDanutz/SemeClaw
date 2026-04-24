@@ -7,7 +7,6 @@ import threading
 from pathlib import Path
 
 import pytest
-
 from state import (
     DEFAULT_STATE,
     atomic_write_json,
@@ -134,8 +133,12 @@ def test_concurrent_record_completed_task_no_loss(tmp_path: Path) -> None:
 
     def bump(i: int) -> None:
         record_completed_task(
-            path, run_id=str(i), task=f"T{i}", agents=["research"],
-            issue_id=f"PC-{i}", succeeded=True,
+            path,
+            run_id=str(i),
+            task=f"T{i}",
+            agents=["research"],
+            issue_id=f"PC-{i}",
+            succeeded=True,
         )
 
     threads = [threading.Thread(target=bump, args=(i,)) for i in range(15)]

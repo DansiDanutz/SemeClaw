@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
+from semeclaw.core.events import EventSource, OutboundEvent
 from semeclaw.tools.base import BaseTool
-from semeclaw.core.events import OutboundEvent, EventSource
 
 if TYPE_CHECKING:
-    from semeclaw.core.eventbus import EventBus
     from semeclaw.core.agent import AgentSession
+    from semeclaw.core.eventbus import EventBus
 
 
 class PostMessageTool(BaseTool):
@@ -39,7 +38,7 @@ class PostMessageTool(BaseTool):
             },
         )
 
-    async def execute(self, args: dict[str, Any], session: "AgentSession") -> str:
+    async def execute(self, args: dict[str, Any], session: AgentSession) -> str:
         """Execute the post_message tool.
 
         Args:

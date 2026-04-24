@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 MAX_DIFF_CHARS = 20000
 
 
@@ -59,7 +58,7 @@ def get_pr_status(repo_path: Path, pr_ref: str | None = None) -> GitHubPrStatus:
         [
             "pr",
             "view",
-            *( [pr_ref] if pr_ref else [] ),
+            *([pr_ref] if pr_ref else []),
             "--json",
             ",".join(
                 [
@@ -86,7 +85,7 @@ def get_pr_status(repo_path: Path, pr_ref: str | None = None) -> GitHubPrStatus:
         [
             "pr",
             "checks",
-            *( [pr_ref] if pr_ref else [str(pr_json["number"])] ),
+            *([pr_ref] if pr_ref else [str(pr_json["number"])]),
             "--json",
             "name,state,bucket,workflow,link",
         ],
@@ -125,7 +124,9 @@ def write_review_bundle(repo_path: Path, pr_ref: str | None = None) -> GitHubPrR
     return GitHubPrReviewBundle(status=status, output_path=output_path, bundle_written=True)
 
 
-def write_review_bundle_or_local(repo_path: Path, pr_ref: str | None = None) -> GitHubPrReviewBundle | LocalReviewBundle:
+def write_review_bundle_or_local(
+    repo_path: Path, pr_ref: str | None = None
+) -> GitHubPrReviewBundle | LocalReviewBundle:
     """Write a PR review bundle, or fall back to a local diff bundle if no PR exists."""
     try:
         return write_review_bundle(repo_path=repo_path, pr_ref=pr_ref)
@@ -173,8 +174,7 @@ def format_pr_status(status: GitHubPrStatus) -> str:
         lines.append("Checks:")
         for check in status.checks[:10]:
             lines.append(
-                f"  - {check.get('name', 'unknown')}: "
-                f"{check.get('bucket') or check.get('state') or 'unknown'}"
+                f"  - {check.get('name', 'unknown')}: {check.get('bucket') or check.get('state') or 'unknown'}"
             )
     else:
         lines.append("Checks: none reported")
@@ -213,10 +213,7 @@ def format_local_review_bundle_result(bundle: LocalReviewBundle) -> str:
 
 
 def _render_review_bundle(status: GitHubPrStatus, diff_text: str) -> str:
-    file_lines = [
-        f"- {file_info.get('path') or file_info.get('name') or '(unknown)'}"
-        for file_info in status.files
-    ]
+    file_lines = [f"- {file_info.get('path') or file_info.get('name') or '(unknown)'}" for file_info in status.files]
     check_lines = [
         f"- {check.get('name', 'unknown')}: {check.get('bucket') or check.get('state') or 'unknown'}"
         for check in status.checks

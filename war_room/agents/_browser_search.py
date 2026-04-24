@@ -10,6 +10,7 @@ Public surface:
     async def search(query, count=5, freshness=None) -> SearchResponse
     SearchResponse: {backend, query, results: [{title, url, snippet, domain}]}
 """
+
 from __future__ import annotations
 
 import logging
@@ -134,9 +135,7 @@ def _strip_html(s: str) -> str:
 
 async def _duckduckgo(query: str, count: int) -> SearchResponse:
     try:
-        async with httpx.AsyncClient(
-            timeout=10.0, follow_redirects=True, headers={"User-Agent": _UA}
-        ) as c:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers={"User-Agent": _UA}) as c:
             r = await c.post(
                 "https://html.duckduckgo.com/html/",
                 data={"q": query, "kl": "us-en"},
@@ -180,7 +179,7 @@ async def search(query: str, count: int = 5, freshness: str | None = None) -> Se
 def status() -> dict:
     """For `semeclaw status` — which backends are configured."""
     return {
-        "brave":      bool(os.environ.get("BRAVE_SEARCH_API_KEY")),
-        "searxng":    bool(os.environ.get("SEARXNG_URL")),
+        "brave": bool(os.environ.get("BRAVE_SEARCH_API_KEY")),
+        "searxng": bool(os.environ.get("SEARXNG_URL")),
         "duckduckgo": True,
     }

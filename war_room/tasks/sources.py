@@ -18,12 +18,13 @@ Adapter env vars (see war_room/agents/adapters/*.md):
 If an adapter's env is missing, the source is silently skipped — the demo
 must still work with zero adapters configured (local files only).
 """
+
 from __future__ import annotations
 
 import json
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 import httpx
 
@@ -45,10 +46,14 @@ def _norm_status(raw: str | None) -> str:
     s = (raw or "open").lower()
     if s in {"open", "in_progress", "needs_review", "done", "archived"}:
         return s
-    if s in {"todo", "new", "backlog"}:           return "open"
-    if s in {"doing", "wip", "active"}:           return "in_progress"
-    if s in {"review", "qa", "blocked"}:          return "needs_review"
-    if s in {"closed", "resolved", "complete"}:   return "done"
+    if s in {"todo", "new", "backlog"}:
+        return "open"
+    if s in {"doing", "wip", "active"}:
+        return "in_progress"
+    if s in {"review", "qa", "blocked"}:
+        return "needs_review"
+    if s in {"closed", "resolved", "complete"}:
+        return "done"
     return "open"
 
 
@@ -57,7 +62,7 @@ def _norm_status(raw: str | None) -> str:
 # ---------------------------------------------------------------------------
 async def paperclip_tasks() -> AsyncIterator[dict]:
     base = os.environ.get("PAPERCLIP_BASE_URL", "").strip()
-    key  = os.environ.get("PAPERCLIP_API_KEY", "").strip()
+    key = os.environ.get("PAPERCLIP_API_KEY", "").strip()
     if not base or not key:
         return
     url = base.rstrip("/") + "/api/tasks"
@@ -69,15 +74,15 @@ async def paperclip_tasks() -> AsyncIterator[dict]:
     except Exception:
         return
     items = data.get("tasks") or data.get("items") or data if isinstance(data, list) else []
-    for it in (items or []):
+    for it in items or []:
         yield {
-            "source":          "paperclip",
-            "source_id":       str(it.get("id") or it.get("uuid") or ""),
-            "title":           it.get("title") or it.get("name") or "(untitled)",
-            "description":     it.get("description") or it.get("body"),
-            "status":          _norm_status(it.get("status")),
+            "source": "paperclip",
+            "source_id": str(it.get("id") or it.get("uuid") or ""),
+            "title": it.get("title") or it.get("name") or "(untitled)",
+            "description": it.get("description") or it.get("body"),
+            "status": _norm_status(it.get("status")),
             "assigned_agents": _norm_agents(it.get("agents") or it.get("assigned_agents")),
-            "meta":            it,
+            "meta": it,
         }
 
 
@@ -86,7 +91,7 @@ async def paperclip_tasks() -> AsyncIterator[dict]:
 # ---------------------------------------------------------------------------
 async def moltica_tasks() -> AsyncIterator[dict]:
     base = os.environ.get("MOLTICA_BASE_URL", "").strip()
-    key  = os.environ.get("MOLTICA_API_KEY", "").strip()
+    key = os.environ.get("MOLTICA_API_KEY", "").strip()
     if not base or not key:
         return
     url = base.rstrip("/") + "/v1/tasks"
@@ -97,15 +102,15 @@ async def moltica_tasks() -> AsyncIterator[dict]:
             data = r.json()
     except Exception:
         return
-    for it in (data.get("data") or data.get("tasks") or []):
+    for it in data.get("data") or data.get("tasks") or []:
         yield {
-            "source":          "moltica",
-            "source_id":       str(it.get("id") or ""),
-            "title":           it.get("title") or it.get("subject") or "(untitled)",
-            "description":     it.get("description"),
-            "status":          _norm_status(it.get("state") or it.get("status")),
+            "source": "moltica",
+            "source_id": str(it.get("id") or ""),
+            "title": it.get("title") or it.get("subject") or "(untitled)",
+            "description": it.get("description"),
+            "status": _norm_status(it.get("state") or it.get("status")),
             "assigned_agents": _norm_agents(it.get("assignees") or it.get("agents")),
-            "meta":            it,
+            "meta": it,
         }
 
 
@@ -125,13 +130,13 @@ async def local_tasks() -> AsyncIterator[dict]:
         except Exception:
             continue
         yield {
-            "source":          "local",
-            "source_id":       data.get("id") or f.stem,
-            "title":           data.get("title") or f.stem,
-            "description":     data.get("description"),
-            "status":          _norm_status(data.get("status")),
+            "source": "local",
+            "source_id": data.get("id") or f.stem,
+            "title": data.get("title") or f.stem,
+            "description": data.get("description"),
+            "status": _norm_status(data.get("status")),
             "assigned_agents": _norm_agents(data.get("assigned_agents") or data.get("agents")),
-            "meta":            data,
+            "meta": data,
         }
 
 
@@ -154,13 +159,13 @@ async def claude_code_tasks() -> AsyncIterator[dict]:
             continue
         for it in data if isinstance(data, list) else data.get("tasks", []):
             yield {
-                "source":          "claude_code",
-                "source_id":       str(it.get("id") or ""),
-                "title":           it.get("title") or "(untitled)",
-                "description":     it.get("description"),
-                "status":          _norm_status(it.get("status")),
+                "source": "claude_code",
+                "source_id": str(it.get("id") or ""),
+                "title": it.get("title") or "(untitled)",
+                "description": it.get("description"),
+                "status": _norm_status(it.get("status")),
                 "assigned_agents": _norm_agents(it.get("agents")),
-                "meta":            {**it, "project": proj.name},
+                "meta": {**it, "project": proj.name},
             }
 
 
@@ -168,10 +173,10 @@ async def claude_code_tasks() -> AsyncIterator[dict]:
 # Aggregator
 # ---------------------------------------------------------------------------
 SOURCES = {
-    "paperclip":    paperclip_tasks,
-    "moltica":      moltica_tasks,
-    "local":        local_tasks,
-    "claude_code":  claude_code_tasks,
+    "paperclip": paperclip_tasks,
+    "moltica": moltica_tasks,
+    "local": local_tasks,
+    "claude_code": claude_code_tasks,
 }
 
 

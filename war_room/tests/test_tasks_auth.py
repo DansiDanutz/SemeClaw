@@ -1,8 +1,8 @@
 """Regression: /api/tasks write endpoints must be bearer-gated."""
+
 from __future__ import annotations
 
 import importlib
-import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 def client_with_key(monkeypatch):
     monkeypatch.setenv("SEMECLAW_API_KEY", "test-bearer-semeclaw")
     import war_room.dashboard.server as srv
+
     importlib.reload(srv)
     return TestClient(srv.app), "test-bearer-semeclaw"
 

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from semeclaw.utils.config import Config
 
 
-def create_pi_company_tools(config: "Config") -> list[BaseTool]:
+def create_pi_company_tools(config: Config) -> list[BaseTool]:
     """Create pi-company integration tools."""
 
     class PiCompanyStatusTool(BaseTool):

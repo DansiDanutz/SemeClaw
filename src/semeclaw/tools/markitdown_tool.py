@@ -7,7 +7,6 @@ from typing import Any
 
 from semeclaw.tools.base import BaseTool
 
-
 _TOOL_NAME = "convert_document"
 _TOOL_DESC = (
     "Convert a file to Markdown text. Supports PDF, DOCX, PPTX, XLSX, "

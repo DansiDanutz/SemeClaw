@@ -38,7 +38,7 @@ async def websearch(query: str, search_provider) -> str:
         return f"Web search failed: {str(e)}"
 
 
-def create_websearch_tool(config: "Config") -> BaseTool | None:
+def create_websearch_tool(config: Config) -> BaseTool | None:
     """Create web search tool if configured.
 
     Args:

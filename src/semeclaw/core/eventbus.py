@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
+import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Any
-from datetime import datetime
+from typing import Any
 
-from semeclaw.core.events import Event, OutboundEvent, InboundEvent, DispatchResultEvent
+from semeclaw.core.events import Event, OutboundEvent
 
 
 class EventBus:
@@ -96,10 +96,7 @@ class EventBus:
                 handlers.extend(self.subscribers[event_class])
 
         if not handlers:
-            self.logger.warning(
-                f"No handlers for {event.__class__.__name__} "
-                f"(session={event.session_id})"
-            )
+            self.logger.warning(f"No handlers for {event.__class__.__name__} (session={event.session_id})")
             return
 
         for handler in handlers:
@@ -107,10 +104,8 @@ class EventBus:
                 result = handler(event)
                 if hasattr(result, "__await__"):
                     await result
-            except Exception as e:
-                self.logger.exception(
-                    f"Error in handler {handler.__name__} for {event.__class__.__name__}"
-                )
+            except Exception:
+                self.logger.exception(f"Error in handler {handler.__name__} for {event.__class__.__name__}")
 
     def _persist_outbound(self, event: OutboundEvent) -> None:
         """Persistently store an outbound event for recovery.

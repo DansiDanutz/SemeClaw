@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from litellm.types.completion import ChatCompletionMessageParam as Message
 
@@ -17,7 +17,7 @@ class SessionState:
     """Pure conversation state container."""
 
     session_id: str
-    agent: "Agent"
+    agent: Agent
     messages: list[Message]
     history_store: HistoryStore | None = field(default=None, repr=False)
 

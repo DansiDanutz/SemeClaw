@@ -14,14 +14,16 @@ Usage:
     # cron can replay it when Supabase is healthy again
     dlq_append(dlq_path, {"kind": "task_upsert", "payload": body, "error": str(exc)})
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger("war_room.utils.supa_durable")
 
@@ -49,7 +51,7 @@ async def with_retry(
             last = exc
             if i == attempts - 1:
                 break
-            delay = min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2 ** i))
+            delay = min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2**i))
             await asyncio.sleep(delay)
     assert last is not None
     raise last

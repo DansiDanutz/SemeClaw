@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import time
 from pathlib import Path
 
 import httpx
@@ -33,11 +32,11 @@ ELEVENLABS_BASE = "https://api.elevenlabs.io/v1"
 # Agent role → ElevenLabs voice id (Flash v2.5 compatible)
 # These are the default premade voices; override via env if desired.
 VOICE_MAP: dict[str, str] = {
-    "narrator":   os.environ.get("ELEVENLABS_VOICE_NARRATOR", "pNInz6obpgDQGcFmaJgB"),   # Adam
-    "research":   os.environ.get("ELEVENLABS_VOICE_RESEARCH", "yoZ06aMxZJJ28mfd3POQ"),   # Josh
-    "strategist": os.environ.get("ELEVENLABS_VOICE_STRATEGIST", "XB0fDUnXU5powFXDhCwa"), # Charlotte
-    "writer":     os.environ.get("ELEVENLABS_VOICE_WRITER", "TX3AE3VoEqMeqjLYdkPk"),     # Matthew
-    "architect":  os.environ.get("ELEVENLABS_VOICE_ARCHITECT", "IKne3meq5aSn9XLyUdCD"),  # Bill
+    "narrator": os.environ.get("ELEVENLABS_VOICE_NARRATOR", "pNInz6obpgDQGcFmaJgB"),  # Adam
+    "research": os.environ.get("ELEVENLABS_VOICE_RESEARCH", "yoZ06aMxZJJ28mfd3POQ"),  # Josh
+    "strategist": os.environ.get("ELEVENLABS_VOICE_STRATEGIST", "XB0fDUnXU5powFXDhCwa"),  # Charlotte
+    "writer": os.environ.get("ELEVENLABS_VOICE_WRITER", "TX3AE3VoEqMeqjLYdkPk"),  # Matthew
+    "architect": os.environ.get("ELEVENLABS_VOICE_ARCHITECT", "IKne3meq5aSn9XLyUdCD"),  # Bill
 }
 
 DEFAULT_VOICE_ID = VOICE_MAP["narrator"]

@@ -68,7 +68,9 @@ def test_pipeline_run_records_state_and_writes_report(
         return f"[{agent_id}] response for {task!r}"
 
     # Writer returns structured output so parsing can extract AC
-    async def fake_call_agent_mixed(agent_id: str, task: str, context: str = "", model: str | None = None, **kwargs) -> str:
+    async def fake_call_agent_mixed(
+        agent_id: str, task: str, context: str = "", model: str | None = None, **kwargs
+    ) -> str:
         if agent_id == "writer":
             return (
                 "# Shipping Telemetry Spec\n\n"
@@ -82,12 +84,14 @@ def test_pipeline_run_records_state_and_writes_report(
     monkeypatch.setattr(wr, "call_agent", fake_call_agent_mixed)
 
     pipeline = wr.WarRoomPipeline(model="anthropic/claude-sonnet-4-6")
-    result = asyncio.run(pipeline.run(
-        task="Build telemetry",
-        agents=["research", "writer"],
-        project="NERVIX",
-        notify_telegram=False,
-    ))
+    result = asyncio.run(
+        pipeline.run(
+            task="Build telemetry",
+            agents=["research", "writer"],
+            project="NERVIX",
+            notify_telegram=False,
+        )
+    )
 
     assert result.run_id
     assert result.paperclip_issue is not None
@@ -101,6 +105,7 @@ def test_pipeline_run_records_state_and_writes_report(
     assert result.output_file.exists()
     # State updated
     from state import load_state
+
     state = load_state(isolated_state)
     assert state["metrics"]["tasks_run"] == 1
     assert state["metrics"]["tasks_succeeded"] == 1
@@ -114,8 +119,7 @@ def test_pipeline_skips_telegram_when_chat_file_missing(
     monkeypatch.setattr(wr, "call_agent", AsyncMock(return_value="done"))
     # TELEGRAM_CHAT_FILE is set to a non-existing path by isolated_state
     pipeline = wr.WarRoomPipeline()
-    with patch.object(wr, "PaperclipAdapter") as mock_pc_cls, \
-         patch.object(wr, "MulticaAdapter") as mock_mc_cls:
+    with patch.object(wr, "PaperclipAdapter") as mock_pc_cls, patch.object(wr, "MulticaAdapter") as mock_mc_cls:
         mock_pc = mock_pc_cls.return_value
         mock_pc.create_issue = AsyncMock(return_value={"id": "PC-999", "title": "X"})
         mock_pc.close = AsyncMock()
@@ -123,11 +127,13 @@ def test_pipeline_skips_telegram_when_chat_file_missing(
         mock_mc.create_issue = AsyncMock(return_value=None)
         mock_mc.close = AsyncMock()
 
-        asyncio.run(pipeline.run(
-            task="X",
-            agents=["research", "writer"],
-            project="NERVIX",
-            notify_telegram=True,
-        ))
+        asyncio.run(
+            pipeline.run(
+                task="X",
+                agents=["research", "writer"],
+                project="NERVIX",
+                notify_telegram=True,
+            )
+        )
         mock_pc.create_issue.assert_awaited_once()
         mock_pc.close.assert_awaited_once()

@@ -6,22 +6,22 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from semeclaw.core.context import SharedContext
 from semeclaw.core.eventbus import EventBus
 from semeclaw.core.routing import RoutingTable
-from semeclaw.core.context import SharedContext
-from semeclaw.server.worker import Worker
 from semeclaw.server.agent_worker import AgentWorker
+from semeclaw.server.app import create_app
 from semeclaw.server.channel_worker import ChannelWorker
+from semeclaw.server.cron_worker import CronWorker
 from semeclaw.server.delivery_worker import DeliveryWorker
 from semeclaw.server.websocket_worker import WebSocketWorker
-from semeclaw.server.cron_worker import CronWorker
-from semeclaw.server.app import create_app
+from semeclaw.server.worker import Worker
 
 if TYPE_CHECKING:
-    from semeclaw.utils.config import Config
+    from semeclaw.channel.base import Channel
     from semeclaw.core.agent_loader import AgentLoader
     from semeclaw.core.cron_loader import CronLoader
-    from semeclaw.channel.base import Channel
+    from semeclaw.utils.config import Config
 
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,7 @@ class Server:
             ]
 
             for worker in self.workers:
-                tasks.append(
-                    asyncio.create_task(worker.start(), name=worker.__class__.__name__)
-                )
+                tasks.append(asyncio.create_task(worker.start(), name=worker.__class__.__name__))
 
             # Create a task for the FastAPI server
             uvi_config = uvicorn.Config(

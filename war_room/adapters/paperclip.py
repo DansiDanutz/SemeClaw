@@ -35,34 +35,34 @@ DEFAULT_BASE = "http://127.0.0.1:3100"
 
 # Mapping from War Room agent ids to Paperclip assignee names
 AGENT_MAP = {
-    "research":   "Dexter",
-    "architect":  "David",
+    "research": "Dexter",
+    "architect": "David",
     "strategist": "Memo",
-    "writer":     "Hermes",
+    "writer": "Hermes",
 }
 
 # Back-compat alias used by war_room.py
 AGENT_ASSIGNEES = AGENT_MAP
 
 PROJECTS = {
-    "NERVIX":     "nervix",
-    "CrawdBot":   "crawdbot",
-    "MyWork AI":  "mywork-ai",
+    "NERVIX": "nervix",
+    "CrawdBot": "crawdbot",
+    "MyWork AI": "mywork-ai",
     "ZmartyChat": "zmartychat",
     "DansLab OS": "danslab-os",
 }
 
 LABEL_COLORS = {
-    "research":           "#6366f1",
-    "architecture":       "#f59e0b",
-    "strategy":           "#10b981",
-    "documentation":      "#3b82f6",
-    "competitive-intel":  "#ef4444",
-    "adr":                "#8b5cf6",
-    "product-decision":   "#ec4899",
-    "spec":               "#14b8a6",
-    "roadmap":            "#f97316",
-    "report":             "#64748b",
+    "research": "#6366f1",
+    "architecture": "#f59e0b",
+    "strategy": "#10b981",
+    "documentation": "#3b82f6",
+    "competitive-intel": "#ef4444",
+    "adr": "#8b5cf6",
+    "product-decision": "#ec4899",
+    "spec": "#14b8a6",
+    "roadmap": "#f97316",
+    "report": "#64748b",
 }
 
 
@@ -201,9 +201,7 @@ class PaperclipAdapter(Adapter):
             if ctype == "create_issue":
                 ok = ok and bool(await self.create_issue(**change.get("payload", {})))
             elif ctype == "move_issue":
-                ok = ok and await self.move_issue(
-                    change.get("issue_id", ""), change.get("status", "")
-                )
+                ok = ok and await self.move_issue(change.get("issue_id", ""), change.get("status", ""))
             elif ctype == "add_comment":
                 ok = ok and await self.add_comment(
                     change.get("issue_id", ""),
@@ -313,12 +311,12 @@ class PaperclipAdapter(Adapter):
             "projects": list(PROJECTS.keys()),
             "columns": ["backlog", "in-progress", "review", "done"],
             "agents": {
-                "Dexter":  {"role": "Research",    "status": "idle", "open_issues": 0},
-                "David":   {"role": "Architect",   "status": "idle", "open_issues": 0},
-                "Memo":    {"role": "Strategist",  "status": "idle", "open_issues": 0},
-                "Hermes":  {"role": "Writer",      "status": "idle", "open_issues": 0},
-                "Sienna":  {"role": "Crypto",      "status": "idle", "open_issues": 0},
-                "Nano":    {"role": "AgentCreator","status": "idle", "open_issues": 0},
+                "Dexter": {"role": "Research", "status": "idle", "open_issues": 0},
+                "David": {"role": "Architect", "status": "idle", "open_issues": 0},
+                "Memo": {"role": "Strategist", "status": "idle", "open_issues": 0},
+                "Hermes": {"role": "Writer", "status": "idle", "open_issues": 0},
+                "Sienna": {"role": "Crypto", "status": "idle", "open_issues": 0},
+                "Nano": {"role": "AgentCreator", "status": "idle", "open_issues": 0},
             },
             "issues": self._mock_issues,
         }

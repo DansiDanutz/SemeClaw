@@ -43,6 +43,7 @@ class TelegramChannel(Channel):
         """Save the latest chat_id so cron jobs can send proactive notifications."""
         try:
             from pathlib import Path
+
             # Save next to the config file — wherever the bot was launched from
             Path(".telegram_chat_id").write_text(chat_id)
         except Exception:
@@ -59,9 +60,7 @@ class TelegramChannel(Channel):
         Runs until _stop_typing() is called or TYPING_TIMEOUT_SECS elapses.
         """
         await self._stop_typing(chat_id)
-        task = asyncio.create_task(
-            _typing_loop(self._application.bot, chat_id)
-        )
+        task = asyncio.create_task(_typing_loop(self._application.bot, chat_id))
         self._typing_tasks[chat_id] = task
 
     async def _stop_typing(self, chat_id: str) -> None:
@@ -123,7 +122,7 @@ class TelegramChannel(Channel):
         in reply() (when the agent finishes). The callback just fires an
         async event and returns immediately, so we cannot tie typing to it.
         """
-        from telegram.ext import MessageHandler, filters, ContextTypes
+        from telegram.ext import ContextTypes, MessageHandler, filters
 
         async def message_handler(update, context: ContextTypes.DEFAULT_TYPE):
             if not (update.message and update.message.text):
@@ -135,14 +134,10 @@ class TelegramChannel(Channel):
 
             if not self._is_user_allowed(user_id):
                 self.logger.warning(f"Unauthorized user: {user_id} (@{username})")
-                await update.message.reply_text(
-                    "⛔ You are not authorized to use this bot."
-                )
+                await update.message.reply_text("⛔ You are not authorized to use this bot.")
                 return
 
-            self.logger.info(
-                f"Message from {user_id} (@{username}): {update.message.text[:80]}"
-            )
+            self.logger.info(f"Message from {user_id} (@{username}): {update.message.text[:80]}")
 
             # ✅ Auto-save chat_id so cron jobs can notify Dan proactively
             self._persist_chat_id(chat_id)
@@ -197,7 +192,7 @@ class TelegramChannel(Channel):
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def from_config_inner(cls, config: "Config") -> "TelegramChannel":
+    def from_config_inner(cls, config: Config) -> TelegramChannel:
         if not config.channels or not config.channels.telegram:
             raise ValueError("Telegram config not found in channels config")
         tg_config = config.channels.telegram
@@ -210,6 +205,7 @@ class TelegramChannel(Channel):
 # ------------------------------------------------------------------ #
 #  Module-level helpers (easy to unit-test)                           #
 # ------------------------------------------------------------------ #
+
 
 async def _typing_loop(bot, chat_id: str) -> None:
     """Send ChatAction.TYPING every TYPING_REFRESH_SECS until cancelled."""

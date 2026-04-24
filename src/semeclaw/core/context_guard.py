@@ -85,9 +85,7 @@ class ContextGuard:
         # If still over, summarize old messages
         await self._compact_messages(state)
 
-    def _truncate_large_tool_results(
-        self, messages: list[Message], max_chars: int = 10000
-    ) -> None:
+    def _truncate_large_tool_results(self, messages: list[Message], max_chars: int = 10000) -> None:
         """Truncate large tool results in messages.
 
         Args:
@@ -133,9 +131,7 @@ class ContextGuard:
             summary_prompt += f"{role}: {content}\n"
 
         # Use LLM to create summary
-        summary_messages: list[Message] = [
-            {"role": "user", "content": summary_prompt}
-        ]
+        summary_messages: list[Message] = [{"role": "user", "content": summary_prompt}]
 
         try:
             summary = await self.llm_provider.chat(summary_messages)

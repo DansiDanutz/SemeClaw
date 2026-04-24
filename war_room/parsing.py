@@ -15,12 +15,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_H1_RE        = re.compile(r"^\s*#\s+(.+?)\s*$")
+_H1_RE = re.compile(r"^\s*#\s+(.+?)\s*$")
 _TITLE_LINE_RE = re.compile(r"^\s*title\s*:\s*(.+?)\s*$", re.IGNORECASE)
 _AC_HEADER_RE = re.compile(r"^\s*#{1,6}\s*acceptance\s+criteria\b", re.IGNORECASE)
-_CHECKBOX_RE  = re.compile(r"^\s*[-*]\s*\[\s*\]\s*(.+?)\s*$")
+_CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[\s*\]\s*(.+?)\s*$")
 _MAX_TITLE_LEN = 140
-_MAX_DESC_LEN  = 2000
+_MAX_DESC_LEN = 2000
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,7 @@ def parse_writer_output(text: str, fallback_task: str) -> WriterOutput:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_title(lines: list[str]) -> str | None:
     for line in lines:

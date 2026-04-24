@@ -1,16 +1,18 @@
 """Health, TTS, and board routes."""
+
 import json
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from war_room.dashboard.routes.deps import STATE_FILE, CONFIG_FILE
+from war_room.dashboard.routes.deps import CONFIG_FILE, STATE_FILE
 
 router = APIRouter(tags=["health"])
 
 
 try:
     import httpx
+
     _HAS_HTTPX = True
 except ImportError:
     _HAS_HTTPX = False
@@ -49,15 +51,20 @@ async def api_board():
     state = {}
     if STATE_FILE.exists():
         state = json.loads(STATE_FILE.read_text())
-    return JSONResponse(state.get("paperclip", {
-        "connected": False,
-        "mode": "mock",
-        "agents": {
-            "Dexter":  {"role": "Research",    "status": "idle"},
-            "David":   {"role": "Architect",   "status": "idle"},
-            "Memo":    {"role": "Strategist",  "status": "idle"},
-            "Hermes":  {"role": "Writer",      "status": "idle"},
-            "Sienna":  {"role": "Crypto",      "status": "idle"},
-            "Nano":    {"role": "AgentCreator","status": "idle"},
-        }
-    }))
+    return JSONResponse(
+        state.get(
+            "paperclip",
+            {
+                "connected": False,
+                "mode": "mock",
+                "agents": {
+                    "Dexter": {"role": "Research", "status": "idle"},
+                    "David": {"role": "Architect", "status": "idle"},
+                    "Memo": {"role": "Strategist", "status": "idle"},
+                    "Hermes": {"role": "Writer", "status": "idle"},
+                    "Sienna": {"role": "Crypto", "status": "idle"},
+                    "Nano": {"role": "AgentCreator", "status": "idle"},
+                },
+            },
+        )
+    )
