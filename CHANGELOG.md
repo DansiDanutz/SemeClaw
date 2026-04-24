@@ -2,6 +2,27 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.0] - 2026-04-24
+
+### Added — versioning policy + CI enforcement
+
+- `VERSIONING.md` documents the semver rules (patch/minor/major), how
+  `scripts/bump_version.py` is used, and what CI enforces.
+- `scripts/check_version_bumped.sh` fails a PR if `pyproject.toml`
+  version equals `main`'s and any non-docs file was touched. Pure
+  docs-only PRs are allowed through.
+- CI: new "Enforce version bump" step runs on `pull_request` events.
+  `fetch-depth: 0` added to the checkout so the script can diff against
+  `origin/main`.
+- Tests: `war_room/tests/test_version_policy.py` smoke-covers script
+  existence, executability, VERSIONING.md headings, and CHANGELOG.md
+  structure.
+
+### Policy
+
+From now on every PR bumps the version. `X-SemeClaw-Version` and
+`/api/agent/manifest` stay meaningful.
+
 ## [0.7.15] - 2026-04-24
 
 ### Changed — lint/format tree-wide + CI ruff enforcement

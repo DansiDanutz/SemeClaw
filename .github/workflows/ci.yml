@@ -17,6 +17,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed so check_version_bumped can see origin/main
+
+      - name: Enforce version bump (PRs only)
+        if: github.event_name == 'pull_request'
+        run: bash scripts/check_version_bumped.sh origin/${{ github.base_ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
