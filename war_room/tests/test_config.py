@@ -19,23 +19,32 @@ def _make_workspace(tmp_path: Path, data: dict) -> Path:
 
 
 def test_resolve_model_from_user_config(tmp_path: Path) -> None:
-    root = _make_workspace(tmp_path, {
-        "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
-    })
+    root = _make_workspace(
+        tmp_path,
+        {
+            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+        },
+    )
     assert wr_config.resolve_model(root) == "anthropic/claude-sonnet-4-20250514"
 
 
 def test_resolve_model_preserves_explicit_prefix(tmp_path: Path) -> None:
-    root = _make_workspace(tmp_path, {
-        "llm": {"provider": "anthropic", "model": "anthropic/claude-opus-4-6"},
-    })
+    root = _make_workspace(
+        tmp_path,
+        {
+            "llm": {"provider": "anthropic", "model": "anthropic/claude-opus-4-6"},
+        },
+    )
     assert wr_config.resolve_model(root) == "anthropic/claude-opus-4-6"
 
 
 def test_resolve_model_override_wins(tmp_path: Path) -> None:
-    root = _make_workspace(tmp_path, {
-        "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
-    })
+    root = _make_workspace(
+        tmp_path,
+        {
+            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+        },
+    )
     assert wr_config.resolve_model(root, override="openai/gpt-4o") == "openai/gpt-4o"
 
 
@@ -45,16 +54,22 @@ def test_resolve_model_falls_back_to_default(tmp_path: Path) -> None:
 
 
 def test_resolve_telegram_token_channels_path(tmp_path: Path) -> None:
-    root = _make_workspace(tmp_path, {
-        "channels": {"telegram": {"bot_token": "NEW-TOKEN"}},
-    })
+    root = _make_workspace(
+        tmp_path,
+        {
+            "channels": {"telegram": {"bot_token": "NEW-TOKEN"}},
+        },
+    )
     assert wr_config.resolve_telegram_token(root) == "NEW-TOKEN"
 
 
 def test_resolve_telegram_token_legacy_path(tmp_path: Path) -> None:
-    root = _make_workspace(tmp_path, {
-        "telegram": {"bot_token": "LEGACY-TOKEN"},
-    })
+    root = _make_workspace(
+        tmp_path,
+        {
+            "telegram": {"bot_token": "LEGACY-TOKEN"},
+        },
+    )
     assert wr_config.resolve_telegram_token(root) == "LEGACY-TOKEN"
 
 

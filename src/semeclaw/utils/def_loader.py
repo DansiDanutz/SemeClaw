@@ -1,8 +1,9 @@
 """Shared utilities for loading definition files (agents, skills, crons)."""
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import yaml
 

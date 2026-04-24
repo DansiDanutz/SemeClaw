@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from semeclaw.core.events import CronEventSource, InboundEvent
 from semeclaw.server.worker import Worker
-from semeclaw.core.events import InboundEvent, CronEventSource
 
 if TYPE_CHECKING:
     from semeclaw.core.cron_loader import CronLoader
@@ -100,8 +99,6 @@ class CronWorker(Worker):
             await self.eventbus.publish(event)
             self._last_run[cron_id] = datetime.now()
 
-            self.logger.info(
-                f"Dispatched cron '{cron_id}' → agent '{event.target_agent}'"
-            )
+            self.logger.info(f"Dispatched cron '{cron_id}' → agent '{event.target_agent}'")
         except Exception as e:
             self.logger.exception(f"Failed to dispatch cron {cron_id}: {e}")

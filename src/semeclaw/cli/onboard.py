@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import os
 import socket
-import urllib.request
 import urllib.error
-from dataclasses import dataclass, field
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import typer
 import yaml
@@ -27,16 +26,17 @@ app = typer.Typer(help="Onboard wizard for SemeClaw")
 # Provider registry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProviderDef:
     id: str
     label: str
-    env_key: str                    # primary env var that signals availability
+    env_key: str  # primary env var that signals availability
     default_model: str
     model_choices: list[str]
     needs_api_key: bool = True
-    api_base_env: str = ""          # env var for custom base URL (Ollama, OpenRouter, etc.)
-    probe_url: str = ""             # HTTP URL to probe (for local providers)
+    api_base_env: str = ""  # env var for custom base URL (Ollama, OpenRouter, etc.)
+    probe_url: str = ""  # HTTP URL to probe (for local providers)
     docs_url: str = ""
 
 
@@ -112,6 +112,7 @@ PROVIDER_BY_ID: dict[str, ProviderDef] = {p.id: p for p in PROVIDERS}
 # Detection helpers
 # ---------------------------------------------------------------------------
 
+
 def _probe_tcp(host: str, port: int, timeout: float = 1.5) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -131,7 +132,7 @@ def _probe_http(url: str, timeout: float = 2.0) -> bool:
 @dataclass
 class DetectedProvider:
     provider: ProviderDef
-    source: str           # "env" | "local_probe"
+    source: str  # "env" | "local_probe"
     api_key: str = ""
 
 
@@ -143,22 +144,26 @@ def detect_providers() -> list[DetectedProvider]:
     for env_var, provider_id in _ENV_TO_PROVIDER.items():
         val = os.environ.get(env_var, "").strip()
         if val and provider_id not in seen:
-            found.append(DetectedProvider(
-                provider=PROVIDER_BY_ID[provider_id],
-                source="env",
-                api_key=val,
-            ))
+            found.append(
+                DetectedProvider(
+                    provider=PROVIDER_BY_ID[provider_id],
+                    source="env",
+                    api_key=val,
+                )
+            )
             seen.add(provider_id)
 
     # Ollama local probe (no key needed)
     if "ollama" not in seen:
         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         if _probe_http(ollama_url + "/api/tags"):
-            found.append(DetectedProvider(
-                provider=PROVIDER_BY_ID["ollama"],
-                source="local_probe",
-                api_key="ollama",
-            ))
+            found.append(
+                DetectedProvider(
+                    provider=PROVIDER_BY_ID["ollama"],
+                    source="local_probe",
+                    api_key="ollama",
+                )
+            )
 
     return found
 
@@ -166,6 +171,7 @@ def detect_providers() -> list[DetectedProvider]:
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+
 
 def validate_llm(provider_id: str, model: str, api_key: str, api_base: str = "") -> tuple[bool, str]:
     """Send a minimal test completion. Returns (ok, error_message)."""
@@ -251,6 +257,7 @@ def scaffold_workspace(workspace: Path, default_agent: str = "assistant") -> Non
 # Config writer
 # ---------------------------------------------------------------------------
 
+
 def write_config(
     workspace: Path,
     provider: ProviderDef,
@@ -329,6 +336,7 @@ def _default_fallback_chain(primary_provider_id: str) -> list[dict]:
 # Main onboarding flow
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def run_onboard(workspace: Path, force: bool = False) -> bool:
     """
@@ -338,12 +346,13 @@ def run_onboard(workspace: Path, force: bool = False) -> bool:
     config_file = workspace / "config.user.yaml"
 
     console.print()
-    console.print(Panel(
-        "[bold cyan]SemeClaw Setup Wizard[/bold cyan]\n"
-        "[dim]Let's get you connected in under 2 minutes.[/dim]",
-        border_style="cyan",
-        padding=(1, 4),
-    ))
+    console.print(
+        Panel(
+            "[bold cyan]SemeClaw Setup Wizard[/bold cyan]\n[dim]Let's get you connected in under 2 minutes.[/dim]",
+            border_style="cyan",
+            padding=(1, 4),
+        )
+    )
 
     if config_file.exists() and not force:
         console.print(f"\n[yellow]Config already exists:[/yellow] {config_file}")
@@ -358,7 +367,7 @@ def run_onboard(workspace: Path, force: bool = False) -> bool:
     console.print("\n[bold]Step 1 — Scanning for available providers...[/bold]")
     detected = detect_providers()
 
-    chosen_provider: Optional[ProviderDef] = None
+    chosen_provider: ProviderDef | None = None
     chosen_key: str = ""
 
     if detected:
@@ -522,20 +531,33 @@ def run_onboard(workspace: Path, force: bool = False) -> bool:
     # Success summary
     # ------------------------------------------------------------------
     console.print()
-    console.print(Panel(
-        Text.assemble(
-            ("✓ SemeClaw is ready!\n\n", "bold green"),
-            ("Config: ", "dim"), (str(config_path), "cyan"), ("\n", ""),
-            ("Provider: ", "dim"), (chosen_provider.label, "white"), ("\n", ""),
-            ("Model: ", "dim"), (chosen_model, "white"), ("\n", ""),
-            ("Agent: ", "dim"), (default_agent, "white"), ("\n\n", ""),
-            ("Next steps:\n", "bold"),
-            ("  semeclaw chat       ", "cyan"), ("→ start chatting\n", "dim"),
-            ("  semeclaw server     ", "cyan"), ("→ start the API server\n", "dim"),
-            ("  semeclaw init       ", "cyan"), ("→ re-run this wizard\n", "dim"),
-        ),
-        border_style="green",
-        padding=(1, 3),
-    ))
+    console.print(
+        Panel(
+            Text.assemble(
+                ("✓ SemeClaw is ready!\n\n", "bold green"),
+                ("Config: ", "dim"),
+                (str(config_path), "cyan"),
+                ("\n", ""),
+                ("Provider: ", "dim"),
+                (chosen_provider.label, "white"),
+                ("\n", ""),
+                ("Model: ", "dim"),
+                (chosen_model, "white"),
+                ("\n", ""),
+                ("Agent: ", "dim"),
+                (default_agent, "white"),
+                ("\n\n", ""),
+                ("Next steps:\n", "bold"),
+                ("  semeclaw chat       ", "cyan"),
+                ("→ start chatting\n", "dim"),
+                ("  semeclaw server     ", "cyan"),
+                ("→ start the API server\n", "dim"),
+                ("  semeclaw init       ", "cyan"),
+                ("→ re-run this wizard\n", "dim"),
+            ),
+            border_style="green",
+            padding=(1, 3),
+        )
+    )
 
     return True

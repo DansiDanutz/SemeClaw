@@ -12,12 +12,12 @@ Phase A keeps it deterministic + offline-friendly:
 This means the live demo + open-source clone work with zero API keys, and
 upgrade gracefully when keys are added.
 """
+
 from __future__ import annotations
 
 import os
 import urllib.parse
 from datetime import datetime, timezone
-from typing import Iterable
 
 from war_room.agents import registry as _reg
 
@@ -32,32 +32,32 @@ def _audio_url(text: str, speaker: str) -> str:
 # Templated voice fallback (no API needed)
 # ---------------------------------------------------------------------------
 _VOICE_TEMPLATES = {
-    "research":  "I'll dig up sources on '{title}' and surface the 3 most-cited references.",
-    "writer":    "I can draft '{title}' once research lands — leaning on a brief, scannable structure.",
-    "scraping":  "I'll pull the raw content for '{title}' from the listed URLs and clean it up.",
-    "browser":   "I'll run the search queries needed to ground '{title}' in current results.",
-    "coder":     "If this needs code I'll scaffold the smallest working version of '{title}' first.",
+    "research": "I'll dig up sources on '{title}' and surface the 3 most-cited references.",
+    "writer": "I can draft '{title}' once research lands — leaning on a brief, scannable structure.",
+    "scraping": "I'll pull the raw content for '{title}' from the listed URLs and clean it up.",
+    "browser": "I'll run the search queries needed to ground '{title}' in current results.",
+    "coder": "If this needs code I'll scaffold the smallest working version of '{title}' first.",
     "architect": "From an architecture lens, '{title}' should stay layered and avoid premature coupling.",
     "strategist": "Strategically, '{title}' lands inside our current quarter priorities — let's scope tight.",
 }
 
 # Short, human-friendly clauses used by the host's intro line (template path).
 _HOST_AGENT_BLURBS = {
-    "research":   "Research for sources",
-    "writer":     "Writer for the draft",
-    "scraping":   "Scraping for raw content",
-    "browser":    "Browser for live search",
-    "coder":      "Coder for the build",
-    "architect":  "Architect for the design lens",
+    "research": "Research for sources",
+    "writer": "Writer for the draft",
+    "scraping": "Scraping for raw content",
+    "browser": "Browser for live search",
+    "coder": "Coder for the build",
+    "architect": "Architect for the design lens",
     "strategist": "Strategist for the priorities",
-    "semeclaw":   "the SemeClaw orchestrator running point",
+    "semeclaw": "the SemeClaw orchestrator running point",
 }
 
 
 def _host_intro_template(task: dict, agents_ids: list[str]) -> str:
     """Deterministic Aria opener used when no LLM key is available."""
     title = task.get("title") or "(untitled)"
-    desc  = (task.get("description") or "").strip()
+    desc = (task.get("description") or "").strip()
     # Goal: first sentence of the description, capped at 90 chars.
     goal = ""
     if desc:
@@ -115,15 +115,13 @@ async def _host_intro_llm(task: dict, agents_ids: list[str], model: str) -> str 
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": sys_prompt},
-                     {"role": "user",   "content": user}],
+        "messages": [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}],
         "temperature": 0.55,
         "max_tokens": 180,
     }
     try:
         async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post("https://openrouter.ai/api/v1/chat/completions",
-                             headers=headers, json=payload)
+            r = await c.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
             if r.status_code >= 400:
                 return None
             data = r.json()
@@ -163,15 +161,13 @@ async def _llm_line(agent_id: str, agent_role: str, model: str, task: dict) -> s
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": sys_prompt},
-                     {"role": "user",   "content": user}],
+        "messages": [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}],
         "temperature": 0.6,
         "max_tokens": 90,
     }
     try:
         async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post("https://openrouter.ai/api/v1/chat/completions",
-                             headers=headers, json=payload)
+            r = await c.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
             if r.status_code >= 400:
                 return None
             data = r.json()
@@ -185,17 +181,17 @@ async def _llm_line(agent_id: str, agent_role: str, model: str, task: dict) -> s
 # ---------------------------------------------------------------------------
 async def compose_dialog(task: dict) -> list[dict]:
     """Return a list of {agent_id, role, text, ts} lines for the task."""
-    title  = task.get("title") or "(untitled)"
+    title = task.get("title") or "(untitled)"
     agents_ids: list[str] = list(task.get("assigned_agents") or [])
 
     catalog = _reg.load_all()
     # Always include orchestrator at the bookends.
     orchestrator = catalog.get("semeclaw")
-    orch_id   = "semeclaw"
+    orch_id = "semeclaw"
     orch_role = orchestrator.role if orchestrator else "Orchestrator"
 
     host = catalog.get("host")
-    host_id   = "host"
+    host_id = "host"
     host_role = host.role if host else "Meeting host and announcer"
 
     lines: list[dict] = []
@@ -204,26 +200,34 @@ async def compose_dialog(task: dict) -> list[dict]:
     # 1. Host opener — Aria says hello, names the task + goal, presents the agents.
     host_model = ""
     if host:
-        for pref in (host.model_preference or []):
+        for pref in host.model_preference or []:
             if pref.startswith("openrouter:"):
                 host_model = pref.split(":", 1)[1]
                 break
     intro = await _host_intro_llm(task, agents_ids, host_model)
     if not intro:
         intro = _host_intro_template(task, agents_ids)
-    lines.append({
-        "agent_id": host_id, "role": host_role,
-        "text": intro, "audio_url": _audio_url(intro, host_id),
-        "ts": now(),
-    })
+    lines.append(
+        {
+            "agent_id": host_id,
+            "role": host_role,
+            "text": intro,
+            "audio_url": _audio_url(intro, host_id),
+            "ts": now(),
+        }
+    )
 
     # 2. Orchestrator scene-setter
     scene = f"Team — task on the table: '{title}'. Status is {task.get('status', 'open')}. Quick passes please."
-    lines.append({
-        "agent_id": orch_id, "role": orch_role,
-        "text": scene, "audio_url": _audio_url(scene, orch_id),
-        "ts": now(),
-    })
+    lines.append(
+        {
+            "agent_id": orch_id,
+            "role": orch_role,
+            "text": scene,
+            "audio_url": _audio_url(scene, orch_id),
+            "ts": now(),
+        }
+    )
 
     # Per-agent line
     for aid in agents_ids:
@@ -232,25 +236,30 @@ async def compose_dialog(task: dict) -> list[dict]:
             continue
         # Try LLM with the agent's preferred model, fall back to template.
         model = ""
-        for pref in (a.model_preference or []):
+        for pref in a.model_preference or []:
             if pref.startswith("openrouter:"):
                 model = pref.split(":", 1)[1]
                 break
         text = (await _llm_line(aid, a.role, model, task)) if model else None
         if not text:
             text = _template_line(aid, a.role, title)
-        lines.append({"agent_id": aid, "role": a.role, "text": text,
-                      "audio_url": _audio_url(text, aid), "ts": now()})
+        lines.append({"agent_id": aid, "role": a.role, "text": text, "audio_url": _audio_url(text, aid), "ts": now()})
 
     # Closing summary
-    next_step = "kick off in priority order — research first, then scrape, then write" \
-        if any(x in agents_ids for x in ("research", "writer")) \
+    next_step = (
+        "kick off in priority order — research first, then scrape, then write"
+        if any(x in agents_ids for x in ("research", "writer"))
         else "assign owners and re-sync in 24h"
+    )
     closer = f"Decision: {next_step}. I'll re-cap once we have intervention #3 or a finish signal."
-    lines.append({
-        "agent_id": orch_id, "role": orch_role,
-        "text": closer, "audio_url": _audio_url(closer, orch_id),
-        "ts": now(),
-    })
+    lines.append(
+        {
+            "agent_id": orch_id,
+            "role": orch_role,
+            "text": closer,
+            "audio_url": _audio_url(closer, orch_id),
+            "ts": now(),
+        }
+    )
 
     return lines

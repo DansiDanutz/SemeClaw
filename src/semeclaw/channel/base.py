@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from semeclaw.core.events import EventSource
 
@@ -116,6 +117,4 @@ class Channel(ABC):
         Returns:
             A channel instance.
         """
-        raise NotImplementedError(
-            f"{cls.__name__} must implement from_config_inner if used with from_config"
-        )
+        raise NotImplementedError(f"{cls.__name__} must implement from_config_inner if used with from_config")

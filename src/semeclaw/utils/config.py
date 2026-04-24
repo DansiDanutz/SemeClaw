@@ -9,7 +9,6 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +21,7 @@ class LLMConfig(BaseModel):
     api_base: str | None = None
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, gt=0)
-    fallbacks: list["LLMFallbackConfig"] = Field(default_factory=list)
+    fallbacks: list[LLMFallbackConfig] = Field(default_factory=list)
 
     @field_validator("api_base")
     @classmethod
@@ -93,7 +92,7 @@ class Config(BaseModel):
     supabase_key: str | None = None
 
     @model_validator(mode="after")
-    def resolve_paths(self) -> "Config":
+    def resolve_paths(self) -> Config:
         """Resolve relative paths to absolute using workspace."""
         for field_name in (
             "agents_path",
@@ -106,7 +105,7 @@ class Config(BaseModel):
         return self
 
     @classmethod
-    def load(cls, workspace_dir: Path) -> "Config":
+    def load(cls, workspace_dir: Path) -> Config:
         """Load configuration from workspace directory."""
         config_data = cls._load_config(workspace_dir)
         config_data["workspace"] = workspace_dir
@@ -129,9 +128,7 @@ class Config(BaseModel):
             selected_file = base_config_file
 
         if selected_file is None:
-            raise FileNotFoundError(
-                f"Config file not found: {user_config_file} or {base_config_file}"
-            )
+            raise FileNotFoundError(f"Config file not found: {user_config_file} or {base_config_file}")
 
         with open(selected_file) as f:
             user_config = yaml.safe_load(f) or {}

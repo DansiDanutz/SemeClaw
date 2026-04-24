@@ -46,9 +46,7 @@ DEFAULT_MULTICA_URL = os.environ.get("MULTICA_SERVER_URL", "http://127.0.0.1:808
 MULTICA_STATE_DIR = Path.home() / ".multica"
 
 # Issue statuses used by Multica
-VALID_STATUSES = [
-    "backlog", "todo", "in_progress", "in_review", "done", "blocked", "cancelled"
-]
+VALID_STATUSES = ["backlog", "todo", "in_progress", "in_review", "done", "blocked", "cancelled"]
 
 
 def _normalize_server_url(raw: str) -> str:
@@ -135,9 +133,7 @@ class MulticaAdapter(Adapter):
                 headers["Authorization"] = f"Bearer {self.token}"
             if self.workspace_id:
                 headers["X-Workspace-ID"] = self.workspace_id
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url, timeout=15.0, headers=headers
-            )
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=15.0, headers=headers)
         return self._client
 
     async def close(self) -> None:
@@ -390,9 +386,7 @@ class MulticaAdapter(Adapter):
     # Back-compat alias
     update_task = update_issue
 
-    async def add_comment(
-        self, issue_id: str, content: str, author: str = "war_room"
-    ) -> bool:
+    async def add_comment(self, issue_id: str, content: str, author: str = "war_room") -> bool:
         if not self._is_reachable():
             logger.info("[LOCAL] Comment on Multica issue %s: %s", issue_id, content[:60])
             return True

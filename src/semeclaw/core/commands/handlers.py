@@ -5,6 +5,13 @@ from typing import TYPE_CHECKING
 
 from semeclaw.core.commands.base import Command
 from semeclaw.core.plugin_loader import PluginLoader
+from semeclaw.integrations.github_pr import (
+    format_local_review_bundle_result,
+    format_pr_status,
+    format_review_bundle_result,
+    get_pr_status,
+    write_review_bundle_or_local,
+)
 from semeclaw.integrations.pi_company import (
     bootstrap_repo,
     format_bootstrap_result,
@@ -15,13 +22,6 @@ from semeclaw.integrations.review_loop import (
     DEFAULT_REVIEW_LOOP_SCHEDULE,
     format_review_loop_install,
     install_review_loop,
-)
-from semeclaw.integrations.github_pr import (
-    format_local_review_bundle_result,
-    format_pr_status,
-    format_review_bundle_result,
-    get_pr_status,
-    write_review_bundle_or_local,
 )
 
 if TYPE_CHECKING:
@@ -234,11 +234,7 @@ class PiCompanyCommand(Command):
                 return f"Error bootstrapping pi-company: {exc}"
             return format_bootstrap_result(result)
 
-        return (
-            "Usage:\n"
-            "  /pi-company status [target_path]\n"
-            "  /pi-company bootstrap [target_path] [company_name]"
-        )
+        return "Usage:\n  /pi-company status [target_path]\n  /pi-company bootstrap [target_path] [company_name]"
 
 
 class GitHubPrCommand(Command):
@@ -265,11 +261,7 @@ class GitHubPrCommand(Command):
         except Exception as exc:
             return f"GitHub PR command failed: {exc}"
 
-        return (
-            "Usage:\n"
-            "  /github-pr status [repo_path] [pr_ref]\n"
-            "  /github-pr bundle [repo_path] [pr_ref]"
-        )
+        return "Usage:\n  /github-pr status [repo_path] [pr_ref]\n  /github-pr bundle [repo_path] [pr_ref]"
 
 
 class ReviewLoopCommand(Command):
@@ -323,7 +315,5 @@ class PluginsCommand(Command):
             tool_info = "tools" if plugin.tool_factory else "docs-only"
             skill_count = len(plugin.skill_paths)
             desc = f" - {plugin.description}" if plugin.description else ""
-            lines.append(
-                f"  - {plugin.id} ({plugin.name}, {tool_info}, skill_paths={skill_count}){desc}"
-            )
+            lines.append(f"  - {plugin.id} ({plugin.name}, {tool_info}, skill_paths={skill_count}){desc}")
         return "\n".join(lines)

@@ -150,9 +150,7 @@ def markitdown_convert(input_path: str, output_path: str = "") -> str:
                 check=False,
             )
             if result.returncode != 0:
-                return (
-                    f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-                )
+                return f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
             return f"Successfully converted {source} to {destination}"
 
         result = subprocess.run(
@@ -163,9 +161,7 @@ def markitdown_convert(input_path: str, output_path: str = "") -> str:
             check=False,
         )
         if result.returncode != 0:
-            return (
-                f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-            )
+            return f"Error converting file: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
         return result.stdout.strip() or "(no output)"
     except subprocess.TimeoutExpired:
         return "Error: MarkItDown conversion timed out after 120 seconds"

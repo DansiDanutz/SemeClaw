@@ -50,9 +50,7 @@ class AgentLoader:
 
         return agent_def
 
-    def _parse_agent_def(
-        self, def_id: str, frontmatter: dict[str, Any], body: str
-    ) -> AgentDef:
+    def _parse_agent_def(self, def_id: str, frontmatter: dict[str, Any], body: str) -> AgentDef:
         """Parse agent definition from frontmatter."""
         llm_overrides = frontmatter.get("llm")
         merged_llm = self._merge_llm_config(llm_overrides)

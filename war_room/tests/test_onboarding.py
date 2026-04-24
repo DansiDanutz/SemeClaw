@@ -5,8 +5,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -72,9 +70,7 @@ class TestDiscovery:
         scan_root.mkdir()
         agent_dir = scan_root / "my-agent"
         agent_dir.mkdir()
-        (agent_dir / "agent.manifest.json").write_text(
-            '{"name": "My Agent", "id": "my-agent", "version": "1.0"}'
-        )
+        (agent_dir / "agent.manifest.json").write_text('{"name": "My Agent", "id": "my-agent", "version": "1.0"}')
         with patch("semeclaw.onboarding.discovery._SCAN_ROOTS", [scan_root]):
             found = discover_generic_agents()
         assert any(a.id == "my-agent" and a.name == "My Agent" for a in found)

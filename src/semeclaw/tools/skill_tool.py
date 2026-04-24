@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from semeclaw.core.plugin_loader import PluginLoader
-from semeclaw.tools.base import BaseTool
 from semeclaw.core.skill_loader import SkillLoader
+from semeclaw.tools.base import BaseTool
 
 if TYPE_CHECKING:
     from semeclaw.utils.config import Config
 
 
-def create_skill_tool(config: "Config") -> BaseTool:
+def create_skill_tool(config: Config) -> BaseTool:
     """Create a skill tool that provides access to available skills.
 
     Args:
@@ -52,9 +52,7 @@ def create_skill_tool(config: "Config") -> BaseTool:
             return skill.content
 
     # Build description with available skills
-    skills_list = "\n".join(
-        [f"  - {skill.id}: {skill.name}" for skill in skills]
-    )
+    skills_list = "\n".join([f"  - {skill.id}: {skill.name}" for skill in skills])
     description = f"""Get the content of a skill. Available skills:
 {skills_list}"""
 

@@ -99,9 +99,7 @@ class GitHubAdapter(Adapter):
             }
             if self.token:
                 headers["Authorization"] = f"Bearer {self.token}"
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url, timeout=15.0, headers=headers
-            )
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=15.0, headers=headers)
         return self._client
 
     async def close(self) -> None:
@@ -205,9 +203,7 @@ class GitHubAdapter(Adapter):
             params: dict[str, Any] = {"state": "all", "per_page": 100}
             if agent_id:
                 params["assignee"] = agent_id
-            r = await client.get(
-                f"/repos/{self.owner}/{self.repo_name}/issues", params=params
-            )
+            r = await client.get(f"/repos/{self.owner}/{self.repo_name}/issues", params=params)
             r.raise_for_status()
             issues = r.json()
             # Filter out pull requests (GitHub returns PRs as issues too)
@@ -284,9 +280,7 @@ class GitHubAdapter(Adapter):
                 payload["assignee"] = assignee
             if milestone:
                 payload["milestone"] = milestone
-            r = await client.post(
-                f"/repos/{self.owner}/{self.repo_name}/issues", json=payload
-            )
+            r = await client.post(f"/repos/{self.owner}/{self.repo_name}/issues", json=payload)
             r.raise_for_status()
             created = r.json()
             logger.info("Created GitHub issue #%s: %s", created.get("number"), title)
@@ -323,9 +317,7 @@ class GitHubAdapter(Adapter):
             logger.error("GitHub update_issue failed: %s", e)
             return False
 
-    async def add_comment(
-        self, issue_number: int | str, body: str
-    ) -> bool:
+    async def add_comment(self, issue_number: int | str, body: str) -> bool:
         issue_number = int(issue_number) if issue_number else 0
         if not self._is_reachable() or not self._repo_ok():
             logger.info("[LOCAL] Comment on GitHub issue #%s: %s", issue_number, body[:60])

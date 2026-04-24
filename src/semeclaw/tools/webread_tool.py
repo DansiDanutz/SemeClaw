@@ -38,7 +38,7 @@ async def webread(url: str, read_provider) -> str:
         return f"Web reading failed: {str(e)}"
 
 
-def create_webread_tool(config: "Config") -> BaseTool | None:
+def create_webread_tool(config: Config) -> BaseTool | None:
     """Create web reading tool if configured.
 
     Args:

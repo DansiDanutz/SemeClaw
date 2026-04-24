@@ -6,12 +6,11 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from semeclaw.server.websocket_worker import WebSocketWorker
     from semeclaw.core.context import SharedContext
 
 
@@ -152,7 +151,7 @@ def create_app(context: SharedContext) -> FastAPI:
             raise HTTPException(status_code=503, detail="Service not fully initialized")
 
         try:
-            from semeclaw.core.events import InboundEvent, CliEventSource
+            from semeclaw.core.events import CliEventSource, InboundEvent
 
             source = CliEventSource()
             event = InboundEvent(
@@ -225,6 +224,6 @@ async def _handle_ws_send(websocket: WebSocket, message_queue: asyncio.Queue) ->
         while True:
             message = await message_queue.get()
             await websocket.send_json(message)
-            logger.debug(f"Sent message via WebSocket")
+            logger.debug("Sent message via WebSocket")
     except Exception as e:
         logger.exception(f"Error sending WebSocket message: {e}")

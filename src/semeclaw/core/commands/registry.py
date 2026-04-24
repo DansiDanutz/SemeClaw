@@ -88,15 +88,15 @@ class CommandRegistry:
             CommandRegistry with HelpCommand, SkillsCommand, and SessionCommand
         """
         from semeclaw.core.commands.handlers import (
-            ContextCommand,
             CompactCommand,
+            ContextCommand,
             GitHubPrCommand,
             HelpCommand,
             PiCompanyCommand,
             PluginsCommand,
             ReviewLoopCommand,
-            SkillsCommand,
             SessionCommand,
+            SkillsCommand,
         )
 
         registry = cls()

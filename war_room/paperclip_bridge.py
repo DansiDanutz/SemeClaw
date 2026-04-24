@@ -20,9 +20,9 @@ except ImportError:
     )
 
 PROJECTS = {
-    "NERVIX":     "nervix",
-    "CrawdBot":   "crawdbot",
-    "MyWork AI":  "mywork-ai",
+    "NERVIX": "nervix",
+    "CrawdBot": "crawdbot",
+    "MyWork AI": "mywork-ai",
     "ZmartyChat": "zmartychat",
     "DansLab OS": "danslab-os",
 }
@@ -30,7 +30,7 @@ PROJECTS = {
 
 class PaperclipBridge:
     """Legacy bridge wrapper around PaperclipAdapter.
-    
+
     Supports mock mode for tests.
     """
 

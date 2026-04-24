@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from semeclaw.utils.config import Config
 
 
-def create_review_loop_tools(config: "Config") -> list[BaseTool]:
+def create_review_loop_tools(config: Config) -> list[BaseTool]:
     """Create tools for review loop management."""
 
     class InstallReviewLoopTool(BaseTool):

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from litellm import acompletion, Choices
+from litellm import Choices, acompletion
 from litellm.types.completion import ChatCompletionMessageParam as Message
 
 if TYPE_CHECKING:
@@ -37,9 +37,7 @@ class ToolCall:
 class LLMProvider:
     """LLM provider using litellm for multi-provider support."""
 
-    def __init__(
-        self, endpoints: list[LLMEndpoint], **kwargs: Any
-    ):
+    def __init__(self, endpoints: list[LLMEndpoint], **kwargs: Any):
         """Initialize LLM provider."""
         self.endpoints = endpoints
         primary = endpoints[0]
@@ -51,7 +49,7 @@ class LLMProvider:
         self._settings = kwargs
 
     @classmethod
-    def from_config(cls, config: "LLMConfig") -> "LLMProvider":
+    def from_config(cls, config: LLMConfig) -> LLMProvider:
         """Create provider from LLMConfig."""
         endpoints = [
             LLMEndpoint(
@@ -69,7 +67,7 @@ class LLMProvider:
         return cls(endpoints=endpoints)
 
     @staticmethod
-    def _endpoint_from_fallback(primary: "LLMConfig", fallback: "LLMFallbackConfig") -> LLMEndpoint:
+    def _endpoint_from_fallback(primary: LLMConfig, fallback: LLMFallbackConfig) -> LLMEndpoint:
         """Resolve fallback config with inherited defaults from the primary endpoint."""
         return LLMEndpoint(
             provider=fallback.provider,

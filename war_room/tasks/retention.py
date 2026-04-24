@@ -1,8 +1,8 @@
 """Retention helpers — soft 100-task cap + over-cap suggestions."""
+
 from __future__ import annotations
 
 from . import _db
-
 
 CAP = 100
 

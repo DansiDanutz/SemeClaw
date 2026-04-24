@@ -15,21 +15,18 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import litellm
-import typer
 from rich.console import Console
-from rich.table import Table
 
 # ---------------------------------------------------------------------------
 # Bootstrap path so this runs from repo root
@@ -40,11 +37,11 @@ DEFAULT_AGENTS = ("research", "strategist", "writer")
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(WAR_ROOM_DIR))  # so local modules are importable directly
 
-from paperclip_bridge import PaperclipBridge, AGENT_ASSIGNEES, load_bridge
-from adapters.paperclip import PaperclipAdapter
 from adapters.multica import MulticaAdapter
-from research_tools import ResearchTools
+from adapters.paperclip import PaperclipAdapter
 from memory import WarRoomMemory
+from paperclip_bridge import AGENT_ASSIGNEES
+from research_tools import ResearchTools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,10 +54,10 @@ console = Console()
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-AGENTS_DIR      = WAR_ROOM_DIR / "agents"
-RESEARCH_DIR    = WAR_ROOM_DIR / "research"
-LOGS_DIR        = WAR_ROOM_DIR / "logs"
-STATE_FILE      = WAR_ROOM_DIR / "shared_state.json"
+AGENTS_DIR = WAR_ROOM_DIR / "agents"
+RESEARCH_DIR = WAR_ROOM_DIR / "research"
+LOGS_DIR = WAR_ROOM_DIR / "logs"
+STATE_FILE = WAR_ROOM_DIR / "shared_state.json"
 TASK_QUEUE_FILE = WAR_ROOM_DIR / "task_queue.json"
 TELEGRAM_CHAT_FILE = ROOT / ".telegram_chat_id"
 
@@ -79,7 +76,7 @@ DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 AGENT_MODELS: dict[str, dict] = {
     # Research: Qwen 3.6 Plus FREE — 1M context, multimodal, best for synthesis
     "research": {
-        "model":    "openrouter/qwen/qwen3.6-plus:free",
+        "model": "openrouter/qwen/qwen3.6-plus:free",
         "api_base": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
         "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",  # from openclaw.json
@@ -88,7 +85,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # Strategist / GSD: Kimi K2.5 — strongest structured reasoning + planning
     "strategist": {
-        "model":    "kimi-k2.5",
+        "model": "kimi-k2.5",
         "api_base": "https://api.moonshot.ai/v1",
         "api_key_env": "MOONSHOT_API_KEY",
         "api_key_fallback": "sk-kimi-TWpgpQOsPq1Qfbhre1wblye1FoRnhhGLfdSgVJaHdPDq0b6T6j4qDYnzfNOflmnx",
@@ -97,7 +94,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # Architect: Z.ai GLM-5 — code-aware architect, 200K context, 1yr subscription
     "architect": {
-        "model":    "glm-5",
+        "model": "glm-5",
         "api_base": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY",
         "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",  # from openclaw.json
@@ -106,7 +103,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # Coder: Z.ai GLM-5 — same subscription, strong at implementation
     "coder": {
-        "model":    "glm-5",
+        "model": "glm-5",
         "api_base": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY",
         "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",
@@ -115,7 +112,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # Writer / Hermes: GPT-5.4 via ChatGPT Pro subscription (local proxy :8995)
     "writer": {
-        "model":    "gpt-5.4",
+        "model": "gpt-5.4",
         "api_base": "http://127.0.0.1:8995/v1",
         "api_key_env": "OPENAI_API_KEY",
         "api_key_fallback": "sk-local",
@@ -124,7 +121,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # Narrator / Host: Gemma 4 local via Ollama — zero-cost, instant narration
     "narrator": {
-        "model":    "ollama/gemma4",
+        "model": "ollama/gemma4",
         "api_base": "http://127.0.0.1:11434",
         "api_key_env": None,
         "api_key_fallback": "ollama",
@@ -133,7 +130,7 @@ AGENT_MODELS: dict[str, dict] = {
     },
     # David (chairman): Gemma 4 local — hosts meetings, fast
     "david": {
-        "model":    "ollama/gemma4",
+        "model": "ollama/gemma4",
         "api_base": "http://127.0.0.1:11434",
         "api_key_env": None,
         "api_key_fallback": "ollama",
@@ -144,7 +141,7 @@ AGENT_MODELS: dict[str, dict] = {
 
 # Fallback if an agent_id isn't in AGENT_MODELS
 _FALLBACK_MODEL_CFG = {
-    "model":    "openrouter/qwen/qwen3.6-plus:free",
+    "model": "openrouter/qwen/qwen3.6-plus:free",
     "api_base": "https://openrouter.ai/api/v1",
     "api_key_env": "OPENROUTER_API_KEY",
     "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",
@@ -169,14 +166,15 @@ def _load_api_keys_from_openclaw():
     """Load provider API keys from openclaw.json into os.environ."""
     try:
         import json as _json
+
         cfg = _json.loads(_OPENCLAW_JSON.read_text())
         providers = cfg.get("models", {}).get("providers", {})
         key_map = {
-            "openrouter":  "OPENROUTER_API_KEY",
-            "moonshot":    "MOONSHOT_API_KEY",
-            "zai":         "ZHIPU_API_KEY",
-            "openai":      "OPENAI_API_KEY",
-            "google":      "GOOGLE_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
+            "moonshot": "MOONSHOT_API_KEY",
+            "zai": "ZHIPU_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "google": "GOOGLE_API_KEY",
         }
         for pname, env_name in key_map.items():
             if not os.environ.get(env_name):
@@ -186,6 +184,7 @@ def _load_api_keys_from_openclaw():
                     logger.debug("Loaded %s from openclaw.json[%s]", env_name, pname)
     except Exception as e:
         logger.debug("openclaw key load: %s", e)
+
 
 _OPENCLAW_JSON = Path.home() / ".openclaw" / "openclaw.json"
 _OPENCLAW_RUNTIME_GLOB = str(Path.home() / ".openclaw" / "openclaw.runtime.json.*")
@@ -210,6 +209,7 @@ def _bootstrap_api_keys() -> None:
     if _OPENCLAW_JSON.exists():
         try:
             import json as _json
+
             cfg = _json.loads(_OPENCLAW_JSON.read_text())
             val = cfg.get(KEY) or cfg.get("env", {}).get(KEY)
             if val and not val.startswith("${"):
@@ -240,10 +240,12 @@ def _bootstrap_api_keys() -> None:
 
     # 3. Latest runtime JSON temp file (openclaw writes these during startup)
     import glob as _glob
+
     runtime_files = sorted(_glob.glob(_OPENCLAW_RUNTIME_GLOB))
     if runtime_files:
         try:
             import json as _json
+
             cfg = _json.loads(Path(runtime_files[-1]).read_text())
             val = cfg.get(KEY) or cfg.get("env", {}).get(KEY)
             if val and not val.startswith("${"):
@@ -253,10 +255,7 @@ def _bootstrap_api_keys() -> None:
         except Exception:
             pass
 
-    logger.warning(
-        "DASHSCOPE_API_KEY not found in any source. "
-        "Set it via: export DASHSCOPE_API_KEY=sk-..."
-    )
+    logger.warning("DASHSCOPE_API_KEY not found in any source. Set it via: export DASHSCOPE_API_KEY=sk-...")
 
 
 # Bootstrap keys immediately at import time
@@ -270,12 +269,11 @@ def _load_model() -> str:
         return DEFAULT_MODEL
     try:
         import yaml
+
         cfg = yaml.safe_load(cfg_path.read_text())
         return cfg.get("model", DEFAULT_MODEL)
     except Exception:
         return DEFAULT_MODEL
-
-
 
 
 def resolve_model(root: Path, model: str | None = None) -> str:
@@ -283,6 +281,8 @@ def resolve_model(root: Path, model: str | None = None) -> str:
     if model:
         return model
     return _load_model()
+
+
 def _load_telegram_creds() -> tuple[str | None, str | None]:
     """
     Load Telegram bot token + Dan's chat ID from multiple fallback sources:
@@ -300,6 +300,7 @@ def _load_telegram_creds() -> tuple[str | None, str | None]:
     if cfg_path.exists():
         try:
             import yaml
+
             cfg = yaml.safe_load(cfg_path.read_text())
             tg = cfg.get("telegram", {})
             bot_token = tg.get("bot_token") or tg.get("token")
@@ -350,6 +351,7 @@ def _load_telegram_creds() -> tuple[str | None, str | None]:
 # Agent definitions (load from markdown files)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class AgentDef:
     id: str
@@ -386,6 +388,7 @@ def load_agent_def(agent_id: str) -> AgentDef:
 # Agents that get access to tools (run_shell, run_code, search, etc.)
 TOOL_ENABLED_AGENTS = {"research", "coder"}
 
+
 async def call_agent(
     agent_id: str,
     task: str,
@@ -399,21 +402,18 @@ async def call_agent(
     Returns the agent's response as a string.
     """
     # Load per-agent model config (ignores the old single-model parameter)
-    mcfg     = _get_model_cfg(agent_id)
+    mcfg = _get_model_cfg(agent_id)
     use_model = model or mcfg["model"]
-    api_base  = mcfg.get("api_base")
-    api_key   = mcfg.get("api_key") or "sk-placeholder"
-    max_tok   = mcfg.get("max_tokens", 4096)
-    temp      = mcfg.get("temperature", 0.3)
+    api_base = mcfg.get("api_base")
+    api_key = mcfg.get("api_key") or "sk-placeholder"
+    max_tok = mcfg.get("max_tokens", 4096)
+    temp = mcfg.get("temperature", 0.3)
 
     agent = load_agent_def(agent_id)
     system = agent["system_prompt"]
     user_msg = task
     if context:
-        user_msg = (
-            f"## Context from previous agents\n\n{context}\n\n"
-            f"---\n\n## Your Task\n\n{task}"
-        )
+        user_msg = f"## Context from previous agents\n\n{context}\n\n---\n\n## Your Task\n\n{task}"
 
     logger.info("🤖 [%s] → %s (base: %s)", agent_id, use_model, (api_base or "")[:40])
 
@@ -448,12 +448,16 @@ async def call_agent(
         logger.warning("⚠️  [%s] %s failed (%s) — falling back to Qwen 3.6 FREE", agent_id, use_model, e)
         # Fallback: Qwen 3.6 Plus FREE via OpenRouter
         use_model = "openrouter/qwen/qwen3.6-plus:free"
-        api_base  = "https://openrouter.ai/api/v1"
-        api_key   = os.environ.get("OPENROUTER_API_KEY", "sk-or-v1-fa790746dcf6b850af34c")
-        response  = await litellm.acompletion(
-            model=use_model, messages=messages, system=system,
-            max_tokens=4096, temperature=0.3,
-            api_base=api_base, api_key=api_key,
+        api_base = "https://openrouter.ai/api/v1"
+        api_key = os.environ.get("OPENROUTER_API_KEY", "sk-or-v1-fa790746dcf6b850af34c")
+        response = await litellm.acompletion(
+            model=use_model,
+            messages=messages,
+            system=system,
+            max_tokens=4096,
+            temperature=0.3,
+            api_base=api_base,
+            api_key=api_key,
         )
 
     result = response.choices[0].message.content or ""
@@ -474,6 +478,7 @@ async def call_agent(
                 tool_result = await tools.search(tool_args.strip('"').strip("'"))
             elif tool_name == "extract":
                 import re
+
                 urls = re.findall(r'https?://[^\s"\']+', tool_args)
                 tool_result = await tools.extract(urls) if urls else "[No URLs found]"
             elif tool_name == "browser_navigate":
@@ -486,10 +491,12 @@ async def call_agent(
                 tool_result = f"[Unknown tool: {tool_name}]"
 
             messages.append({"role": "assistant", "content": result})
-            messages.append({
-                "role": "user",
-                "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue.",
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result from {tool_name}:\n\n{tool_result[:4000]}\n\nContinue.",
+                }
+            )
             response = await _llm_call(messages)
             result = response.choices[0].message.content or ""
             tool_iterations += 1
@@ -507,11 +514,11 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
     import re
 
     tool_patterns = [
-        (r'search\(["\'](.+?)["\']\)',           'search'),
-        (r'extract\((.+?)\)',                    'extract'),
-        (r'browser_navigate\(["\'](.+?)["\']\)', 'browser_navigate'),
-        (r'run_code\((.+?)\)',                   'run_code'),
-        (r'run_shell\(["\'](.+?)["\']\)',        'run_shell'),
+        (r'search\(["\'](.+?)["\']\)', "search"),
+        (r"extract\((.+?)\)", "extract"),
+        (r'browser_navigate\(["\'](.+?)["\']\)', "browser_navigate"),
+        (r"run_code\((.+?)\)", "run_code"),
+        (r'run_shell\(["\'](.+?)["\']\)', "run_shell"),
     ]
 
     for pattern, tool_name in tool_patterns:
@@ -520,7 +527,7 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
             return tool_name, match.group(1)
 
     # XML-style: <tool>search</tool><args>query</args>
-    xml_tool = re.search(r'<tool>(\w+)</tool>\s*<args>(.+?)</args>', response, re.DOTALL)
+    xml_tool = re.search(r"<tool>(\w+)</tool>\s*<args>(.+?)</args>", response, re.DOTALL)
     if xml_tool:
         return xml_tool.group(1), xml_tool.group(2)
 
@@ -530,6 +537,7 @@ def _parse_tool_call(response: str, tools: ResearchTools) -> tuple[str, str] | N
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PipelineResult:
@@ -543,13 +551,13 @@ class PipelineResult:
 
     def to_public(self) -> dict:
         return {
-            "run_id":          self.run_id,
-            "task":            self.task,
-            "agents_run":      self.agents_run,
-            "output_file":     str(self.output_file),
+            "run_id": self.run_id,
+            "task": self.task,
+            "agents_run": self.agents_run,
+            "output_file": str(self.output_file),
             "paperclip_issue": self.paperclip_issue,
-            "multica_issue":   self.multica_issue,
-            "results":         {k: v[:200] + "…" for k, v in self.results.items()},
+            "multica_issue": self.multica_issue,
+            "results": {k: v[:200] + "…" for k, v in self.results.items()},
         }
 
 
@@ -608,7 +616,8 @@ class WarRoomPipeline:
         for agent_id in agents:
             logger.info("▶️  Running agent: %s", agent_id)
             output = await call_agent(
-                agent_id, task,
+                agent_id,
+                task,
                 context=context,
                 model=self.model,
                 tools=research_tools,
@@ -675,7 +684,6 @@ class WarRoomPipeline:
             multica_issue=multica_issue,
             results=self.results,
         )
-
 
     def _build_report(self, task: str, agents: list[str], started: str) -> str:
         lines = [
@@ -762,13 +770,15 @@ class WarRoomPipeline:
             state = {}
         state.setdefault("completed_tasks", [])
         state.setdefault("metrics", {"tasks_run": 0, "tasks_succeeded": 0, "paperclip_issues_created": 0})
-        state["completed_tasks"].append({
-            "run_id":       run_id,
-            "task":         task,
-            "agents":       agents,
-            "issue_id":     issue.get("id") if issue else None,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-        })
+        state["completed_tasks"].append(
+            {
+                "run_id": run_id,
+                "task": task,
+                "agents": agents,
+                "issue_id": issue.get("id") if issue else None,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         state["metrics"]["tasks_run"] += 1
         state["metrics"]["tasks_succeeded"] += 1
         if issue:
@@ -779,12 +789,12 @@ class WarRoomPipeline:
     def _log_run(self, run_id: str, task: str, agents: list[str], started: str, issue: dict | None):
         log_file = LOGS_DIR / f"run-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
         record = {
-            "run_id":    run_id,
-            "task":      task,
-            "agents":    agents,
-            "started":   started,
+            "run_id": run_id,
+            "task": task,
+            "agents": agents,
+            "started": started,
             "completed": datetime.now(timezone.utc).isoformat(),
-            "issue_id":  issue.get("id") if issue else None,
+            "issue_id": issue.get("id") if issue else None,
         }
         with log_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
@@ -793,6 +803,7 @@ class WarRoomPipeline:
 # ---------------------------------------------------------------------------
 # Helpers (module-level so tests can reach them directly)
 # ---------------------------------------------------------------------------
+
 
 def _slugify(value: str, max_len: int = 40) -> str:
     cleaned = "".join(c if c.isalnum() else "-" for c in value.lower())

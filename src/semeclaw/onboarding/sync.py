@@ -115,6 +115,7 @@ def sync_agents(agents: list[DiscoveredAgent], dry_run: bool = False) -> dict[st
 
 def _now_iso() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).isoformat()
 
 

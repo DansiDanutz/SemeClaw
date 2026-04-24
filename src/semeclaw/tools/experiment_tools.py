@@ -9,7 +9,6 @@ Powers the daily autonomous research loop:
 from __future__ import annotations
 
 import csv
-import io
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -238,6 +237,7 @@ class TelegramNotifyTool(BaseTool):
 
         # Convert markdown to Telegram HTML
         from semeclaw.channel.telegram_channel import _md_to_html
+
         html = _md_to_html(args["message"])
 
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"

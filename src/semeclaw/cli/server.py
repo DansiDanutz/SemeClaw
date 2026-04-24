@@ -5,16 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
 
 import click
 
-from semeclaw.utils.config import Config
+from semeclaw.channel.base import Channel
 from semeclaw.core.agent_loader import AgentLoader
 from semeclaw.core.cron_loader import CronLoader
-from semeclaw.channel.base import Channel
 from semeclaw.server.server import Server
-
+from semeclaw.utils.config import Config
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from semeclaw.core.events import EventSource, CronEventSource, AgentEventSource
+from semeclaw.core.events import AgentEventSource, CronEventSource, EventSource
 
 if TYPE_CHECKING:
     from semeclaw.core.session_state import SessionState
@@ -24,7 +24,7 @@ class PromptBuilder:
         """
         self.workspace_path = Path(workspace_path)
 
-    def build(self, state: "SessionState", source: EventSource | None = None) -> str:
+    def build(self, state: SessionState, source: EventSource | None = None) -> str:
         """Build complete system prompt from all layers.
 
         Args:
@@ -56,9 +56,7 @@ class PromptBuilder:
             layers.append(memory_ctx)
 
         # Layer 5: Runtime context
-        runtime = self._build_runtime_context(
-            state.agent.agent_def.id, time.time()
-        )
+        runtime = self._build_runtime_context(state.agent.agent_def.id, time.time())
         if runtime:
             layers.append(runtime)
 
@@ -211,7 +209,10 @@ class PromptBuilder:
         if not sections:
             return None
 
-        return "## Your Memory\n\nYou have stored knowledge available. Use `memory_search` and `memory_recall` to access it.\n\n" + "\n".join(sections)
+        return (
+            "## Your Memory\n\nYou have stored knowledge available. Use `memory_search` and `memory_recall` to access it.\n\n"
+            + "\n".join(sections)
+        )
 
     def _build_runtime_context(self, agent_id: str, timestamp: float) -> str | None:
         """Build runtime context with current agent and timestamp info.

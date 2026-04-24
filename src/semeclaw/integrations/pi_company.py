@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 PACKAGE_ENV_VAR = "SEMECLAW_PI_COMPANY_PACKAGE_PATH"
 
 
@@ -51,7 +50,7 @@ def candidate_package_paths(workspace: Path) -> list[Path]:
             current / "packages" / "pi-company",
             parent / "pi-mono" / "packages" / "pi-company",
             parent / "packages" / "pi-company",
-            Path("/Users/davidai/pi-mono/packages/pi-company"),
+            # (removed developer-specific /Users/davidai/... fallback during prod hardening)
         ]
     )
 
@@ -118,8 +117,7 @@ def bootstrap_repo(
     resolved_package = resolve_package_path(workspace, package_path)
     if resolved_package is None:
         raise FileNotFoundError(
-            "Could not find pi-company package. "
-            f"Set {PACKAGE_ENV_VAR} or pass an explicit package_path."
+            f"Could not find pi-company package. Set {PACKAGE_ENV_VAR} or pass an explicit package_path."
         )
 
     settings_path = target / ".pi" / "settings.json"
@@ -155,9 +153,7 @@ def format_status(status: PiCompanyStatus) -> str:
         f"Package configured: {'yes' if status.package_configured else 'no'}",
     ]
     if status.package_path is None:
-        lines.append(
-            f"Hint: set {PACKAGE_ENV_VAR} or place pi-company at ../pi-mono/packages/pi-company"
-        )
+        lines.append(f"Hint: set {PACKAGE_ENV_VAR} or place pi-company at ../pi-mono/packages/pi-company")
     return "\n".join(lines)
 
 

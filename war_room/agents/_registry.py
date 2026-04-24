@@ -17,6 +17,7 @@ Schema (frontmatter fields):
 
 System prompt = everything after the closing `---` of the frontmatter.
 """
+
 from __future__ import annotations
 
 import logging
@@ -75,6 +76,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     body = text[end + 4 :].lstrip("\n")
     try:
         import yaml  # type: ignore
+
         meta = yaml.safe_load(fm_text) or {}
     except Exception:
         # Tiny fallback parser — handles flat key:value, lists, nested one level
@@ -139,7 +141,9 @@ def _load_one(path: Path) -> Agent | None:
         tools=list(meta.get("tools", []) or []),
         adapter=meta.get("adapter") if isinstance(meta.get("adapter"), dict) else None,
         system_prompt=body.strip(),
-        source_path=str(path.relative_to(_AGENTS_DIR.parent.parent)) if _AGENTS_DIR.parent.parent in path.parents else str(path),
+        source_path=str(path.relative_to(_AGENTS_DIR.parent.parent))
+        if _AGENTS_DIR.parent.parent in path.parents
+        else str(path),
     )
 
 

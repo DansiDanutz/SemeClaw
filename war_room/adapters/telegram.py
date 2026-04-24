@@ -50,10 +50,7 @@ class TelegramAdapter(Adapter):
         resolved_token = (
             token
             if token is not None
-            else (
-                os.environ.get("TELEGRAM_BOT_TOKEN", "")
-                or os.environ.get("SEMECLAW_BOT_TOKEN", "")
-            )
+            else (os.environ.get("TELEGRAM_BOT_TOKEN", "") or os.environ.get("SEMECLAW_BOT_TOKEN", ""))
         )
         api_base = (base_url or DEFAULT_BASE).rstrip("/")
         resolved_base = f"{api_base}/bot{resolved_token}" if resolved_token else api_base
@@ -164,7 +161,9 @@ class TelegramAdapter(Adapter):
             payload["reply_markup"] = json.dumps(reply_markup)
 
         if not self._has_token():
-            self._outbox.append({"type": "message", "payload": payload, "queued_at": datetime.now(timezone.utc).isoformat()})
+            self._outbox.append(
+                {"type": "message", "payload": payload, "queued_at": datetime.now(timezone.utc).isoformat()}
+            )
             self._save_local_state()
             logger.info("[LOCAL] Queued Telegram message for chat %s", chat_id)
             return {"queued": True}
@@ -189,9 +188,7 @@ class TelegramAdapter(Adapter):
         button_text: str = "🚀 Open War Room",
     ) -> dict | None:
         """Send a message with an inline button linking to a URL."""
-        reply_markup = {
-            "inline_keyboard": [[{"text": button_text, "url": url}]]
-        }
+        reply_markup = {"inline_keyboard": [[{"text": button_text, "url": url}]]}
         return await self.send_message(
             chat_id=chat_id,
             text=text,
@@ -278,12 +275,14 @@ class TelegramAdapter(Adapter):
 
         cmd, args = self.process_command(text)
 
-        self._recent_commands.append({
-            "chat_id": chat_id,
-            "command": cmd or "text",
-            "args": args,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._recent_commands.append(
+            {
+                "chat_id": chat_id,
+                "command": cmd or "text",
+                "args": args,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         self._recent_commands = self._recent_commands[-100:]  # keep last 100
         self._save_local_state()
 

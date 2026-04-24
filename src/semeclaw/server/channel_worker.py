@@ -6,8 +6,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from semeclaw.server.worker import Worker
 from semeclaw.core.events import InboundEvent
+from semeclaw.server.worker import Worker
 
 if TYPE_CHECKING:
     from semeclaw.channel.base import Channel
@@ -39,10 +39,7 @@ class ChannelWorker(Worker):
 
         try:
             # Create a task for each channel
-            tasks = [
-                asyncio.create_task(self._run_channel(channel))
-                for channel in self.channels.values()
-            ]
+            tasks = [asyncio.create_task(self._run_channel(channel)) for channel in self.channels.values()]
 
             # Wait for all to complete (they should block indefinitely)
             await asyncio.gather(*tasks)
@@ -72,9 +69,7 @@ class ChannelWorker(Worker):
                     content=content,
                 )
                 await self.eventbus.publish(event)
-                self.logger.debug(
-                    f"Published inbound event from {channel.platform_name}: {event.session_id}"
-                )
+                self.logger.debug(f"Published inbound event from {channel.platform_name}: {event.session_id}")
 
             # Run the channel with the callback
             await channel.run(on_message)

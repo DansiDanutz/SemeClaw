@@ -1,6 +1,6 @@
 [project]
 name = "semeclaw"
-version = "0.7.14"
+version = "0.8.9"
 description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
@@ -36,8 +36,10 @@ dependencies = [
     "itsdangerous>=2.0.0",
     "kokoro-onnx>=0.5.0",
     "faster-whisper>=1.1.0",
+    "pyjwt>=2.8.0",
     "soundfile>=0.12.0",
     "onnxruntime>=1.17.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [build-system]
@@ -49,3 +51,85 @@ packages = ["src/semeclaw"]
 
 [project.scripts]
 semeclaw = "semeclaw.cli.main:app"
+
+[dependency-groups]
+# Tooling installed in CI for lint/type-check — not shipped in the wheel.
+# CI installs with: `uv sync --frozen --group dev || uv sync --group dev`.
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+
+[tool.ruff]
+# Keep permissive to start — existing code wasn't linted strictly.
+# Tighten the selected rules over time.
+line-length = 120
+target-version = "py310"
+exclude = [
+    "nervix_platform/data",
+    "war_room/research/saved",
+    "experimental",
+    "default_workspace",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "B",   # flake8-bugbear (subset of bug patterns)
+    "UP",  # pyupgrade (keeps syntax modern)
+    "I",   # import sorting
+]
+ignore = [
+    "E501",  # line length handled by formatter
+    "B008",  # FastAPI's Depends() pattern needs function defaults
+    "B904",  # raise ... from err — style, not bug
+    # The following were all pre-existing issues when ruff was first enforced.
+    # Left as ignores so new code is kept clean without a tree-wide refactor.
+    # Tighten by removing individual codes and fixing call sites over time.
+    "E402",  # module-level import not at top (common with sys.path bootstrap)
+    "E701",  # multiple statements on one line (colon)
+    "E702",  # multiple statements on one line (semicolon)
+    "E731",  # lambda assignments (style)
+    "E741",  # ambiguous variable names
+    "F841",  # local variable assigned but never used
+    "B005",  # strip with multi-characters (intentional in a few places)
+    "B007",  # unused loop control variable
+    "B905",  # zip without explicit strict=
+    "F821",  # undefined name (raised by test fixtures imported from conftest)
+    "W293",  # blank line with whitespace
+]
+
+[tool.ruff.lint.per-file-ignores]
+"war_room/tests/*" = ["B011"]  # assert False is fine in tests
+"tests/*" = ["B011"]
+
+[tool.ruff.format]
+# Black-compatible defaults; no action needed
+
+[tool.mypy]
+python_version = "3.10"
+# Start lax — gradual typing. Ratchet up later.
+ignore_missing_imports = true
+warn_unused_ignores = false
+# Only error on things that definitely matter:
+warn_return_any = false
+warn_unreachable = true
+no_implicit_optional = true
+strict_optional = false
+# Skip the generated / heavy areas for now
+exclude = [
+    "nervix_platform/data",
+    "experimental",
+    "default_workspace",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:stripe.*",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::DeprecationWarning:jwt.*",
+]

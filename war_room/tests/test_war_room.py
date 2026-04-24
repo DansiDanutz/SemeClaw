@@ -7,13 +7,9 @@ Run:
   python -m pytest war_room/tests/ -v
 """
 
-import asyncio
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,13 +17,13 @@ import pytest
 WAR_ROOM_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(WAR_ROOM_DIR))
 
-from paperclip_bridge import PaperclipBridge, PROJECTS, AGENT_ASSIGNEES
+from paperclip_bridge import AGENT_ASSIGNEES, PROJECTS, PaperclipBridge
 from research_tools import ResearchTools
-
 
 # ===========================================================================
 # Paperclip Bridge Tests
 # ===========================================================================
+
 
 class TestPaperclipBridge:
     """Tests for PaperclipBridge in mock mode."""
@@ -189,6 +185,7 @@ class TestPaperclipBridge:
 # Research Tools Tests
 # ===========================================================================
 
+
 class TestResearchTools:
     """Tests for ResearchTools."""
 
@@ -263,12 +260,14 @@ class TestResearchTools:
 # War Room Pipeline Helper Tests
 # ===========================================================================
 
+
 class TestAgentDefs:
     """Tests for agent definition loading."""
 
     def test_load_agent_def_research(self):
         """Research agent def loads correctly."""
         from war_room.war_room import load_agent_def
+
         agent = load_agent_def("research")
         assert agent["id"] == "research"
         assert "system_prompt" in agent
@@ -277,6 +276,7 @@ class TestAgentDefs:
     def test_load_agent_def_architect(self):
         """Architect agent def loads correctly."""
         from war_room.war_room import load_agent_def
+
         agent = load_agent_def("architect")
         assert agent["id"] == "architect"
         assert "CTO" in agent["system_prompt"]
@@ -284,6 +284,7 @@ class TestAgentDefs:
     def test_load_agent_def_strategist(self):
         """Strategist agent def loads correctly."""
         from war_room.war_room import load_agent_def
+
         agent = load_agent_def("strategist")
         assert agent["id"] == "strategist"
         assert "Strategist" in agent["system_prompt"]
@@ -291,6 +292,7 @@ class TestAgentDefs:
     def test_load_agent_def_writer(self):
         """Writer agent def loads correctly."""
         from war_room.war_room import load_agent_def
+
         agent = load_agent_def("writer")
         assert agent["id"] == "writer"
         assert "Writer" in agent["system_prompt"]
@@ -298,6 +300,7 @@ class TestAgentDefs:
     def test_load_agent_def_not_found(self):
         """Loading non-existent agent raises FileNotFoundError."""
         from war_room.war_room import load_agent_def
+
         with pytest.raises(FileNotFoundError):
             load_agent_def("nonexistent_agent")
 
@@ -308,8 +311,11 @@ class TestPipelineHelpers:
     def test_parse_writer_output_with_title(self):
         """Parse writer output with explicit title."""
         from war_room.war_room import WarRoomPipeline
+
         pipeline = WarRoomPipeline()
-        writer_output = "Title: Implement new feature X\n\nDescription of the feature.\n\n- [ ] Write tests\n- [ ] Deploy"
+        writer_output = (
+            "Title: Implement new feature X\n\nDescription of the feature.\n\n- [ ] Write tests\n- [ ] Deploy"
+        )
         title, description, ac = pipeline._parse_writer_output(writer_output, "fallback")
         assert title == "Implement new feature X"
         assert len(ac) == 2
@@ -319,6 +325,7 @@ class TestPipelineHelpers:
     def test_parse_writer_output_fallback(self):
         """Parse writer output without title falls back to task."""
         from war_room.war_room import WarRoomPipeline
+
         pipeline = WarRoomPipeline()
         title, description, ac = pipeline._parse_writer_output("", "My Task")
         assert "[War Room] My Task" in title
@@ -328,6 +335,7 @@ class TestPipelineHelpers:
     def test_build_report(self):
         """Report building includes all agent outputs."""
         from war_room.war_room import WarRoomPipeline
+
         pipeline = WarRoomPipeline()
         pipeline.results = {
             "research": "Research findings here",
@@ -345,6 +353,7 @@ class TestPipelineHelpers:
 # ===========================================================================
 # Config Tests
 # ===========================================================================
+
 
 class TestConfig:
     """Tests for war_room config loading."""
@@ -366,6 +375,7 @@ class TestConfig:
     def test_load_bridge_reads_config(self):
         """load_bridge reads config.json."""
         from paperclip_bridge import load_bridge
+
         bridge = load_bridge(workspace_path=WAR_ROOM_DIR.parent)
         # Bridge should be configured from config
         assert bridge.base_url == "http://127.0.0.1:3100"
@@ -375,12 +385,14 @@ class TestConfig:
 # Default Model Test
 # ===========================================================================
 
+
 class TestDefaultModel:
     """Tests for the default model configuration."""
 
     def test_default_model_is_qwen(self):
         """Default model is qwen3.6-plus, not Claude."""
         from war_room.war_room import DEFAULT_MODEL
+
         assert "qwen3.6-plus" in DEFAULT_MODEL
         assert "claude" not in DEFAULT_MODEL.lower()
         assert "dashscope" in DEFAULT_MODEL.lower()
@@ -390,12 +402,14 @@ class TestDefaultModel:
 # Memory Tests
 # ===========================================================================
 
+
 class TestWarRoomMemory:
     """Tests for the cross-run memory system."""
 
     @pytest.fixture
     def mem(self, tmp_path):
         from memory import WarRoomMemory
+
         return WarRoomMemory(tmp_path / "memory")
 
     def test_save_and_load_all(self, mem):
@@ -462,18 +476,21 @@ class TestWarRoomMemory:
 # Coder Agent Tests
 # ===========================================================================
 
+
 class TestCoderAgent:
     """Tests for the Coder agent definition."""
 
     def test_coder_agent_def_exists(self):
         """coder.md agent definition file exists."""
         from war_room.war_room import AGENTS_DIR
+
         coder_path = AGENTS_DIR / "coder.md"
         assert coder_path.exists(), "war_room/agents/coder.md not found"
 
     def test_coder_agent_loadable(self):
         """Coder agent definition can be loaded and has a system prompt."""
         from war_room.war_room import load_agent_def
+
         agent = load_agent_def("coder")
         assert "system_prompt" in agent
         assert len(agent["system_prompt"]) > 100
@@ -482,6 +499,7 @@ class TestCoderAgent:
     def test_coder_in_tool_enabled_agents(self):
         """Coder is in TOOL_ENABLED_AGENTS so it gets shell/code access."""
         from war_room.war_room import TOOL_ENABLED_AGENTS
+
         assert "coder" in TOOL_ENABLED_AGENTS
 
 
@@ -489,12 +507,14 @@ class TestCoderAgent:
 # Telegram Credential Tests
 # ===========================================================================
 
+
 class TestTelegramCreds:
     """Tests for the multi-source Telegram credential loader."""
 
     def test_load_creds_returns_tuple(self):
         """_load_telegram_creds always returns a 2-tuple."""
         from war_room.war_room import _load_telegram_creds
+
         result = _load_telegram_creds()
         assert isinstance(result, tuple)
         assert len(result) == 2
@@ -502,7 +522,9 @@ class TestTelegramCreds:
     def test_load_creds_from_yaml(self, tmp_path):
         """Creds are read from default_workspace/config.yaml telegram section."""
         import yaml
+
         from war_room import war_room as wr
+
         # Function looks for ROOT / "default_workspace" / "config.yaml"
         ws_dir = tmp_path / "default_workspace"
         ws_dir.mkdir()

@@ -17,6 +17,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed so check_version_bumped can see origin/main
+
+      - name: Enforce version bump (PRs only)
+        if: github.event_name == 'pull_request'
+        run: bash scripts/check_version_bumped.sh origin/${{ github.base_ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -47,12 +53,12 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: uv sync --frozen || uv sync
+        run: uv sync --frozen --group dev || uv sync --group dev
 
       - name: Lint with ruff
         run: |
-          uv run ruff check src/ war_room/ || true
-          uv run ruff format --check src/ war_room/ || true
+          uv run ruff check src/ war_room/ adclaw/ nervix_platform/
+          uv run ruff format --check src/ war_room/ adclaw/ nervix_platform/
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -106,7 +112,12 @@ jobs:
           echo "bump_version OK"
 
       - name: Test — NERVIX platform
-        run: uv run pytest nervix_platform/tests/ -q
+        run: |
+          if [ -d nervix_platform/tests ] && compgen -G "nervix_platform/tests/test_*.py" > /dev/null; then
+            uv run pytest nervix_platform/tests/ -q
+          else
+            echo "No NERVIX platform tests yet — skipping."
+          fi
 
   docker-build:
     runs-on: ubuntu-latest

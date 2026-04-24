@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

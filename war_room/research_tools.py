@@ -16,18 +16,15 @@ Usage (from war_room.py):
 """
 
 import asyncio
-import json
 import logging
-import subprocess
 import sys
-from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("war_room.research_tools")
 
 # ---------------------------------------------------------------------------
 # Web Search (via curl to a public search API or via hermes web_search)
 # ---------------------------------------------------------------------------
+
 
 class ResearchTools:
     """Tools available to the Research Agent during pipeline runs."""
@@ -45,6 +42,7 @@ class ResearchTools:
         try:
             # Use DuckDuckGo HTML search via curl
             import httpx
+
             async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
                 r = await client.get(
                     "https://html.duckduckgo.com/html/",
@@ -53,7 +51,9 @@ class ResearchTools:
                 )
                 # Parse results from HTML
                 from html.parser import HTMLParser
+
                 results = []
+
                 class DDGParser(HTMLParser):
                     def __init__(self):
                         super().__init__()
@@ -67,10 +67,15 @@ class ResearchTools:
 
                     def handle_starttag(self, tag, attrs):
                         attrs_dict = dict(attrs)
-                        if tag == "a" and "class" in attrs_dict and "result__snippet" not in attrs_dict.get("class", ""):
+                        if (
+                            tag == "a"
+                            and "class" in attrs_dict
+                            and "result__snippet" not in attrs_dict.get("class", "")
+                        ):
                             href = attrs_dict.get("href", "")
                             if href.startswith("//duckduckgo.com/l/?uddg=") or href.startswith("/"):
-                                from urllib.parse import unquote, parse_qs, urlparse
+                                from urllib.parse import parse_qs, unquote, urlparse
+
                                 if "uddg" in href:
                                     qs = parse_qs(urlparse(href).query)
                                     self._current_url = unquote(qs["uddg"][0])
@@ -82,6 +87,7 @@ class ResearchTools:
 
                 # Simpler approach: use regex to extract results
                 import re
+
                 html = r.text
                 # Find result links and snippets
                 title_pattern = re.compile(r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', re.DOTALL)
@@ -90,17 +96,19 @@ class ResearchTools:
                 titles = title_pattern.findall(html)
                 snippets = snippet_pattern.findall(html)
 
-                for i, (href, title) in enumerate(titles[:self.max_search_results]):
+                for i, (href, title) in enumerate(titles[: self.max_search_results]):
                     # Clean title
-                    title = re.sub(r'<[^>]+>', '', title).strip()
+                    title = re.sub(r"<[^>]+>", "", title).strip()
                     snippet = ""
                     if i < len(snippets):
-                        snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
-                    results.append({
-                        "title": title,
-                        "url": href,
-                        "snippet": snippet,
-                    })
+                        snippet = re.sub(r"<[^>]+>", "", snippets[i]).strip()
+                    results.append(
+                        {
+                            "title": title,
+                            "url": href,
+                            "snippet": snippet,
+                        }
+                    )
 
                 if not results:
                     # Fallback: return search URL and suggest manual research
@@ -111,7 +119,7 @@ class ResearchTools:
                 for i, r in enumerate(results, 1):
                     lines.append(f"{i}. {r['title']}")
                     lines.append(f"   URL: {r['url']}")
-                    if r['snippet']:
+                    if r["snippet"]:
                         lines.append(f"   {r['snippet']}")
                     lines.append("")
                 return "\n".join(lines)
@@ -131,6 +139,7 @@ class ResearchTools:
         for url in urls:
             try:
                 import httpx
+
                 async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
                     r = await client.get(
                         url,
@@ -140,8 +149,11 @@ class ResearchTools:
 
                     # Try markitdown for clean HTML→Markdown
                     try:
+                        import os
+                        import tempfile
+
                         from markitdown import MarkItDown
-                        import tempfile, os
+
                         with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
                             f.write(html)
                             tmp = f.name
@@ -159,6 +171,7 @@ class ResearchTools:
                     # Try trafilatura for clean extraction
                     try:
                         import trafilatura
+
                         extracted = trafilatura.extract(html, include_comments=False, include_tables=True)
                         if extracted:
                             results.append({"url": url, "title": url, "content": extracted[:3000]})
@@ -168,10 +181,11 @@ class ResearchTools:
 
                     # Fallback: simple HTML-to-text
                     import re
-                    text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
-                    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
-                    text = re.sub(r'<[^>]+>', ' ', text)
-                    text = re.sub(r'\s+', ' ', text).strip()
+
+                    text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+                    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                    text = re.sub(r"<[^>]+>", " ", text)
+                    text = re.sub(r"\s+", " ", text).strip()
                     results.append({"url": url, "title": url, "content": text[:3000]})
 
             except Exception as e:
@@ -194,6 +208,7 @@ class ResearchTools:
         logger.info("🌐 Navigating to: %s", url)
         try:
             import httpx
+
             async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
                 r = await client.get(
                     url,
@@ -201,13 +216,17 @@ class ResearchTools:
                 )
                 html = r.text
                 import re
-                title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.DOTALL | re.IGNORECASE)
+
+                title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.DOTALL | re.IGNORECASE)
                 title = title_match.group(1).strip() if title_match else url
 
                 # Try markitdown for rich HTML→Markdown
                 try:
+                    import os
+                    import tempfile
+
                     from markitdown import MarkItDown
-                    import tempfile, os
+
                     with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
                         f.write(html)
                         tmp = f.name
@@ -222,10 +241,10 @@ class ResearchTools:
                     pass
 
                 # Fallback: strip HTML
-                text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
-                text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
-                text = re.sub(r'<[^>]+>', ' ', text)
-                text = re.sub(r'\s+', ' ', text).strip()
+                text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+                text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<[^>]+>", " ", text)
+                text = re.sub(r"\s+", " ", text).strip()
                 return f"Title: {title}\nURL: {url}\n\n{text[:5000]}"
         except Exception as e:
             return f"[Navigation failed: {e}]"
@@ -238,6 +257,7 @@ class ResearchTools:
         logger.info("📎 Converting document: %s", file_path)
         try:
             from pathlib import Path
+
             p = Path(file_path).expanduser().resolve()
             if not p.exists():
                 return f"[File not found: {file_path}]"
@@ -245,13 +265,14 @@ class ResearchTools:
                 return f"[Not a file: {file_path}]"
 
             from markitdown import MarkItDown
+
             md = MarkItDown()
             result = md.convert(str(p))
             text = result.text_content or ""
             if not text.strip():
                 return f"[No extractable content from {p.name}]"
             if len(text) > 50_000:
-                text = text[:50_000] + f"\n\n... [truncated at 50,000 chars]"
+                text = text[:50_000] + "\n\n... [truncated at 50,000 chars]"
             return text
         except ImportError:
             return "[markitdown not installed. Run: pip install markitdown]"
@@ -266,7 +287,9 @@ class ResearchTools:
         logger.info("🐍 Running code (%d chars)", len(python_code))
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-c", python_code,
+                sys.executable,
+                "-c",
+                python_code,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

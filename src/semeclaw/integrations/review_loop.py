@@ -7,7 +7,6 @@ from pathlib import Path
 
 import yaml
 
-
 DEFAULT_REVIEW_LOOP_SCHEDULE = "0 9 * * 1-5"
 
 

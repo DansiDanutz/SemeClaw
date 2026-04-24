@@ -2,6 +2,7 @@
 
 Uses winmm.dll via ctypes — no extra dependencies on Windows.
 """
+
 from __future__ import annotations
 
 import ctypes

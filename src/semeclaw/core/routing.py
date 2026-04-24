@@ -41,9 +41,7 @@ class RoutingTable:
         self.bindings: list[Binding] = []
         self.logger = logging.getLogger(__name__)
 
-    def add_binding(
-        self, agent_id: str, pattern: str | None = None, tier: int = 0
-    ) -> None:
+    def add_binding(self, agent_id: str, pattern: str | None = None, tier: int = 0) -> None:
         """Add a binding to the routing table.
 
         Args:

@@ -61,10 +61,11 @@ def _extract_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         return {}, text
     try:
         import yaml
+
         front = yaml.safe_load(m.group(1)) or {}
     except Exception:
         front = {}
-    body = text[m.end():]
+    body = text[m.end() :]
     return front, body
 
 
@@ -74,6 +75,7 @@ def _build_note(title: str, body: str, frontmatter: dict[str, Any] | None = None
     fm.setdefault("created_at", datetime.now(timezone.utc).isoformat())
     try:
         import yaml
+
         fm_text = yaml.safe_dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     except Exception:
         fm_text = json.dumps(fm, indent=2)
@@ -125,6 +127,7 @@ class ObsidianAdapter(Adapter):
             return False
         try:
             import socket
+
             parsed = httpx.URL(self.api_url)
             host = parsed.host
             port = parsed.port or 80
@@ -196,13 +199,15 @@ class ObsidianAdapter(Adapter):
             try:
                 text = path.read_text(encoding="utf-8")
                 front, body = _extract_frontmatter(text)
-                notes.append({
-                    "filename": path.name,
-                    "path": str(path.relative_to(target)),
-                    "title": front.get("title", path.stem),
-                    "frontmatter": front,
-                    "body": body.strip(),
-                })
+                notes.append(
+                    {
+                        "filename": path.name,
+                        "path": str(path.relative_to(target)),
+                        "title": front.get("title", path.stem),
+                        "frontmatter": front,
+                        "body": body.strip(),
+                    }
+                )
             except Exception as e:
                 logger.debug("Could not read note %s: %s", path, e)
         return notes
@@ -310,14 +315,16 @@ class ObsidianAdapter(Adapter):
             try:
                 text = path.read_text(encoding="utf-8")
                 front, body = _extract_frontmatter(text)
-                notes.append({
-                    "id": str(path),
-                    "title": front.get("title", path.stem),
-                    "path": str(path),
-                    "frontmatter": front,
-                    "body": body.strip(),
-                    "platform": self.name,
-                })
+                notes.append(
+                    {
+                        "id": str(path),
+                        "title": front.get("title", path.stem),
+                        "path": str(path),
+                        "frontmatter": front,
+                        "body": body.strip(),
+                        "platform": self.name,
+                    }
+                )
             except Exception:
                 continue
         return notes

@@ -1,7 +1,5 @@
 """Brave Search provider implementation."""
 
-from typing import Any
-
 import httpx
 
 from semeclaw.provider.web_search.base import SearchResult, WebSearchProvider

@@ -1,9 +1,7 @@
 """Tests for the War Room dashboard server endpoints."""
 
-import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,12 +14,13 @@ sys.path.insert(0, str(ROOT / "war_room" / "dashboard"))
 
 os.chdir(str(ROOT))
 
-from war_room.dashboard.server import app, RESEARCH_DIR, STATE_FILE
+from war_room.dashboard.server import app
 
 
 @pytest.fixture
 def client(tmp_path):
     from starlette.testclient import TestClient
+
     # Isolate research dir and state file for tests
     with patch("war_room.dashboard.server.RESEARCH_DIR", tmp_path / "research"):
         with patch("war_room.dashboard.server.STATE_FILE", tmp_path / "state.json"):
@@ -64,12 +63,13 @@ def test_meeting_finalize_appends_qa_and_verdict(client, tmp_path):
     report.write_text("# Test Report\n\nBody here.\n", encoding="utf-8")
 
     with patch("war_room.dashboard.server._call_openrouter", return_value="Looks good.\n\nVERDICT: CORRECT — proceed"):
-        r = client.post("/api/meeting/finalize", json={
-            "name": "test-report.md",
-            "qa_pairs": [
-                {"question": "How long?", "responder": "GSD", "response": "6 weeks."}
-            ],
-        })
+        r = client.post(
+            "/api/meeting/finalize",
+            json={
+                "name": "test-report.md",
+                "qa_pairs": [{"question": "How long?", "responder": "GSD", "response": "6 weeks."}],
+            },
+        )
 
     assert r.status_code == 200
     data = r.json()

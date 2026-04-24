@@ -1,6 +1,5 @@
 """Tests for agent manifest, embed endpoints, and bearer auth."""
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -20,6 +19,7 @@ from war_room.dashboard.server import app
 @pytest.fixture
 def client():
     from starlette.testclient import TestClient
+
     with TestClient(app) as c:
         yield c
 
@@ -55,16 +55,20 @@ def test_embed_returns_iframe_html(client):
 
 def test_write_endpoints_open_when_no_api_key(client):
     """If SEMECLAW_API_KEY is unset, writes should succeed without auth."""
-    with patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""), \
-         patch("war_room.dashboard.server._build_meeting_mp3", return_value=None):
+    with (
+        patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._build_meeting_mp3", return_value=None),
+    ):
         r = client.post("/api/meeting/pin", params={"name": "x.md"})
         # _build_meeting_mp3 returns None for missing report → 500
         assert r.status_code in (200, 500)
 
 
 def test_write_endpoints_require_bearer_when_key_set(client):
-    with patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"), \
-         patch("war_room.dashboard.server._build_meeting_mp3", return_value=None):
+    with (
+        patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"),
+        patch("war_room.dashboard.server._build_meeting_mp3", return_value=None),
+    ):
         # No auth header
         r = client.post("/api/meeting/pin", params={"name": "x.md"})
         assert r.status_code == 401

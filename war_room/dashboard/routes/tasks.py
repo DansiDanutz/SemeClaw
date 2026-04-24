@@ -8,6 +8,7 @@ POST /api/tasks/{task_id}/dialog   regenerate (bumps version)
 GET  /api/tasks/quota              {tenant_id, cap, active, archived, available, over_cap}
 POST /api/tasks/gc                 enforce retention (archives oldest beyond cap)
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from war_room.dashboard.routes.deps import _tenant_id
-from war_room.tasks import _db, sources, dialog as _dialog, retention, intervene as _intervene
+from war_room.tasks import _db, retention, sources
+from war_room.tasks import dialog as _dialog
+from war_room.tasks import intervene as _intervene
 
 logger = logging.getLogger("war_room.dashboard.tasks")
 router = APIRouter(tags=["tasks"])
@@ -27,9 +30,7 @@ def _err(msg: str, code: int = 500):
 
 
 @router.get("/api/tasks")
-async def api_list_tasks(request: Request,
-                         status: str | None = None,
-                         limit: int = 100):
+async def api_list_tasks(request: Request, status: str | None = None, limit: int = 100):
     tenant = _tenant_id(request)
     try:
         rows = await _db.list_tasks(tenant_id=tenant, status=status, limit=limit)
@@ -51,6 +52,7 @@ async def api_create_task(request: Request):
     if not title:
         return _err("title is required", 400)
     import uuid
+
     sid = body.get("source_id") or f"manual-{uuid.uuid4().hex[:8]}"
     try:
         task_id = await _db.upsert_task(
@@ -173,8 +175,13 @@ async def api_list_interventions(task_id: str):
         if not d:
             return {"ok": True, "interventions": []}
         items = await _db.list_interventions(d["id"])
-        return {"ok": True, "dialog_id": d["id"], "version": d.get("version"),
-                "count": len(items), "interventions": items}
+        return {
+            "ok": True,
+            "dialog_id": d["id"],
+            "version": d.get("version"),
+            "count": len(items),
+            "interventions": items,
+        }
     except Exception as e:
         return _err(str(e))
 

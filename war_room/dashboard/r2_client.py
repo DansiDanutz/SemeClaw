@@ -5,11 +5,11 @@ Minimal R2 client for serving assets from the semeclaw-assets bucket.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 
 def get_r2_client():
     import boto3
+
     return boto3.client(
         "s3",
         endpoint_url=os.environ["R2_ENDPOINT_URL"],
@@ -18,7 +18,7 @@ def get_r2_client():
     )
 
 
-def generate_presigned_url(key: str, expiration: int = 3600) -> Optional[str]:
+def generate_presigned_url(key: str, expiration: int = 3600) -> str | None:
     """Generate a presigned GET URL for an R2 object."""
     try:
         client = get_r2_client()

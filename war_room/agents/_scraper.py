@@ -10,6 +10,7 @@ Public surface:
     async def scrape_url(url, max_chars=8000) -> ScrapeResult
     async def scrape_batch(urls, max_chars=6000) -> list[ScrapeResult]
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -105,9 +106,7 @@ async def scrape_url(url: str, max_chars: int = 8000) -> ScrapeResult:
 
     fetch_url = _github_readme_url(url) or url
     try:
-        async with httpx.AsyncClient(
-            timeout=15.0, follow_redirects=True, headers={"User-Agent": _UA}
-        ) as c:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={"User-Agent": _UA}) as c:
             r = await c.get(fetch_url)
             if r.status_code in (401, 402, 403):
                 return ScrapeResult(url=url, flag="PAYWALL", error=f"http {r.status_code}")

@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from semeclaw.utils.def_loader import parse_definition, discover_definitions
+from semeclaw.utils.def_loader import discover_definitions, parse_definition
 
 
 class SkillDef(BaseModel):
@@ -80,9 +80,7 @@ class SkillLoader:
         return None
 
     @staticmethod
-    def _parse_skill_def(
-        skill_id: str, frontmatter: dict[str, Any], body: str
-    ) -> SkillDef:
+    def _parse_skill_def(skill_id: str, frontmatter: dict[str, Any], body: str) -> SkillDef:
         """Parse skill definition from frontmatter and body.
 
         Args:

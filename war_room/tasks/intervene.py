@@ -9,6 +9,7 @@ Flow per dialog version (capped at 3 interventions, per agents/semeclaw.md):
                       previous dialog is marked superseded_by the new one,
                       and (optionally) the patched task is pushed back to its source.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,8 +18,9 @@ import re
 from datetime import datetime, timezone
 
 from war_room.agents import registry as _reg
-from . import _db, dialog as _dialog
 
+from . import _db
+from . import dialog as _dialog
 
 MAX_INTERVENTIONS = 3
 _now = lambda: datetime.now(timezone.utc).isoformat()
@@ -27,30 +29,29 @@ _now = lambda: datetime.now(timezone.utc).isoformat()
 # ---------------------------------------------------------------------------
 # Per-agent reply (LLM with template fallback — same pattern as compose_dialog)
 # ---------------------------------------------------------------------------
-async def _agent_reply(agent_id: str, agent_role: str, model: str,
-                       task: dict, comment: str) -> str:
+async def _agent_reply(agent_id: str, agent_role: str, model: str, task: dict, comment: str) -> str:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if key and model:
         try:
             import httpx
+
             sys_prompt = (
                 f"You are agent '{agent_id}' ({agent_role}) responding to a user comment "
                 "during a SemeClaw meeting room. Reply in ONE sentence (max 32 words), "
                 "in your role's voice. Acknowledge the comment, take a position, no preamble."
             )
-            user = (
-                f"Task: {task.get('title')}\n"
-                f"Status: {task.get('status')}\n"
-                f"User comment: {comment}"
-            )
+            user = f"Task: {task.get('title')}\nStatus: {task.get('status')}\nUser comment: {comment}"
             async with httpx.AsyncClient(timeout=20.0) as c:
-                r = await c.post("https://openrouter.ai/api/v1/chat/completions",
-                                 headers={"Authorization": f"Bearer {key}",
-                                          "Content-Type": "application/json"},
-                                 json={"model": model,
-                                       "messages": [{"role": "system", "content": sys_prompt},
-                                                    {"role": "user", "content": user}],
-                                       "temperature": 0.5, "max_tokens": 100})
+                r = await c.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}],
+                        "temperature": 0.5,
+                        "max_tokens": 100,
+                    },
+                )
                 if r.status_code < 400:
                     txt = (r.json()["choices"][0]["message"]["content"] or "").strip().strip('"')
                     if txt:
@@ -58,19 +59,17 @@ async def _agent_reply(agent_id: str, agent_role: str, model: str,
         except Exception:
             pass
     # Deterministic fallback
-    return (f"Noted — I hear you on '{comment[:80]}'. "
-            f"As the {agent_role.lower()}, my next move accounts for it.")
+    return f"Noted — I hear you on '{comment[:80]}'. As the {agent_role.lower()}, my next move accounts for it."
 
 
 async def _gather_replies(task: dict, comment: str) -> list[dict]:
     catalog = _reg.load_all()
     out: list[dict] = []
-    for aid in (task.get("assigned_agents") or []):
+    for aid in task.get("assigned_agents") or []:
         a = catalog.get(aid)
         if not a:
             continue
-        model = next((p.split(":", 1)[1] for p in (a.model_preference or [])
-                      if p.startswith("openrouter:")), "")
+        model = next((p.split(":", 1)[1] for p in (a.model_preference or []) if p.startswith("openrouter:")), "")
         text = await _agent_reply(aid, a.role, model, task, comment)
         out.append({"agent_id": aid, "role": a.role, "text": text, "ts": _now()})
     return out
@@ -105,53 +104,62 @@ def _safe_json(raw: str) -> dict | None:
         a, b = raw.find("{"), raw.rfind("}")
         if a >= 0 and b > a:
             try:
-                return json.loads(raw[a:b + 1])
+                return json.loads(raw[a : b + 1])
             except Exception:
                 return None
     return None
 
 
-async def orchestrator_decide(task: dict, all_lines: list[dict],
-                              interventions: list[dict]) -> dict:
+async def orchestrator_decide(task: dict, all_lines: list[dict], interventions: list[dict]) -> dict:
     """Run the SemeClaw orchestrator to produce a strict-JSON decision."""
     catalog = _reg.load_all()
     orch = catalog.get("semeclaw")
-    model = next((p.split(":", 1)[1] for p in ((orch.model_preference if orch else []) or [])
-                  if p.startswith("openrouter:")), "")
+    model = next(
+        (p.split(":", 1)[1] for p in ((orch.model_preference if orch else []) or []) if p.startswith("openrouter:")), ""
+    )
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
 
     # Compact context for the model
     ctx = {
-        "task": {k: task.get(k) for k in
-                 ("id", "title", "description", "status", "assigned_agents")},
-        "dialog_lines": [{"agent": l.get("agent_id"), "text": l.get("text")}
-                         for l in (all_lines or [])],
-        "interventions": [{"turn": i.get("turn_index"),
-                           "user": i.get("user_comment"),
-                           "replies": [{"agent": r.get("agent_id"), "text": r.get("text")}
-                                       for r in (i.get("agent_replies") or [])]}
-                          for i in (interventions or [])],
+        "task": {k: task.get(k) for k in ("id", "title", "description", "status", "assigned_agents")},
+        "dialog_lines": [{"agent": l.get("agent_id"), "text": l.get("text")} for l in (all_lines or [])],
+        "interventions": [
+            {
+                "turn": i.get("turn_index"),
+                "user": i.get("user_comment"),
+                "replies": [
+                    {"agent": r.get("agent_id"), "text": r.get("text")} for r in (i.get("agent_replies") or [])
+                ],
+            }
+            for i in (interventions or [])
+        ],
     }
 
     decision: dict | None = None
     if key and model:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=30.0) as c:
-                r = await c.post("https://openrouter.ai/api/v1/chat/completions",
-                                 headers={"Authorization": f"Bearer {key}",
-                                          "Content-Type": "application/json"},
-                                 json={"model": model,
-                                       "messages": [
-                                           {"role": "system",
-                                            "content": "You are SemeClaw, the orchestrator. "
-                                                       "Synthesize the dialog and 3 interventions "
-                                                       "into a final task update. " + _DECISION_SCHEMA_HINT},
-                                           {"role": "user",
-                                            "content": json.dumps(ctx, ensure_ascii=False)},
-                                       ],
-                                       "temperature": 0.2, "max_tokens": 500,
-                                       "response_format": {"type": "json_object"}})
+                r = await c.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are SemeClaw, the orchestrator. "
+                                "Synthesize the dialog and 3 interventions "
+                                "into a final task update. " + _DECISION_SCHEMA_HINT,
+                            },
+                            {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)},
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 500,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
                 if r.status_code < 400:
                     decision = _safe_json(r.json()["choices"][0]["message"]["content"])
         except Exception:
@@ -163,13 +171,13 @@ async def orchestrator_decide(task: dict, all_lines: list[dict],
         decision = {
             "task_patch": {
                 "title": task.get("title"),
-                "description": (task.get("description") or "") +
-                               (f"\n\n[v2 update] {last_comment}" if last_comment else ""),
+                "description": (task.get("description") or "")
+                + (f"\n\n[v2 update] {last_comment}" if last_comment else ""),
                 "assigned_agents": task.get("assigned_agents") or [],
                 "status": "needs_review",
             },
             "rationale": "Auto-derived (no LLM available): user pushed back on the original plan; "
-                         "moved to needs_review for explicit human approval.",
+            "moved to needs_review for explicit human approval.",
             "dialog_brief": f"Re-open the discussion on '{task.get('title')}' addressing: {last_comment[:160]}",
         }
     return decision
@@ -178,8 +186,7 @@ async def orchestrator_decide(task: dict, all_lines: list[dict],
 # ---------------------------------------------------------------------------
 # Shared finalize helper — used by turn-3 and by explicit /finalize calls
 # ---------------------------------------------------------------------------
-async def _finalize_dialog(task: dict, dialog: dict, all_interventions: list[dict]
-                           ) -> dict:
+async def _finalize_dialog(task: dict, dialog: dict, all_interventions: list[dict]) -> dict:
     """Run orchestrator → patch task → compose v(n+1) → writeback.
 
     Returns {decision, new_dialog, writeback, task} so callers can serialise
@@ -189,30 +196,31 @@ async def _finalize_dialog(task: dict, dialog: dict, all_interventions: list[dic
 
     patch = decision.get("task_patch", {}) or {}
     db_patch: dict = {}
-    if "title" in patch:           db_patch["title"]           = patch["title"]
-    if "description" in patch:     db_patch["description"]     = patch["description"]
-    if "assigned_agents" in patch: db_patch["assigned_agents"] = patch["assigned_agents"]
-    if "status" in patch:          db_patch["status"]          = patch["status"]
+    if "title" in patch:
+        db_patch["title"] = patch["title"]
+    if "description" in patch:
+        db_patch["description"] = patch["description"]
+    if "assigned_agents" in patch:
+        db_patch["assigned_agents"] = patch["assigned_agents"]
+    if "status" in patch:
+        db_patch["status"] = patch["status"]
     if db_patch:
         await _db.patch_task(task["id"], db_patch)
         task = {**task, **db_patch}
 
-    seed_task = {**task, "description": (decision.get("dialog_brief")
-                                         or task.get("description"))}
+    seed_task = {**task, "description": (decision.get("dialog_brief") or task.get("description"))}
     new_lines = await _dialog.compose_dialog(seed_task)
-    new_dialog = await _db.insert_dialog(task["id"],
-                                         version=dialog["version"] + 1,
-                                         lines=new_lines)
+    new_dialog = await _db.insert_dialog(task["id"], version=dialog["version"] + 1, lines=new_lines)
     await _db.supersede_dialog(dialog["id"], new_dialog["id"])
 
     try:
         from . import writeback as _wb
+
         wb = await _wb.push_to_source(task)
     except Exception as e:
         wb = {"ok": False, "error": str(e)}
 
-    return {"decision": decision, "new_dialog": new_dialog,
-            "writeback": wb, "task": task}
+    return {"decision": decision, "new_dialog": new_dialog, "writeback": wb, "task": task}
 
 
 async def finalize_now(task_id: str) -> dict:
@@ -230,11 +238,14 @@ async def finalize_now(task_id: str) -> dict:
         return {"ok": False, "error": "no dialog to finalize"}
     interventions = await _db.list_interventions(dialog["id"])
     res = await _finalize_dialog(task, dialog, interventions)
-    return {"ok": True, "finalized": True,
-            "orchestrator_decision": res["decision"],
-            "new_dialog": res["new_dialog"],
-            "writeback": res["writeback"],
-            "task": res["task"]}
+    return {
+        "ok": True,
+        "finalized": True,
+        "orchestrator_decision": res["decision"],
+        "new_dialog": res["new_dialog"],
+        "writeback": res["writeback"],
+        "task": res["task"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +270,7 @@ async def intervene(task_id: str, comment: str) -> dict:
 
     prior = await _db.list_interventions(dialog["id"])
     if len(prior) >= MAX_INTERVENTIONS:
-        return {"ok": False, "error": f"intervention cap reached ({MAX_INTERVENTIONS}); "
-                                       "regenerate the dialog first"}
+        return {"ok": False, "error": f"intervention cap reached ({MAX_INTERVENTIONS}); regenerate the dialog first"}
 
     turn = len(prior) + 1
     replies = await _gather_replies(task, comment)
@@ -271,9 +281,13 @@ async def intervene(task_id: str, comment: str) -> dict:
 
     if turn >= MAX_INTERVENTIONS:
         # Build full intervention list (including the current one) for context
-        all_interventions = prior + [{
-            "turn_index": turn, "user_comment": comment, "agent_replies": replies,
-        }]
+        all_interventions = prior + [
+            {
+                "turn_index": turn,
+                "user_comment": comment,
+                "agent_replies": replies,
+            }
+        ]
         res = await _finalize_dialog(task, dialog, all_interventions)
         decision = res["decision"]
         new_dialog = res["new_dialog"]
@@ -281,8 +295,11 @@ async def intervene(task_id: str, comment: str) -> dict:
         task = res["task"]
 
     saved = await _db.insert_intervention(
-        task_id=task_id, dialog_id=dialog["id"], turn_index=turn,
-        user_comment=comment, agent_replies=replies,
+        task_id=task_id,
+        dialog_id=dialog["id"],
+        turn_index=turn,
+        user_comment=comment,
+        agent_replies=replies,
         orchestrator_decision=decision,
     )
 

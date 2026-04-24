@@ -3,6 +3,7 @@
 Includes small backward-compatibility shims for the older Telegram bridge,
 which still posts to `/api/meeting/task` and polls `/api/meeting/history/...`.
 """
+
 from __future__ import annotations
 
 import re
@@ -10,12 +11,13 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from war_room.agents import registry as _reg
-from war_room.dashboard.routes.deps import ROOT, _tenant_id
 from war_room.dashboard.r2_client import generate_presigned_url
-from war_room.tasks import _db, dialog as _dialog
+from war_room.dashboard.routes.deps import ROOT, _tenant_id
+from war_room.tasks import _db
+from war_room.tasks import dialog as _dialog
 
 router = APIRouter(tags=["meetings"])
 _LEGACY_MEETING_CACHE: dict[str, dict] = {}
@@ -219,9 +221,7 @@ async def api_meeting_task(request: Request):
     except Exception:
         return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
 
-    task_text = _clean_task_text(
-        body.get("task") or body.get("text") or body.get("message") or ""
-    )
+    task_text = _clean_task_text(body.get("task") or body.get("text") or body.get("message") or "")
     if not task_text:
         return JSONResponse({"ok": False, "error": "task is required"}, status_code=400)
 
