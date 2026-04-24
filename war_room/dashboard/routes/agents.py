@@ -187,6 +187,65 @@ async def api_agents(include: str = "all"):
     return JSONResponse(agents)
 
 
+@router.get("/api/agents/adapters/{adapter_id}/agents")
+async def api_adapter_agents(adapter_id: str):
+    """Phase C: discover agents inside a connected adapter workspace.
+
+    Calls the adapter's `agents_path` (from the .md frontmatter), substituting
+    `{workspace_id}` / `{company_id}` from env. Returns the raw payload so
+    SemeClaw can route tasks to the user's *own* agents instead of (or in
+    addition to) the built-in 4.
+    """
+    import os as _os
+    try:
+        from war_room.agents import registry as _agent_registry
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    a = _agent_registry.get(adapter_id) or _agent_registry.get(f"adapter_{adapter_id}")
+    if not a or not a.is_adapter:
+        return JSONResponse({"ok": False, "error": f"adapter '{adapter_id}' not found"},
+                            status_code=404)
+
+    meta = a.adapter or {}
+    if meta.get("protocol") != "http":
+        return JSONResponse({"ok": False, "error": f"adapter protocol "
+                                                    f"{meta.get('protocol')!r} is not http"},
+                            status_code=400)
+
+    base = _os.environ.get(meta.get("base_url_env", ""), "").strip() or meta.get("base_url", "")
+    key  = _os.environ.get(meta.get("api_key_env", ""), "").strip()
+    path = meta.get("agents_path", "")
+    if not (base and key and path):
+        missing = [k for k in (meta.get("required_env") or []) if not _os.environ.get(k)]
+        return JSONResponse({"ok": False, "error": "adapter not configured",
+                             "missing_env": missing}, status_code=409)
+
+    # Substitute path templates from env (e.g. {workspace_id} <- MOLTICA_WORKSPACE_ID)
+    for placeholder in ("workspace_id", "company_id", "tenant_id"):
+        env_key = f"{adapter_id.upper()}_{placeholder.upper()}"
+        val = _os.environ.get(env_key, "")
+        path = path.replace("{" + placeholder + "}", val)
+
+    url = base.rstrip("/") + path
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(url, headers={"Authorization": f"Bearer {key}"})
+            if r.status_code >= 400:
+                return JSONResponse({"ok": False, "error": f"upstream HTTP {r.status_code}",
+                                     "body": r.text[:240]}, status_code=502)
+            data = r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+
+    # Normalize: try common shapes (data, agents, items) → list[dict]
+    items = data.get("agents") or data.get("data") or data.get("items") or data
+    if not isinstance(items, list):
+        items = []
+    return JSONResponse({"ok": True, "adapter": a.id, "url": url,
+                         "count": len(items), "agents": items})
+
+
 @router.get("/api/agents/adapters/status")
 async def api_adapter_status():
     """Per-adapter status: which env vars are set, is the adapter ready to call?"""

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SemeClaw — Tasks</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #141823; --panel2: #1b2030;
+    --line: #232838; --text: #e7ecf3; --muted: #8a93a6;
+    --accent: #6cf; --warn: #f7b955; --err: #ff6b6b; --ok: #4ade80;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 14px 22px; border-bottom: 1px solid var(--line);
+           display: flex; gap: 18px; align-items: center; background: var(--panel); }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .3px; }
+  header .grow { flex: 1; }
+  header .pill { font: 12px var(--mono); color: var(--muted);
+                 padding: 4px 8px; background: var(--panel2);
+                 border: 1px solid var(--line); border-radius: 999px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+           padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #021018; border-color: var(--accent);
+                   font-weight: 600; }
+  main { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 53px); }
+  #tasks { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+  .task { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .task:hover { background: var(--panel2); }
+  .task.active { background: var(--panel2); border-left: 3px solid var(--accent); }
+  .task .row1 { display: flex; gap: 8px; align-items: baseline; }
+  .task .id { font: 11px var(--mono); color: var(--muted); }
+  .task .status { font-size: 11px; padding: 1px 6px; border-radius: 4px;
+                  background: var(--line); color: var(--muted); text-transform: uppercase; }
+  .task .status.open { background: #1f3a4a; color: var(--accent); }
+  .task .status.needs_review { background: #4a3a1f; color: var(--warn); }
+  .task .status.done { background: #1f4a2a; color: var(--ok); }
+  .task .title { margin-top: 3px; }
+  #right { overflow-y: auto; padding: 18px 22px; }
+  #right h2 { margin: 0 0 4px; font-size: 18px; }
+  #right .meta { color: var(--muted); font: 12px var(--mono); margin-bottom: 16px; }
+  .section { background: var(--panel); border: 1px solid var(--line);
+             border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .section h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+                letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .line { display: flex; gap: 10px; align-items: flex-start;
+          padding: 8px 0; border-top: 1px dashed var(--line); }
+  .line:first-of-type { border-top: none; }
+  .line .agent { width: 92px; flex: none; font: 12px var(--mono);
+                 color: var(--accent); text-transform: uppercase; }
+  .line .text { flex: 1; }
+  .line button { padding: 2px 8px; font-size: 12px; }
+  .iv { padding: 8px 0; border-top: 1px dashed var(--line); }
+  .iv:first-child { border-top: none; }
+  .iv .turn { font: 11px var(--mono); color: var(--muted); }
+  .iv .user { color: var(--warn); margin: 4px 0; }
+  .iv .reply { font-size: 13px; padding: 2px 0; }
+  .iv .reply b { color: var(--accent); font: 12px var(--mono); margin-right: 6px; }
+  .iv .decision { background: var(--panel2); border-left: 3px solid var(--warn);
+                  padding: 8px 10px; margin-top: 6px; border-radius: 4px; }
+  textarea { width: 100%; min-height: 70px; resize: vertical;
+             background: var(--bg); color: var(--text);
+             border: 1px solid var(--line); border-radius: 6px;
+             padding: 8px; font: inherit; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .empty { color: var(--muted); padding: 40px 20px; text-align: center; }
+  .toast { position: fixed; bottom: 20px; right: 20px;
+           background: var(--panel2); border: 1px solid var(--line);
+           padding: 10px 16px; border-radius: 6px; max-width: 340px;
+           opacity: 0; transition: opacity .25s; }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🪖 SemeClaw — Tasks</h1>
+  <span id="quota" class="pill">quota …</span>
+  <span class="grow"></span>
+  <button onclick="syncTasks()">⟲ Sync</button>
+  <button onclick="newTask()">+ New</button>
+</header>
+<main>
+  <div id="tasks"><div class="empty">Loading…</div></div>
+  <div id="right"><div class="empty">Select a task on the left.</div></div>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = (s, p=document) => p.querySelector(s);
+const $$ = (s, p=document) => Array.from(p.querySelectorAll(s));
+let TASKS = [];
+let CURRENT = null;
+let DIALOG = null;
+let INTERVENTIONS = [];
+
+function toast(msg, isErr=false) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => t.className = "toast", 2400);
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  return r.json();
+}
+
+async function loadTasks() {
+  const r = await api("/api/tasks?limit=100");
+  TASKS = r.tasks || [];
+  renderTasks();
+  loadQuota();
+}
+
+async function loadQuota() {
+  const q = await api("/api/tasks/quota");
+  if (q.ok) {
+    $("#quota").textContent =
+      `quota ${q.active||0}/${q.cap||100} · ${q.archived||0} archived`;
+  }
+}
+
+function renderTasks() {
+  const root = $("#tasks");
+  if (!TASKS.length) {
+    root.innerHTML = '<div class="empty">No tasks yet.<br>Run <code>semeclaw tasks sync</code> or click + New.</div>';
+    return;
+  }
+  root.innerHTML = TASKS.map(t => `
+    <div class="task ${CURRENT===t.id?'active':''}" onclick="selectTask('${t.id}')">
+      <div class="row1">
+        <span class="id">${t.id.slice(0,8)}</span>
+        <span class="status ${t.status||'open'}">${t.status||'open'}</span>
+        <span style="color:var(--muted);font-size:11px">${t.source||''}</span>
+      </div>
+      <div class="title">${escapeHtml(t.title||'(untitled)')}</div>
+    </div>`).join("");
+}
+
+function escapeHtml(s) {
+  return String(s||"").replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function selectTask(id) {
+  CURRENT = id;
+  renderTasks();
+  $("#right").innerHTML = '<div class="empty">Loading dialog…</div>';
+  const [dRes, ivRes] = await Promise.all([
+    api(`/api/tasks/${id}/dialog`),
+    api(`/api/tasks/${id}/interventions`),
+  ]);
+  DIALOG = dRes.dialog || null;
+  INTERVENTIONS = ivRes.interventions || [];
+  renderRight();
+}
+
+function renderRight() {
+  const t = TASKS.find(x => x.id === CURRENT);
+  if (!t) return;
+  const lines = (DIALOG && DIALOG.lines) || [];
+  const turn = INTERVENTIONS.length;
+  const remaining = Math.max(0, 3 - turn);
+
+  $("#right").innerHTML = `
+    <h2>${escapeHtml(t.title||'(untitled)')}</h2>
+    <div class="meta">id=${t.id} · source=${t.source||'?'} · status=${t.status||'?'}
+      · agents=${(t.assigned_agents||[]).join(',')||'–'}</div>
+
+    ${t.description ? `<div class="section"><h3>Description</h3>
+      <div style="white-space:pre-wrap">${escapeHtml(t.description)}</div></div>` : ''}
+
+    <div class="section">
+      <h3>Dialog v${DIALOG ? DIALOG.version : '?'}</h3>
+      ${lines.length ? lines.map(l => `
+        <div class="line">
+          <div class="agent">${l.agent_id}</div>
+          <div class="text">${escapeHtml(l.text||'')}</div>
+          ${l.audio_url ? `<button onclick="playAudio('${l.audio_url}')">▶︎</button>` : ''}
+        </div>`).join('') : '<div class="empty">No dialog yet.</div>'}
+      <div style="margin-top:10px"><button onclick="regen()">↻ Regenerate</button></div>
+    </div>
+
+    <div class="section">
+      <h3>Interventions (${turn}/3)</h3>
+      ${INTERVENTIONS.length ? INTERVENTIONS.map(renderIv).join('') :
+        '<div class="empty" style="padding:14px">No comments yet.</div>'}
+      ${remaining > 0 ? `
+        <div style="margin-top:12px">
+          <textarea id="comment" placeholder="Add a comment for the agents…"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button class="primary" onclick="sendComment()">Send comment</button>
+            <span class="hint">${remaining} turn${remaining===1?'':'s'} left
+              ${remaining===1?'— next one triggers the orchestrator':''}</span>
+          </div>
+        </div>` :
+        '<div class="hint" style="margin-top:10px">Limit reached. Regenerate dialog to start a new round.</div>'}
+    </div>`;
+}
+
+function renderIv(iv) {
+  const replies = (iv.agent_replies||[]).map(r =>
+    `<div class="reply"><b>${r.agent_id}</b>${escapeHtml(r.text||'')}</div>`).join('');
+  const dec = iv.orchestrator_decision;
+  const decHtml = dec ? `
+    <div class="decision">
+      <div style="font-weight:600">🧭 Orchestrator decision</div>
+      <div>${escapeHtml(dec.rationale||'')}</div>
+      ${dec.task_patch ? `<div class="hint" style="margin-top:4px">
+         patch: ${escapeHtml(JSON.stringify(dec.task_patch))}</div>` : ''}
+    </div>` : '';
+  return `<div class="iv">
+    <div class="turn">turn ${iv.turn_index}</div>
+    <div class="user">› ${escapeHtml(iv.user_comment||'')}</div>
+    ${replies}${decHtml}
+  </div>`;
+}
+
+let AUDIO = null;
+function playAudio(url) {
+  if (AUDIO) { AUDIO.pause(); AUDIO = null; }
+  AUDIO = new Audio(url);
+  AUDIO.play().catch(e => toast("audio failed: " + e.message, true));
+}
+
+async function sendComment() {
+  const ta = $("#comment");
+  const text = (ta.value||"").trim();
+  if (!text) return;
+  ta.disabled = true;
+  const r = await api(`/api/tasks/${CURRENT}/intervene`,
+    { method: "POST", body: JSON.stringify({ comment: text }) });
+  ta.disabled = false;
+  if (!r.ok) { toast(r.error||"intervene failed", true); return; }
+  toast(`Turn ${r.turn_index}/3 recorded`);
+  await selectTask(CURRENT);
+  await loadTasks();
+}
+
+async function regen() {
+  const r = await api(`/api/tasks/${CURRENT}/dialog`, { method: "POST" });
+  if (!r.ok) { toast(r.error||"regen failed", true); return; }
+  toast(`Dialog v${r.dialog.version} composed`);
+  await selectTask(CURRENT);
+}
+
+async function syncTasks() {
+  toast("Syncing…");
+  const r = await api("/api/tasks/sync", { method: "POST" });
+  if (!r.ok) { toast(r.error||"sync failed", true); return; }
+  toast(`Synced ${r.synced||0} task(s)`);
+  await loadTasks();
+}
+
+async function newTask() {
+  const title = prompt("Task title:");
+  if (!title) return;
+  const r = await api("/api/tasks", { method: "POST",
+    body: JSON.stringify({ title }) });
+  if (!r.ok) { toast(r.error||"create failed", true); return; }
+  toast("Task created");
+  await loadTasks();
+  selectTask(r.task_id);
+}
+
+loadTasks();
+</script>
+</body>
+</html>

@@ -266,6 +266,7 @@ try:
     from war_room.dashboard.routes import meetings, webhooks, paperclip
     from war_room.dashboard.routes import billing, alerts, advertiser
     from war_room.dashboard.routes import tasks as tasks_routes
+    from war_room.dashboard.routes import telegram as telegram_routes
 
     app.include_router(health.router)
     app.include_router(embed.router)
@@ -278,6 +279,7 @@ try:
     app.include_router(alerts.router)
     app.include_router(advertiser.router)
     app.include_router(tasks_routes.router)
+    app.include_router(telegram_routes.router)
 except Exception as e:
     logger.warning("Router mount skipped (routes may be stubs): %s", e)
 
@@ -605,6 +607,18 @@ async def agents_page():
     if agents_html.exists():
         return HTMLResponse(content=agents_html.read_text(encoding="utf-8"))
     return JSONResponse({"error": "agents.html not found"}, status_code=404)
+
+
+@app.get("/tasks", response_class=HTMLResponse)
+async def tasks_page():
+    """Serve the SemeClaw tasks UI (list + dialog + interventions)."""
+    html_file = Path(__file__).parent / "tasks.html"
+    if html_file.exists():
+        return HTMLResponse(
+            content=html_file.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store"},
+        )
+    return HTMLResponse(content="<h1>tasks.html not found</h1>", status_code=404)
 
 
 @app.get("/", response_class=HTMLResponse)
