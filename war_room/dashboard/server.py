@@ -311,6 +311,13 @@ async def _lifespan(_: FastAPI):
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        # Close the shared httpx connection pool (best-effort).
+        try:
+            from war_room.utils.http_client import close_shared_clients
+
+            await close_shared_clients()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 app = FastAPI(title="SemeClaw War Room Agent", version=APP_VERSION, lifespan=_lifespan)

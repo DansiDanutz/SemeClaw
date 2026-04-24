@@ -2,6 +2,23 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.3] - 2026-04-24
+
+### Added — Shared httpx.AsyncClient pool
+
+- `war_room/utils/http_client.py` — process-wide shared `httpx.AsyncClient`
+  pool keyed by `base_url`. Reuses connections so steady-state Supabase
+  latency drops by 20-80 ms per call vs creating a new client per request.
+- Connection pool sized generously (`max_connections=100`,
+  `max_keepalive_connections=20`) so traffic bursts don't queue.
+- `tasks/_db._supa_once` now delegates to `get_shared_client` instead of
+  `async with httpx.AsyncClient(...)`.
+- Server lifespan calls `close_shared_clients()` on shutdown so Fly's
+  rolling deploys don't leak sockets.
+- 4 new tests verify identity (same base_url → same client), isolation
+  (different base_urls → different clients), recreate-after-close, and
+  tasks/_db wiring.
+
 ## [0.8.2] - 2026-04-24
 
 ### Added — Deep health endpoint (/api/health/deep)

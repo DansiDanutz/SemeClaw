@@ -9,9 +9,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import httpx
-
 from war_room.dashboard.routes.deps import SUPA_HEADERS, SUPA_KEY, SUPA_URL
+from war_room.utils.http_client import get_shared_client
 from war_room.utils.supa_durable import dlq_append, with_retry
 
 
@@ -23,14 +22,18 @@ _TASKS_DLQ_PATH = Path(os.environ.get("SEMECLAW_TASKS_DLQ_PATH", "/app/data/seme
 
 
 async def _supa_once(method: str, path: str, **kwargs):
-    """Single-attempt Supabase REST call. Raises TasksDBError on any failure."""
+    """Single-attempt Supabase REST call. Raises TasksDBError on any failure.
+
+    Uses the process-wide shared httpx client so connections are reused —
+    materially faster than creating one per call under steady traffic.
+    """
     if not SUPA_URL or not SUPA_KEY:
         raise TasksDBError("Supabase not configured (DLS_TEAM_SUPABASE_URL / _SERVICE_KEY)")
-    async with httpx.AsyncClient(base_url=SUPA_URL, timeout=15.0) as c:
-        r = await getattr(c, method)(f"/rest/v1/{path}", headers=SUPA_HEADERS, **kwargs)
-        if r.status_code >= 400:
-            raise TasksDBError(f"{method.upper()} {path} -> {r.status_code} {r.text[:240]}")
-        return r.json() if r.content else []
+    client = await get_shared_client(base_url=SUPA_URL, timeout=15.0, headers=SUPA_HEADERS)
+    r = await getattr(client, method)(f"/rest/v1/{path}", **kwargs)
+    if r.status_code >= 400:
+        raise TasksDBError(f"{method.upper()} {path} -> {r.status_code} {r.text[:240]}")
+    return r.json() if r.content else []
 
 
 async def supa(method: str, path: str, **kwargs):
