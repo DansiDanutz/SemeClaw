@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import os
-import secrets
+import ipaddress
 import logging
+import secrets
+import socket
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 import httpx
 
@@ -566,6 +569,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Stripe webhook — handles subscription lifecycle (renewal, cancellation, failure)
 # ---------------------------------------------------------------------------
 @router.post("/api/advertiser/stripe/webhook")
@@ -793,3 +797,129 @@ async def api_spotlight_click(request: Request):
     except Exception as e:
         logger.warning("click record failed: %s", e)
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Webpage fetch proxy
+#
+# Client-side analysis needs to read an advertiser-supplied product URL to
+# extract title/description/body text when building an ad draft. Direct
+# browser fetch is usually blocked by CORS, so we proxy it through the
+# backend with an SSRF guard, size cap, and short timeout. This replaces the
+# previous dependency on the public api.allorigins.win CORS proxy.
+# ---------------------------------------------------------------------------
+_FETCH_WEBPAGE_MAX_BYTES = 2 * 1024 * 1024  # 2 MiB
+_FETCH_WEBPAGE_TIMEOUT_S = 10.0
+_FETCH_WEBPAGE_UA = "SemeClawAdvertiser/1.0 (+https://ad-semeclaw.vercel.app)"
+
+
+def _is_public_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    ):
+        return False
+    # Block common cloud metadata endpoints explicitly.
+    if ip in {"169.254.169.254", "fd00:ec2::254"}:
+        return False
+    return True
+
+
+def _resolve_and_check(host: str) -> Optional[str]:
+    """Resolve host and reject if any resolved IP is not publicly routable.
+
+    Note: does not defeat DNS rebinding. For defence-in-depth, requests should
+    be made against the resolved IP with Host header preserved — left as a
+    follow-up. This still closes the trivial SSRF vectors (localhost, RFC1918,
+    link-local metadata, etc.) that the previous public proxy had.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return "unresolvable"
+    for info in infos:
+        ip = info[4][0]
+        if not _is_public_ip(ip):
+            return f"private/reserved IP not allowed: {ip}"
+    return None
+
+
+@router.get("/api/advertiser/{advertiser_id}/fetch-webpage")
+async def api_advertiser_fetch_webpage(advertiser_id: str, request: Request):
+    """Proxy-fetch an advertiser-supplied URL so the client can analyse it.
+
+    Query param:
+        url: absolute http(s) URL to fetch.
+
+    Returns the raw response body as text. Refuses URLs that resolve to
+    private/loopback/link-local/metadata addresses, non-http(s) schemes, or
+    responses larger than 2 MiB.
+    """
+    raw_url = request.query_params.get("url", "").strip()
+    if not raw_url:
+        return JSONResponse({"error": "missing url"}, status_code=400)
+
+    try:
+        parsed = urlparse(raw_url)
+    except Exception:
+        return JSONResponse({"error": "invalid url"}, status_code=400)
+
+    if parsed.scheme not in ("http", "https"):
+        return JSONResponse({"error": "only http(s) URLs allowed"}, status_code=400)
+    if not parsed.hostname:
+        return JSONResponse({"error": "missing host"}, status_code=400)
+
+    guard = _resolve_and_check(parsed.hostname)
+    if guard:
+        return JSONResponse({"error": guard}, status_code=400)
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=_FETCH_WEBPAGE_TIMEOUT_S,
+            follow_redirects=True,
+            max_redirects=3,
+            headers={"User-Agent": _FETCH_WEBPAGE_UA},
+        ) as client:
+            async with client.stream("GET", raw_url) as resp:
+                if resp.status_code >= 400:
+                    return JSONResponse(
+                        {"error": f"upstream {resp.status_code}"},
+                        status_code=502,
+                    )
+                ctype = resp.headers.get("content-type", "")
+                if ctype and "html" not in ctype and "text" not in ctype and "xml" not in ctype:
+                    return JSONResponse(
+                        {"error": f"unsupported content-type: {ctype}"},
+                        status_code=415,
+                    )
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > _FETCH_WEBPAGE_MAX_BYTES:
+                        return JSONResponse(
+                            {"error": "response too large"},
+                            status_code=413,
+                        )
+                    chunks.append(chunk)
+                body = b"".join(chunks)
+                # Best-effort decode; fall back to latin-1 so we never raise here.
+                try:
+                    text = body.decode(resp.encoding or "utf-8", errors="replace")
+                except LookupError:
+                    text = body.decode("utf-8", errors="replace")
+                return PlainTextResponse(text, media_type="text/html; charset=utf-8")
+    except httpx.HTTPError as e:
+        logger.warning("fetch-webpage httpx error for %s: %s", raw_url, e)
+        return JSONResponse({"error": "fetch failed"}, status_code=502)
+    except Exception as e:
+        logger.warning("fetch-webpage unexpected error for %s: %s", raw_url, e)
+        return JSONResponse({"error": "fetch failed"}, status_code=500)
