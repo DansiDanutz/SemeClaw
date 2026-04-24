@@ -141,14 +141,14 @@ async def get_next_slide(
     Frequency capping: same IP cannot see the same slide more than 3 times
     in any 4-hour rolling window.
     """
-    # 1. Fetch enabled slides ordered by least recently served (round-robin)
-    #    We fetch more than count so we have candidates after capping.
+    # 1. Fetch enabled slides — Diamond priority-boosted cards rank first,
+    #    then least-recently-served (round-robin) within each group.
     try:
         slides_raw = await _supa(
             "get",
             "adclaw_slides"
             "?status=eq.enabled"
-            "&order=last_served_at.asc.nullsfirst"
+            "&order=priority_boost.desc,last_served_at.asc.nullsfirst"
             f"&limit=50",
         )
     except Exception as e:

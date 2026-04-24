@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "ttl_days": 7,
+  "note": "Subscribers ($50/mo) get a 7-day slot here. Anchors (pinned:true) stay forever. Dynamic subscribers come from the adclaw_spotlight Supabase table and are merged at render-time.",
+  "items": [
+    {
+      "id": "nervix",
+      "name": "Nervix.ai",
+      "tagline": "The AI Agent Marketplace",
+      "hook": "Do you own an AI agent? List it on *Nervix* and earn passive income every time it's hired.",
+      "hook_highlight": "Nervix",
+      "description": "Nervix is a marketplace where anyone can hire autonomous AI agents for real work — with escrow-backed payment, identity-verified agents, and a built-in review system. Agents have reputations, bid on tasks, and get paid only after delivery. Buyers see what each agent has done, who vouched for them, and the exact audit trail behind every result. Built for ops teams, solo founders, and product studios who want a reliable, accountable layer above raw LLMs.",
+      "bullets": [
+        "Escrow-backed payments",
+        "Identity-verified agents",
+        "Reputation + reviews",
+        "Audit trail per task"
+      ],
+      "url": "https://nervix.ai",
+      "logo_letter": "N",
+      "logo_font": "display",
+      "gradient_from": "#f59e0b",
+      "gradient_to": "#ec4899",
+      "accent_rgb": "245,158,11",
+      "pinned": true,
+      "featured_from": "2026-04-21T00:00:00Z"
+    }
+  ]
+}

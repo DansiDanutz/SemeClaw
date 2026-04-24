@@ -3621,10 +3621,13 @@ async def api_meeting_say(request: Request):
 # ---------------------------------------------------------------------------
 
 # Free model waterfall: OpenRouter free → local Ollama (Gemma 4 preferred local)
+# Verified live against https://openrouter.ai/api/v1/models (2026-04-23).
 _AI_MODELS = [
-    ("openrouter", "qwen/qwen3.6-plus:free"),
+    ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
+    ("openrouter", "qwen/qwen3-next-80b-a3b-instruct:free"),
     ("openrouter", "google/gemma-3-27b-it:free"),
-    ("openrouter", "qwen/qwen3.5-72b:free"),
+    ("openrouter", "openai/gpt-oss-120b:free"),
+    ("openrouter", "nousresearch/hermes-3-llama-3.1-405b:free"),
     ("ollama",     "gemma4:latest"),   # local 9.6GB Gemma 4 — best local model
     ("ollama",     "qwen3:8b"),        # lightweight fallback
 ]
