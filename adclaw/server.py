@@ -218,6 +218,63 @@ async def get_next_slide(
     })
 
 
+# ---------------------------------------------------------------------------
+# Impression write durability
+#
+# _record_impression used to wrap three Supabase calls in a single try/except
+# that silently swallowed any error. Under even transient Supabase flakiness
+# that meant: slide served -> impression row missing -> no credit deducted.
+# The "anti-bypass" claim in the module docstring quietly broke.
+#
+# Hardened flow:
+#   1. Retry each write with exponential backoff (3 attempts total).
+#   2. On final failure, append to an on-disk dead-letter log so a cron /
+#      operator can replay the write when Supabase is healthy again.
+#   3. Serving stays fail-open (we still return the slide) so ad delivery
+#      isn't held hostage to Supabase availability — but we no longer lose
+#      the audit trail.
+# ---------------------------------------------------------------------------
+import asyncio
+from pathlib import Path
+
+_IMPRESSION_DLQ_PATH = Path(
+    os.environ.get("ADCLAW_DLQ_PATH", "/app/data/adclaw_dlq.jsonl")
+).expanduser()
+_IMPRESSION_MAX_ATTEMPTS = int(os.environ.get("ADCLAW_IMPRESSION_RETRIES", "3"))
+_IMPRESSION_BACKOFF_BASE_S = 0.1
+_IMPRESSION_BACKOFF_CAP_S = 2.0
+
+
+async def _supa_with_retry(method: str, path: str, attempts: int = _IMPRESSION_MAX_ATTEMPTS, **kwargs):
+    """_supa wrapper with bounded exponential backoff. Re-raises on final failure."""
+    last_exc: Exception | None = None
+    for i in range(attempts):
+        try:
+            return await _supa(method, path, **kwargs)
+        except Exception as exc:  # noqa: BLE001 — retry any error
+            last_exc = exc
+            if i == attempts - 1:
+                break
+            delay = min(_IMPRESSION_BACKOFF_CAP_S, _IMPRESSION_BACKOFF_BASE_S * (2 ** i))
+            await asyncio.sleep(delay)
+    assert last_exc is not None  # for type-checkers
+    raise last_exc
+
+
+def _dlq_append(entry: dict) -> None:
+    """Append a failed-impression entry to the local dead-letter log.
+
+    Best-effort: if the DLQ path is unwritable we log and move on rather than
+    crash the response path.
+    """
+    try:
+        _IMPRESSION_DLQ_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _IMPRESSION_DLQ_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:  # noqa: BLE001
+        logger.error("DLQ write failed (%s); impression lost: %s", e, entry)
+
+
 async def _record_impression(
     slide_id: str,
     campaign_id: str,
@@ -226,33 +283,52 @@ async def _record_impression(
     tenant_id: str,
     now_iso: str,
 ) -> None:
+    """Write impression + deduct credits + stamp last_served_at, durably.
+
+    Each step retries on transient Supabase errors; on exhaustion the step's
+    payload is written to the DLQ so no impression is lost silently.
+    """
+    impression_payload = {
+        "slide_id": slide_id,
+        "campaign_id": campaign_id,
+        "instance_id": instance_id,
+        "ip_hash": ip_hash or "unknown",
+        "tenant_id": tenant_id,
+        "viewed_at": now_iso,
+    }
+    deduct_payload = {
+        "p_campaign_id": campaign_id,
+        "p_credits": CREDITS_PER_IMPRESSION,
+        "p_slide_id": slide_id,
+        "p_instance_id": instance_id,
+        "p_description": f"View via {instance_id or 'unknown'}",
+    }
+    last_served_payload = {"last_served_at": now_iso}
+
+    # 1. Impression row — critical for audit / billing.
     try:
-        # Write impression row
-        await _supa("post", "adclaw_impressions", json={
-            "slide_id": slide_id,
-            "campaign_id": campaign_id,
-            "instance_id": instance_id,
-            "ip_hash": ip_hash or "unknown",
-            "tenant_id": tenant_id,
-            "viewed_at": now_iso,
-        })
-        # Deduct credits from campaign wallet via RPC (atomic in Postgres)
-        # Pass slide + instance so a transaction row is recorded.
-        await _supa("post", "rpc/adclaw_deduct_credits", json={
-            "p_campaign_id": campaign_id,
-            "p_credits": CREDITS_PER_IMPRESSION,
-            "p_slide_id": slide_id,
-            "p_instance_id": instance_id,
-            "p_description": f"View via {instance_id or 'unknown'}",
-        })
-        # Update last_served_at on slide (for round-robin fairness)
-        await _supa(
+        await _supa_with_retry("post", "adclaw_impressions", json=impression_payload)
+    except Exception as e:  # noqa: BLE001
+        logger.error("impression insert exhausted retries for slide %s: %s", slide_id, e)
+        _dlq_append({"kind": "impression", "at": now_iso, "payload": impression_payload, "error": str(e)})
+
+    # 2. Credit deduction — atomic in Postgres; skip on failure to avoid double-charging on retry.
+    try:
+        await _supa_with_retry("post", "rpc/adclaw_deduct_credits", json=deduct_payload)
+    except Exception as e:  # noqa: BLE001
+        logger.error("deduct_credits exhausted retries for campaign %s: %s", campaign_id, e)
+        _dlq_append({"kind": "deduct", "at": now_iso, "payload": deduct_payload, "error": str(e)})
+
+    # 3. last_served_at — purely for rotation fairness; DLQ is overkill, just log.
+    try:
+        await _supa_with_retry(
             "patch",
             f"adclaw_slides?id=eq.{slide_id}",
-            json={"last_served_at": now_iso},
+            json=last_served_payload,
+            attempts=2,
         )
-    except Exception as e:
-        logger.warning("Impression record failed for slide %s: %s", slide_id, e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("last_served_at update failed for slide %s: %s", slide_id, e)
 
 
 def _normalise_slide(row: dict) -> dict:
