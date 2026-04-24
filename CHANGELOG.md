@@ -2,6 +2,38 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.10] - 2026-04-24
+
+### Security — Close advertiser-owner auth bypass on 5 routes
+
+Post-deploy audit of v0.8.9 production caught that 5 of the 17
+`/api/advertiser/{advertiser_id}/*` routes accepted an advertiser id in
+the URL path **without** calling `require_advertiser_owner`. With the
+advertiser-auth middleware in audit mode (STRICT=0) this meant nothing;
+with STRICT=1 it would be an auth bypass — anyone could act on any
+advertiser id by omitting the bearer (or sending a mismatched one) since
+the guard was never invoked.
+
+Routes fixed:
+
+- `GET  /api/advertiser/{advertiser_id}/special`           (line 731)
+- `POST /api/advertiser/{advertiser_id}/apply-referral`    (line 775)
+- `PATCH /api/advertiser/{advertiser_id}/slides/{id}/boost`     (line 792)
+- `PATCH /api/advertiser/{advertiser_id}/slides/{id}/targeting` (line 814)
+- `GET  /api/advertiser/{advertiser_id}/fetch-webpage`     (line 915)
+
+`fetch-webpage` was the most exposed — SSRF was already mitigated by
+`_resolve_and_check`, but without the owner guard it was effectively a
+free public http(s) proxy and would have burned our egress.
+
+### Added — Cross-cutting regression test
+
+- `war_room/tests/test_advertiser_routes_guarded.py` parses
+  `advertiser.py` directly and asserts that every route whose URL has
+  `{advertiser_id}` calls `require_advertiser_owner` in its body. If a
+  future contributor adds a new route and forgets the guard this test
+  fails in CI instead of shipping silently.
+
 ## [0.8.9] - 2026-04-24
 
 ### Fixed — NERVIX test CI step no-ops when no tests exist
