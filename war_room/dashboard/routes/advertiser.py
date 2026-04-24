@@ -20,6 +20,7 @@ from war_room.dashboard.routes.deps import (
     STRIPE_WEBHOOK_SECRET,
     SEMECLAW_PUBLIC_URL,
     ADCLAW_PUBLIC_URL,
+    require_advertiser_owner,
 )
 
 logger = logging.getLogger("war_room.dashboard.advertiser")
@@ -75,8 +76,9 @@ async def _ensure_advertiser(advertiser_id: str, email: str = "") -> None:
 # Wallet
 # ---------------------------------------------------------------------------
 @router.get("/api/advertiser/{advertiser_id}/wallet")
-async def api_advertiser_wallet(advertiser_id: str):
+async def api_advertiser_wallet(advertiser_id: str, request: Request):
     try:
+        await require_advertiser_owner(request, advertiser_id)
         await _ensure_advertiser(advertiser_id)
         # Daily login bonus — RPC is idempotent per UTC day, safe to call on every fetch.
         try:
@@ -96,6 +98,7 @@ async def api_advertiser_wallet(advertiser_id: str):
 @router.post("/api/advertiser/{advertiser_id}/topup")
 async def api_advertiser_topup(advertiser_id: str, request: Request):
     """Add credits to wallet. Called by Stripe webhook after payment."""
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     credits = int(body.get("credits", 0))
     if credits <= 0:
@@ -115,7 +118,8 @@ async def api_advertiser_topup(advertiser_id: str, request: Request):
 # Projects
 # ---------------------------------------------------------------------------
 @router.get("/api/advertiser/{advertiser_id}/projects")
-async def api_advertiser_projects(advertiser_id: str):
+async def api_advertiser_projects(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     try:
         rows = await _supa(
             "get",
@@ -131,6 +135,7 @@ async def api_advertiser_projects(advertiser_id: str):
 
 @router.post("/api/advertiser/{advertiser_id}/projects")
 async def api_advertiser_create_project(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     name = (body.get("name") or "").strip()
     if not name:
@@ -158,6 +163,7 @@ async def api_advertiser_create_project(advertiser_id: str, request: Request):
 
 @router.patch("/api/advertiser/{advertiser_id}/projects/{project_id}")
 async def api_advertiser_update_project(advertiser_id: str, project_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     try:
         # Verify ownership
@@ -180,7 +186,8 @@ async def api_advertiser_update_project(advertiser_id: str, project_id: str, req
 # Library (slides)
 # ---------------------------------------------------------------------------
 @router.get("/api/advertiser/{advertiser_id}/library")
-async def api_advertiser_library(advertiser_id: str):
+async def api_advertiser_library(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     try:
         # 1. Get all campaign IDs for this advertiser
         campaigns = await _supa(
@@ -251,7 +258,8 @@ def _compose_draft(project: dict) -> dict:
 GENERATE_CARD_COST = 10  # credits to generate one ad card
 
 @router.post("/api/advertiser/{advertiser_id}/projects/{project_id}/generate-card")
-async def api_advertiser_generate_card(advertiser_id: str, project_id: str):
+async def api_advertiser_generate_card(advertiser_id: str, project_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     try:
         rows = await _supa("get", f"adclaw_projects?id=eq.{project_id}&advertiser_id=eq.{advertiser_id}&select=*")
         if not rows:
@@ -286,6 +294,7 @@ async def api_advertiser_generate_card(advertiser_id: str, project_id: str):
 # ---------------------------------------------------------------------------
 @router.post("/api/advertiser/{advertiser_id}/slides")
 async def api_advertiser_create_slide(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     campaign = (body.get("campaign") or "").strip() or "Generated"
     try:
@@ -324,6 +333,7 @@ async def api_advertiser_create_slide(advertiser_id: str, request: Request):
 
 @router.post("/api/advertiser/{advertiser_id}/slides/{slide_id}/edit")
 async def api_advertiser_edit_slide(advertiser_id: str, slide_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     try:
         # Verify ownership via campaign → advertiser
@@ -354,6 +364,7 @@ async def api_advertiser_edit_slide(advertiser_id: str, slide_id: str, request: 
 @router.patch("/api/advertiser/{advertiser_id}/slides/{slide_id}/status")
 @router.post("/api/advertiser/{advertiser_id}/slides/{slide_id}/status")
 async def api_advertiser_slide_status(advertiser_id: str, slide_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     status = (body.get("status") or "").strip()
     if status not in ("enabled", "active", "inactive", "pending", "paused"):
@@ -396,7 +407,8 @@ async def api_advertiser_slide_status(advertiser_id: str, slide_id: str, request
 # Credit history
 # ---------------------------------------------------------------------------
 @router.get("/api/advertiser/{advertiser_id}/history")
-async def api_advertiser_history(advertiser_id: str):
+async def api_advertiser_history(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     try:
         # Summary stats
         adv_rows = await _supa(
@@ -475,6 +487,7 @@ async def api_advertiser_history(advertiser_id: str):
 # ---------------------------------------------------------------------------
 @router.post("/api/advertiser/{advertiser_id}/checkout")
 async def api_advertiser_checkout(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     if not STRIPE_SECRET_KEY:
         return JSONResponse({"error": "stripe not configured"}, status_code=503)
     body = await request.json()

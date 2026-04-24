@@ -214,3 +214,103 @@ try:
         _ELEVEN_VOICES = json.loads(_ELEVEN_VOICE_JSON.read_text())
 except Exception:
     pass
+
+
+# ---------------------------------------------------------------------------
+# Advertiser ownership check (JWT-gated)
+#
+# Every /api/advertiser/{advertiser_id}/... route accepts the advertiser id
+# in the path. Without verification any authenticated advertiser could read
+# or mutate another advertiser's data by guessing IDs. We verify that the
+# caller holds a Supabase JWT whose `sub` claim matches the path parameter.
+#
+# Modes:
+#   SEMECLAW_ADVERTISER_AUTH_STRICT = "1" (default)  -> reject on mismatch
+#   SEMECLAW_ADVERTISER_AUTH_STRICT = "0"            -> audit mode: log only
+#
+# Demo:
+#   SEMECLAW_ADVERTISER_DEMO_ID (e.g. "demo")        -> bypass for this id
+#
+# Requires SUPABASE_JWT_SECRET when strict; when unset the mode auto-degrades
+# to "audit" with a loud warning so the service still boots.
+# ---------------------------------------------------------------------------
+from typing import Any as _Any
+
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
+_ADVERTISER_AUTH_STRICT = os.environ.get("SEMECLAW_ADVERTISER_AUTH_STRICT", "1").strip() not in ("0", "false", "False", "no", "")
+_ADVERTISER_DEMO_ID = os.environ.get("SEMECLAW_ADVERTISER_DEMO_ID", "").strip()
+
+if _ADVERTISER_AUTH_STRICT and not SUPABASE_JWT_SECRET:
+    logger.warning(
+        "SEMECLAW_ADVERTISER_AUTH_STRICT=1 but SUPABASE_JWT_SECRET is unset. "
+        "Falling back to audit mode until the secret is set."
+    )
+    _ADVERTISER_AUTH_STRICT = False
+
+
+def _extract_bearer(request: _Any) -> Optional[str]:
+    """Return the bearer token from Authorization header, or None."""
+    try:
+        auth = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    except Exception:
+        return None
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip() or None
+    return None
+
+
+def _decode_supabase_jwt(token: str) -> dict:
+    """Decode a Supabase HS256 JWT using SUPABASE_JWT_SECRET.
+
+    Accepts aud="authenticated" (the role Supabase stamps on logged-in users).
+    """
+    try:
+        import jwt  # PyJWT; already pulled in transitively via supabase[auth]
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("PyJWT not installed") from exc
+    return jwt.decode(
+        token,
+        SUPABASE_JWT_SECRET,
+        algorithms=["HS256"],
+        audience="authenticated",
+    )
+
+
+def _advertiser_auth_decision(request: _Any, advertiser_id: str) -> tuple[bool, str]:
+    """Decide whether a caller may act on `advertiser_id`.
+
+    Returns (allowed, reason). In strict mode an unallowed decision should be
+    surfaced as an HTTPException by the caller. In audit mode the caller
+    should log the reason and proceed.
+    """
+    if _ADVERTISER_DEMO_ID and advertiser_id == _ADVERTISER_DEMO_ID:
+        return True, "demo bypass"
+    token = _extract_bearer(request)
+    if not token:
+        return False, "missing bearer"
+    try:
+        claims = _decode_supabase_jwt(token)
+    except Exception as e:  # noqa: BLE001 -- any decode error = reject
+        return False, f"jwt decode failed: {e}"
+    sub = str(claims.get("sub", ""))
+    if not sub:
+        return False, "jwt has no sub"
+    if sub != advertiser_id:
+        return False, f"sub={sub[:8]}... != path={advertiser_id[:8]}..."
+    return True, "ok"
+
+
+async def require_advertiser_owner(request: _Any, advertiser_id: str) -> None:
+    """Raise HTTPException if the caller does not own `advertiser_id`.
+
+    In audit mode this never raises; it only logs. Flip strict by setting
+    SEMECLAW_ADVERTISER_AUTH_STRICT=1 and providing SUPABASE_JWT_SECRET.
+    """
+    allowed, reason = _advertiser_auth_decision(request, advertiser_id)
+    if allowed:
+        return
+    if _ADVERTISER_AUTH_STRICT:
+        from fastapi import HTTPException
+        status = 401 if reason in ("missing bearer", "jwt has no sub") or "decode" in reason else 403
+        raise HTTPException(status_code=status, detail=reason)
+    logger.warning("advertiser_auth audit: %s (path=%s)", reason, advertiser_id)
