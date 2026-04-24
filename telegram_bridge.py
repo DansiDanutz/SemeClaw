@@ -5,9 +5,12 @@ Forwards Telegram messages to the War Room task-meeting endpoint and streams
 agent turns back to the chat.
 
 Env:
-  SEMECLAW_BOT_TOKEN    Telegram bot token for @SemeClaw_bot
-  SEMECLAW_API_BASE     War Room base URL (default: http://127.0.0.1:8765)
-  SEMECLAW_ALLOWED_CHAT Optional comma-separated chat IDs. Empty = open.
+  SEMECLAW_BOT_TOKEN / TELEGRAM_BOT_TOKEN
+                        Telegram bot token for @SemeClaw_bot
+  SEMECLAW_API_BASE / SEMECLAW_API / SEMECLAW_PUBLIC_URL
+                        War Room base URL (default: http://127.0.0.1:8765)
+  SEMECLAW_ALLOWED_CHAT / TELEGRAM_CHAT_ID
+                        Optional allowed chat IDs. Empty = open.
 """
 from __future__ import annotations
 
@@ -25,12 +28,35 @@ logging.basicConfig(
 )
 log = logging.getLogger("semeclaw-tg")
 
-BOT_TOKEN = os.environ.get("SEMECLAW_BOT_TOKEN", "").strip()
-API_BASE = os.environ.get("SEMECLAW_API_BASE", "http://127.0.0.1:8765").rstrip("/")
-ALLOWED = {c.strip() for c in os.environ.get("SEMECLAW_ALLOWED_CHAT", "").split(",") if c.strip()}
+
+def _first_env(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return default
+
+
+BOT_TOKEN = _first_env("SEMECLAW_BOT_TOKEN", "TELEGRAM_BOT_TOKEN")
+API_BASE = _first_env(
+    "SEMECLAW_API_BASE",
+    "SEMECLAW_API",
+    "SEMECLAW_PUBLIC_URL",
+    default="http://127.0.0.1:8765",
+).rstrip("/")
+_allowed_raw = ",".join(
+    value
+    for value in (
+        os.environ.get("SEMECLAW_ALLOWED_CHAT", "").strip(),
+        os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
+    )
+    if value
+)
+ALLOWED = {c.strip() for c in _allowed_raw.split(",") if c.strip()}
+API_KEY = os.environ.get("SEMECLAW_API_KEY", "").strip()
 
 if not BOT_TOKEN:
-    raise SystemExit("SEMECLAW_BOT_TOKEN not set")
+    raise SystemExit("SEMECLAW_BOT_TOKEN / TELEGRAM_BOT_TOKEN not set")
 
 TG = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -46,6 +72,12 @@ WELCOME = (
 
 # chat_id -> current meeting tracking task
 _active: dict[str, asyncio.Task] = {}
+
+
+def _api_headers() -> dict[str, str]:
+    if not API_KEY:
+        return {}
+    return {"Authorization": f"Bearer {API_KEY}"}
 
 
 async def tg_send(client: httpx.AsyncClient, chat_id: str, text: str, parse: str = "Markdown") -> None:
@@ -74,7 +106,10 @@ async def track_meeting(chat_id: str, meeting_id: str) -> None:
         )
         while time.time() < deadline:
             try:
-                r = await client.get(f"{API_BASE}/api/meeting/history/{meeting_id}")
+                r = await client.get(
+                    f"{API_BASE}/api/meeting/history/{meeting_id}",
+                    headers=_api_headers(),
+                )
                 if r.status_code != 200:
                     await asyncio.sleep(3)
                     continue
@@ -138,8 +173,15 @@ async def handle_message(client: httpx.AsyncClient, msg: dict) -> None:
         return
 
     if text.startswith("/"):
-        await tg_send(client, chat_id, "Unknown command. Send a task or /help.")
-        return
+        if text.startswith("/run"):
+            parts = text.split(None, 1)
+            if len(parts) < 2 or not parts[1].strip():
+                await tg_send(client, chat_id, "Usage: /run <task>")
+                return
+            text = parts[1].strip()
+        else:
+            await tg_send(client, chat_id, "Unknown command. Send a task or /help.")
+            return
 
     # Cancel prior tracking for this chat
     prev = _active.pop(chat_id, None)
@@ -151,6 +193,7 @@ async def handle_message(client: httpx.AsyncClient, msg: dict) -> None:
         r = await client.post(
             f"{API_BASE}/api/meeting/task",
             json={"task": text, "user_context": f"telegram:@{user}", "lang": "en"},
+            headers=_api_headers(),
             timeout=20,
         )
         if r.status_code != 200:

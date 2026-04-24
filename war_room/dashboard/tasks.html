@@ -328,6 +328,7 @@
     text-transform: uppercase;
     flex: none;
   }
+  .avatar-host      { background: linear-gradient(135deg,#ec4899,#db2777); }
   .avatar-research  { background: linear-gradient(135deg,#06b6d4,#0891b2); }
   .avatar-writer    { background: linear-gradient(135deg,#f59e0b,#d97706); }
   .avatar-scrape    { background: linear-gradient(135deg,#10b981,#059669); }
@@ -654,11 +655,17 @@ let DIALOG = null;
 let INTERVENTIONS = [];
 
 const AGENT_COLORS = {
+  host:     'avatar-host',
+  aria:     'avatar-host',
   research: 'avatar-research',
   writer:   'avatar-writer',
   scrape:   'avatar-scrape',
   scraper:  'avatar-scrape',
+  scraping: 'avatar-scrape',
+  browser:  'avatar-scrape',
   coder:    'avatar-coder',
+  architect:'avatar-coder',
+  strategist:'avatar-writer',
   semeclaw: 'avatar-semeclaw',
 };
 const agentClass = (id) => AGENT_COLORS[(id||'').toLowerCase()] || 'avatar-default';

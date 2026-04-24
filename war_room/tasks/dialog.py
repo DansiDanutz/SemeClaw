@@ -41,6 +41,97 @@ _VOICE_TEMPLATES = {
     "strategist": "Strategically, '{title}' lands inside our current quarter priorities — let's scope tight.",
 }
 
+# Short, human-friendly clauses used by the host's intro line (template path).
+_HOST_AGENT_BLURBS = {
+    "research":   "Research for sources",
+    "writer":     "Writer for the draft",
+    "scraping":   "Scraping for raw content",
+    "browser":    "Browser for live search",
+    "coder":      "Coder for the build",
+    "architect":  "Architect for the design lens",
+    "strategist": "Strategist for the priorities",
+    "semeclaw":   "the SemeClaw orchestrator running point",
+}
+
+
+def _host_intro_template(task: dict, agents_ids: list[str]) -> str:
+    """Deterministic Aria opener used when no LLM key is available."""
+    title = task.get("title") or "(untitled)"
+    desc  = (task.get("description") or "").strip()
+    # Goal: first sentence of the description, capped at 90 chars.
+    goal = ""
+    if desc:
+        first = desc.split("\n", 1)[0].split(". ", 1)[0].strip()
+        if first and first.lower() != title.lower():
+            goal = first[:90].rstrip(" .,;:") + "."
+    blurbs = []
+    for aid in agents_ids:
+        b = _HOST_AGENT_BLURBS.get(aid)
+        if b:
+            blurbs.append(b)
+        else:
+            blurbs.append(f"{aid.capitalize()}")
+    # Always include the orchestrator at the end of the roster.
+    blurbs.append(_HOST_AGENT_BLURBS["semeclaw"])
+
+    if len(blurbs) == 1:
+        roster = blurbs[0]
+    elif len(blurbs) == 2:
+        roster = f"{blurbs[0]} and {blurbs[1]}"
+    else:
+        roster = ", ".join(blurbs[:-1]) + f", and {blurbs[-1]}"
+
+    parts = [f"Hello and welcome to the War Room. Today's task is '{title}'."]
+    if goal:
+        parts.append(f"The goal: {goal}")
+    parts.append(f"Joining me are {roster}.")
+    parts.append("Over to you, SemeClaw.")
+    return " ".join(parts)
+
+
+async def _host_intro_llm(task: dict, agents_ids: list[str], model: str) -> str | None:
+    """LLM-generated opener in Aria's voice, falls back to None on any failure."""
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key or not model:
+        return None
+    try:
+        import httpx
+    except Exception:
+        return None
+    sys_prompt = (
+        "You are Aria, the host of the SemeClaw War Room. Open the meeting with "
+        "ONE short paragraph (max 65 words). Structure: greet → name the task and the "
+        "goal in plain language → introduce the attending agents by role (one short clause "
+        "each) → hand off with 'Over to you, SemeClaw.' Warm, broadcast-quality, no jargon, "
+        "no filler, no quotes around the task."
+    )
+    roster = ", ".join(agents_ids + ["semeclaw"])
+    user = (
+        f"Task title: {task.get('title')}\n"
+        f"Description: {(task.get('description') or '')[:400]}\n"
+        f"Status: {task.get('status')}\n"
+        f"Attending agents: {roster}"
+    )
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": sys_prompt},
+                     {"role": "user",   "content": user}],
+        "temperature": 0.55,
+        "max_tokens": 180,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.post("https://openrouter.ai/api/v1/chat/completions",
+                             headers=headers, json=payload)
+            if r.status_code >= 400:
+                return None
+            data = r.json()
+            txt = (data["choices"][0]["message"]["content"] or "").strip().strip('"').strip()
+            return txt or None
+    except Exception:
+        return None
+
 
 def _template_line(agent_id: str, role: str, title: str) -> str:
     tpl = _VOICE_TEMPLATES.get(agent_id)
@@ -103,10 +194,30 @@ async def compose_dialog(task: dict) -> list[dict]:
     orch_id   = "semeclaw"
     orch_role = orchestrator.role if orchestrator else "Orchestrator"
 
+    host = catalog.get("host")
+    host_id   = "host"
+    host_role = host.role if host else "Meeting host and announcer"
+
     lines: list[dict] = []
     now = lambda: datetime.now(timezone.utc).isoformat()
 
-    # Scene-setter
+    # 1. Host opener — Aria says hello, names the task + goal, presents the agents.
+    host_model = ""
+    if host:
+        for pref in (host.model_preference or []):
+            if pref.startswith("openrouter:"):
+                host_model = pref.split(":", 1)[1]
+                break
+    intro = await _host_intro_llm(task, agents_ids, host_model)
+    if not intro:
+        intro = _host_intro_template(task, agents_ids)
+    lines.append({
+        "agent_id": host_id, "role": host_role,
+        "text": intro, "audio_url": _audio_url(intro, host_id),
+        "ts": now(),
+    })
+
+    # 2. Orchestrator scene-setter
     scene = f"Team — task on the table: '{title}'. Status is {task.get('status', 'open')}. Quick passes please."
     lines.append({
         "agent_id": orch_id, "role": orch_role,
