@@ -515,6 +515,7 @@ _PROTECTED_WRITE_PATHS = (
     "/api/reports/delete",
     "/api/webhooks",
     "/api/reports",
+    "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
 )
 
 
