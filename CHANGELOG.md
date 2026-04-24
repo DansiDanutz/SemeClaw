@@ -2,6 +2,15 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.7] - 2026-04-24
+
+### Added — Order-independent shared-httpx test
+
+- `war_room/tests/test_shared_http_client.py::test_tasks_db_uses_shared_client`
+  was flaky in full-suite order because it reloaded the `_db` module.
+  Rewritten as self-contained with direct `monkeypatch.setattr` on
+  module symbols. Now order-independent.
+
 ## [0.8.6] - 2026-04-24
 
 ### Added — DLQ admin endpoints (/api/admin/dlq)
