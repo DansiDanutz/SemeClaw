@@ -35,14 +35,19 @@ async def test_recreates_after_close() -> None:
 
 @pytest.mark.asyncio
 async def test_tasks_db_uses_shared_client(monkeypatch) -> None:
-    """tasks._db._supa_once should delegate to get_shared_client."""
+    """tasks._db._supa_once should delegate to get_shared_client.
+
+    Test is self-contained: sets env, then patches the module\'s symbol
+    directly without reloading. Avoids test-order dependencies.
+    """
     monkeypatch.setenv("DLS_TEAM_SUPABASE_URL", "https://probe.invalid")
     monkeypatch.setenv("DLS_TEAM_SUPABASE_SERVICE_KEY", "k")
-    import importlib
-
     from war_room.tasks import _db
 
-    importlib.reload(_db)
+    # Pin module-level constants without reloading
+    monkeypatch.setattr(_db, "SUPA_URL", "https://probe.invalid")
+    monkeypatch.setattr(_db, "SUPA_KEY", "k")
+    monkeypatch.setattr(_db, "SUPA_HEADERS", {})
 
     called = {"n": 0}
 

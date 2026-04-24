@@ -544,6 +544,7 @@ _PROTECTED_WRITE_PATHS = (
     "/api/webhooks",
     "/api/reports",
     "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
+    "/api/admin",  # DLQ inspect/replay — fully bearer-gated (incl. GET)
 )
 
 
@@ -558,6 +559,22 @@ async def _semeclaw_request_id(request, call_next):
         set_request_id("")
     response.headers["X-Request-ID"] = rid
     return response
+
+
+@app.middleware("http")
+async def _semeclaw_admin_gate(request, call_next):
+    """Gate /api/admin/* on every method, including GET. Uses SEMECLAW_API_KEY."""
+    if request.url.path.startswith("/api/admin"):
+        if not SEMECLAW_API_KEY:
+            from fastapi.responses import JSONResponse as _J
+
+            return _J({"error": "admin endpoints require SEMECLAW_API_KEY"}, status_code=503)
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {SEMECLAW_API_KEY}":
+            from fastapi.responses import JSONResponse as _J
+
+            return _J({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -5559,6 +5576,96 @@ async def api_probe_now(request: Request):
     """Manually trigger an immediate connectivity probe of all droplets."""
     results = await _run_all_probes()
     return JSONResponse({"ok": True, "results": results})
+
+
+# ---------------------------------------------------------------------------
+# DLQ admin — inspect + replay dead-letter queues
+# ---------------------------------------------------------------------------
+_DLQ_REGISTRY = {
+    "adclaw": os.environ.get("ADCLAW_DLQ_PATH", "/app/data/adclaw_dlq.jsonl"),
+    "tasks": os.environ.get("SEMECLAW_TASKS_DLQ_PATH", "/app/data/semeclaw_tasks_dlq.jsonl"),
+}
+
+
+@app.get("/api/admin/dlq")
+async def api_admin_dlq_list():
+    """List every DLQ known to the app with existence and size (bytes + line count)."""
+    from pathlib import Path as _P
+
+    out = {}
+    for name, p in _DLQ_REGISTRY.items():
+        pp = _P(p)
+        entry: dict = {"path": p, "exists": pp.exists()}
+        if pp.exists():
+            try:
+                entry["bytes"] = pp.stat().st_size
+                with pp.open("r", encoding="utf-8") as f:
+                    entry["lines"] = sum(1 for line in f if line.strip())
+            except Exception as exc:
+                entry["error"] = str(exc)[:120]
+        out[name] = entry
+    return JSONResponse({"dlqs": out})
+
+
+@app.get("/api/admin/dlq/{name}")
+async def api_admin_dlq_peek(name: str, head: int = 20, tail: int = 0):
+    """Return up to `head` lines from the top and/or `tail` from the bottom."""
+    import json as _j
+    from pathlib import Path as _P
+
+    if name not in _DLQ_REGISTRY:
+        return JSONResponse({"error": f"unknown dlq {name!r}"}, status_code=404)
+    p = _P(_DLQ_REGISTRY[name])
+    if not p.exists():
+        return JSONResponse({"name": name, "lines": [], "total": 0})
+    head = max(0, min(int(head), 500))
+    tail = max(0, min(int(tail), 500))
+    top: list = []
+    bot: list = []
+    total = 0
+    with p.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            total += 1
+            if len(top) < head:
+                try:
+                    top.append(_j.loads(line))
+                except Exception:
+                    top.append({"_raw": line.strip()})
+            if tail:
+                if len(bot) >= tail:
+                    bot.pop(0)
+                try:
+                    bot.append(_j.loads(line))
+                except Exception:
+                    bot.append({"_raw": line.strip()})
+    return JSONResponse({"name": name, "total": total, "head": top, "tail": bot})
+
+
+@app.post("/api/admin/dlq/{name}/drain")
+async def api_admin_dlq_drain(name: str, keep_file: bool = False):
+    """Move the DLQ file aside (renamed with .drained-<ts> suffix).
+
+    Does NOT attempt to re-run entries — that requires human judgement or a
+    purpose-built replayer per DLQ kind. This endpoint just lets ops clear
+    the backlog once it has been inspected and replayed manually.
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path as _P
+
+    if name not in _DLQ_REGISTRY:
+        return JSONResponse({"error": f"unknown dlq {name!r}"}, status_code=404)
+    p = _P(_DLQ_REGISTRY[name])
+    if not p.exists():
+        return JSONResponse({"name": name, "drained": 0, "archived_to": None})
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    archive = p.with_suffix(p.suffix + f".drained-{ts}")
+    try:
+        p.rename(archive)
+        return JSONResponse({"name": name, "archived_to": str(archive)})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @app.get("/api/agent/health")

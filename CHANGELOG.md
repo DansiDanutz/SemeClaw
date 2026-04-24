@@ -2,6 +2,27 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.6] - 2026-04-24
+
+### Added — DLQ admin endpoints (/api/admin/dlq)
+
+- `GET /api/admin/dlq` — list every registered DLQ with path, existence,
+  size in bytes, and line count.
+- `GET /api/admin/dlq/{name}?head=N&tail=M` — return up to `head` top
+  entries and/or `tail` bottom entries parsed from the JSONL. Safe cap
+  of 500 lines per side.
+- `POST /api/admin/dlq/{name}/drain` — renames the DLQ file aside with a
+  `.drained-<ts>` suffix. Does NOT attempt automatic replay — entries
+  require human judgement or a DLQ-kind-specific handler.
+- New `_semeclaw_admin_gate` middleware: `/api/admin/*` is bearer-gated
+  on *every* method (including GET), separate from the existing
+  write-only gate. If `SEMECLAW_API_KEY` is unset the endpoint returns
+  503 — an operator must explicitly configure it to access DLQs.
+- Registry currently covers `adclaw` and `tasks` DLQs; extend by adding
+  to `_DLQ_REGISTRY` in `server.py`.
+- 6 unit tests: list/peek/drain happy paths, 401 without bearer, 404 on
+  unknown name, 503 when `SEMECLAW_API_KEY` isn't set.
+
 ## [0.8.5] - 2026-04-24
 
 ### Added — Meeting replay API (/api/meeting/{id}/replay)
