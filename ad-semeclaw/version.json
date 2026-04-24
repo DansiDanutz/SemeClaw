@@ -1,1 +1,8 @@
-{"version":"0.7.14+a133f5a.20260424T110959Z","pyproject_version":"0.7.14","git_sha":"a133f5a","built_at":"20260424T110959Z"}
+{
+  "version": "0.7.14+2d997c0+dirty.20260424T114716Z",
+  "pyproject_version": "0.7.14",
+  "git_sha": "2d997c0",
+  "git_branch": "main",
+  "built_at": "20260424T114716Z",
+  "dirty": true
+}

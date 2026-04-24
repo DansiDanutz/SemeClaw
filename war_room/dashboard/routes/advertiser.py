@@ -404,7 +404,7 @@ async def api_advertiser_history(advertiser_id: str):
 
         tx_rows = await _supa(
             "get",
-            f"adclaw_transactions?advertiser_id=eq.{advertiser_id}&select=*&order=created_at.desc&limit=200"
+            f"adclaw_credit_transactions?advertiser_id=eq.{advertiser_id}&select=*&order=created_at.desc&limit=200"
         )
 
         total_purchased = sum(t["credits"] for t in tx_rows if t["type"] in ("purchase", "subscription", "refund", "adjustment") and t["credits"] > 0)
