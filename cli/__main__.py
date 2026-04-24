@@ -9,6 +9,7 @@ SemeClaw CLI
 Usage:
   semeclaw setup       Interactive onboarding (API keys, smoke test, save env)
   semeclaw status      Checklist of what's configured + what's missing
+  semeclaw doctor      End-to-end connectivity probe (use after clone)
   semeclaw agents      List all registered agents (core + adapters)
   semeclaw demo        Run the saved 4-agent live demo task
   semeclaw tasks ...   Sync / list / dialog / quota / gc (see `semeclaw tasks`)
@@ -28,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "status":
         from . import status
         return status.run()
+    if cmd == "doctor":
+        from . import doctor
+        return doctor.run()
     if cmd == "agents":
         from . import agents
         return agents.run()

@@ -22,6 +22,41 @@
 
 ---
 
+## ⚡ Quickstart — three paths from clone to running
+
+Pick the one that fits how you work:
+
+### Path A — human, with a CLI (60 seconds)
+```bash
+curl -fsSL https://raw.githubusercontent.com/DansiDanutz/SemeClaw/main/install.sh | bash
+cd ~/SemeClaw
+semeclaw setup     # interactive: pick free providers, smoke-test, save
+semeclaw doctor    # connectivity check — tells you exactly what's missing
+semeclaw war-room  # dashboard at http://127.0.0.1:8765
+```
+
+### Path B — autonomous, with an AI coding agent (Claude Code / Codex / Cursor)
+```bash
+git clone https://github.com/DansiDanutz/SemeClaw.git && cd SemeClaw
+# Open the repo in your AI agent and paste the prompt from:
+# scripts/autonomous-setup-prompt.md
+```
+The agent reads [`AGENTS.md`](./AGENTS.md), runs `semeclaw doctor --json`, and
+sets up everything that doesn't need a human decision. Works without any API
+keys — it'll only ask if you want to plug in optional ones.
+
+### Path C — Docker
+```bash
+git clone https://github.com/DansiDanutz/SemeClaw.git && cd SemeClaw
+docker compose up
+```
+
+> **Zero-key mode is real.** Dialog generation, web search, and TTS all have
+> free fallbacks (deterministic templates, DuckDuckGo HTML, edge-tts). Add keys
+> only when you want to upgrade the quality.
+
+---
+
 ## 🚀 What is SemeClaw?
 
 SemeClaw is a **self-hosted, embeddable AI agent** that turns any task report into a **cinematic multi-agent meeting**. Built from the ground up as the AI brain of [NERVIX](https://nervix.ai) and designed for distribution to other Paperclip companies.

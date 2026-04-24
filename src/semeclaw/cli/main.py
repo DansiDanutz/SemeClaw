@@ -353,6 +353,14 @@ def status_cmd() -> None:
     raise typer.Exit(_s.run())
 
 
+@app.command("doctor")
+def doctor_cmd() -> None:
+    """End-to-end connectivity probe — DNS, dashboard, Supabase, OpenRouter, adapters."""
+    _bootstrap_repo_cli()
+    from cli import doctor as _d
+    raise typer.Exit(_d.run())
+
+
 @app.command("setup")
 def setup_cmd() -> None:
     """Interactive onboarding: API key, smoke test, save ~/.semeclaw/env."""

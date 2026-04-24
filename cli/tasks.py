@@ -57,9 +57,12 @@ def cmd_sync() -> int:
     return 0
 
 
-def cmd_list() -> int:
-    banner("semeclaw tasks list", _api_base())
+def cmd_list(as_json: bool = False) -> int:
     res = _http("GET", "/api/tasks?limit=50")
+    if as_json:
+        print(json.dumps(res, indent=2))
+        return 0 if res.get("ok") else 1
+    banner("semeclaw tasks list", _api_base())
     if not res.get("ok"):
         fail(res.get("error", "unknown"))
         return 1
@@ -135,7 +138,7 @@ def run(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[2:])  # skip "semeclaw tasks"
     cmd = (args[0] if args else "").lower()
     if cmd == "sync":   return cmd_sync()
-    if cmd == "list":   return cmd_list()
+    if cmd == "list":   return cmd_list(as_json=("--json" in args))
     if cmd == "dialog": return cmd_dialog(args[1] if len(args) > 1 else None)
     if cmd == "quota":  return cmd_quota()
     if cmd == "gc":     return cmd_gc()
