@@ -156,26 +156,51 @@ def synthesize(
         if path.exists() and path.stat().st_size > 0:
             return path
         logger.info("TTS synth: voice=%s bytes=%d key=%s...", voice, len(text), key[:8])
+        edge_err: Exception | None = None
         try:
-            asyncio.run(_synthesize_async(text, voice, path, rate=rate, pitch=pitch))
-        except RuntimeError as e:
-            if "event loop" in str(e).lower():
-                result: dict[str, Exception | None] = {"err": None}
+            try:
+                asyncio.run(_synthesize_async(text, voice, path, rate=rate, pitch=pitch))
+            except RuntimeError as e:
+                if "event loop" in str(e).lower():
+                    result: dict[str, Exception | None] = {"err": None}
 
-                def _worker() -> None:
-                    try:
-                        asyncio.run(_synthesize_async(text, voice, path, rate=rate, pitch=pitch))
-                    except Exception as inner:
-                        result["err"] = inner
+                    def _worker() -> None:
+                        try:
+                            asyncio.run(_synthesize_async(text, voice, path, rate=rate, pitch=pitch))
+                        except Exception as inner:
+                            result["err"] = inner
 
-                t = threading.Thread(target=_worker, daemon=True)
-                t.start()
-                t.join()
-                if result["err"] is not None:
-                    raise result["err"]
-            else:
-                raise
-    return path
+                    t = threading.Thread(target=_worker, daemon=True)
+                    t.start()
+                    t.join()
+                    if result["err"] is not None:
+                        raise result["err"]
+                else:
+                    raise
+        except Exception as e:  # noqa: BLE001 — any failure triggers kokoro fallback
+            edge_err = e
+            logger.warning("edge-tts failed, trying kokoro: %s", e)
+
+    # If edge-tts produced a file we're done.
+    if path.exists() and path.stat().st_size > 0:
+        return path
+
+    # --- Tier 3: Kokoro ONNX (local, offline, no API key) ------------------
+    try:
+        from war_room.dashboard import kokoro_tts as kt
+        kokoro_path = kt.synthesize(text, voice=voice, agent=agent)
+        if kokoro_path is not None and kokoro_path.exists() and kokoro_path.stat().st_size > 0:
+            logger.info("TTS served by kokoro fallback for key=%s", key[:8])
+            return kokoro_path
+    except Exception as e:  # noqa: BLE001
+        logger.error("kokoro fallback also failed: %s (after edge err: %s)", e, edge_err)
+
+    # Re-raise the original edge-tts error if we got here with nothing.
+    if edge_err is not None:
+        raise edge_err
+    raise RuntimeError(
+        f"TTS failed: no engine produced audio for voice={voice}"
+    )
 
 
 def clear_cache() -> int:

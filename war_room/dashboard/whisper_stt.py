@@ -29,10 +29,26 @@ logger = logging.getLogger("war_room.whisper")
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-# Model size: tiny, base, small, medium, large-v1, large-v2, large-v3, large-v3-turbo, distil-*
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base").strip() or "base"
+# Model quality vs. speed tradeoffs (faster-whisper):
+#   tiny            39M   ~8x realtime   — demo only
+#   base            74M   ~5x realtime   — previously the default; too noisy for production meetings
+#   small          244M   ~2x realtime   — production-grade CPU default
+#   medium         769M   ~1x realtime   — high quality, heavier CPU
+#   large-v3      1.5B    ~0.5x rt       — best quality, GPU recommended
+#   large-v3-turbo 809M   ~3x rt on GPU  — best quality/speed on GPU
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu").strip() or "cpu"  # "cpu" or "cuda"
-WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", "int8").strip() or "int8"  # int8, float16, float32
+
+# Default chosen so a fresh fly deploy sounds good:
+#   GPU available   -> large-v3-turbo (best on GPU)
+#   CPU only        -> small          (production-usable on a Fly shared CPU)
+_DEFAULT_MODEL = "large-v3-turbo" if WHISPER_DEVICE == "cuda" else "small"
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", _DEFAULT_MODEL).strip() or _DEFAULT_MODEL
+
+# Compute type: int8 is fastest but lossy; float16/float32 preserve quality.
+#   CPU -> int8 is the pragmatic default (still small model).
+#   GPU -> float16 is the right balance on modern hardware.
+_DEFAULT_COMPUTE = "float16" if WHISPER_DEVICE == "cuda" else "int8"
+WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", _DEFAULT_COMPUTE).strip() or _DEFAULT_COMPUTE
 
 # ---------------------------------------------------------------------------
 # Lazy model init (thread-safe)
