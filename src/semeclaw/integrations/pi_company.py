@@ -51,7 +51,7 @@ def candidate_package_paths(workspace: Path) -> list[Path]:
             current / "packages" / "pi-company",
             parent / "pi-mono" / "packages" / "pi-company",
             parent / "packages" / "pi-company",
-            Path("/Users/davidai/pi-mono/packages/pi-company"),
+            # (removed developer-specific /Users/davidai/... fallback during prod hardening)
         ]
     )
 

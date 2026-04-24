@@ -197,6 +197,53 @@ async def _prune_agent_history(agent_name: str):
 from war_room.dashboard.routes.deps import APP_VERSION
 
 
+def _range_audio_response(
+    data: bytes,
+    request: "Request",
+    *,
+    media_type: str = "audio/mpeg",
+    extra_headers: dict | None = None,
+):
+    """Return audio bytes with Range support so clients can scrub/resume.
+
+    The HTTP Range protocol supported here is the 99% case: single byte-range
+    ``Range: bytes=<start>-<end>`` or ``Range: bytes=<start>-``. Multipart
+    ranges are not supported; such a request falls back to a 200 with the
+    whole body (still valid per RFC 7233 §3.1).
+    """
+    from fastapi.responses import Response as _FR
+    total = len(data)
+    headers: dict[str, str] = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(total),
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+
+    rng = request.headers.get("range") or request.headers.get("Range") or ""
+    if not rng or not rng.lower().startswith("bytes="):
+        return _FR(content=data, media_type=media_type, headers=headers)
+
+    try:
+        spec = rng.split("=", 1)[1].strip()
+        if "," in spec:  # multipart — decline; return whole body
+            return _FR(content=data, media_type=media_type, headers=headers)
+        start_s, _, end_s = spec.partition("-")
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else total - 1
+        if start < 0 or end >= total or start > end:
+            raise ValueError("bad range")
+    except Exception:
+        # Malformed Range — RFC says return 416, but 200 with full body is a
+        # safer fallback for players that send weird range headers.
+        return _FR(content=data, media_type=media_type, headers=headers)
+
+    slice_bytes = data[start : end + 1]
+    headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+    headers["Content-Length"] = str(len(slice_bytes))
+    return _FR(content=slice_bytes, media_type=media_type, status_code=206, headers=headers)
+
+
 async def _prune_loop() -> None:
     while True:
         try:
@@ -208,8 +255,36 @@ async def _prune_loop() -> None:
         await asyncio.sleep(3600)
 
 
+def _startup_config_checks() -> None:
+    """Log loud warnings when critical env vars are missing.
+
+    Called once at lifespan startup. Non-fatal — the app still boots so a
+    deployer can see the boot succeed and check logs — but the WARNING lines
+    are hard to miss in Fly logs / Grafana.
+    """
+    if STRIPE_SECRET_KEY and not STRIPE_WEBHOOK_SECRET:
+        logger.warning(
+            "[config] STRIPE_WEBHOOK_SECRET is unset while STRIPE_SECRET_KEY is set. "
+            "Stripe webhooks will return 503 and Stripe will retry storm. "
+            "Set STRIPE_WEBHOOK_SECRET via `fly secrets set ...` before taking payments."
+        )
+    if not SEMECLAW_API_KEY:
+        logger.warning(
+            "[config] SEMECLAW_API_KEY is unset. Write endpoints are unauthenticated. "
+            "Set it for any non-demo deployment."
+        )
+    supa_url = os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip()
+    supa_key = os.environ.get("DLS_TEAM_SUPABASE_SERVICE_KEY", "").strip()
+    if supa_url and not supa_key:
+        logger.warning(
+            "[config] DLS_TEAM_SUPABASE_URL set but DLS_TEAM_SUPABASE_SERVICE_KEY missing. "
+            "Advertiser / AdClaw writes will fail."
+        )
+
+
 async def _start_background_tasks() -> list[asyncio.Task]:
     """Start long-lived background tasks for the dashboard process."""
+    _startup_config_checks()
     tasks = [
         asyncio.create_task(file_watcher(), name="semeclaw-file-watcher"),
         asyncio.create_task(_droplet_probe_loop(), name="semeclaw-droplet-probe-loop"),
