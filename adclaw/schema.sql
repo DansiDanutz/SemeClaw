@@ -1,5 +1,13 @@
--- AdClaw Schema — Supabase (Moltbot project)
--- Run once: paste into Supabase SQL editor or use apply_migration
+-- AdClaw Schema — legacy summary only.
+-- Source of truth now lives in:
+--   war_room/db/migrations/2026_04_23_adclaw_00_base.sql
+--   war_room/db/migrations/2026_04_23_adclaw_credits.sql
+--   war_room/db/migrations/2026_04_23_adclaw_special.sql
+--   war_room/db/migrations/2026_04_23_adclaw_tier.sql
+--   war_room/db/migrations/2026_04_23_adclaw_weekly_bonus.sql
+--   war_room/db/migrations/2026_04_24_adclaw_projects_and_spotlight.sql
+-- Keep this file only as a human-readable sketch; do not treat it as the
+-- canonical migration chain.
 
 -- -----------------------------------------------------------------------
 -- Advertisers & wallets

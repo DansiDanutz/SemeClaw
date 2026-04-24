@@ -176,6 +176,68 @@ async def orchestrator_decide(task: dict, all_lines: list[dict],
 
 
 # ---------------------------------------------------------------------------
+# Shared finalize helper — used by turn-3 and by explicit /finalize calls
+# ---------------------------------------------------------------------------
+async def _finalize_dialog(task: dict, dialog: dict, all_interventions: list[dict]
+                           ) -> dict:
+    """Run orchestrator → patch task → compose v(n+1) → writeback.
+
+    Returns {decision, new_dialog, writeback, task} so callers can serialise
+    a single uniform response shape.
+    """
+    decision = await orchestrator_decide(task, dialog.get("lines") or [], all_interventions)
+
+    patch = decision.get("task_patch", {}) or {}
+    db_patch: dict = {}
+    if "title" in patch:           db_patch["title"]           = patch["title"]
+    if "description" in patch:     db_patch["description"]     = patch["description"]
+    if "assigned_agents" in patch: db_patch["assigned_agents"] = patch["assigned_agents"]
+    if "status" in patch:          db_patch["status"]          = patch["status"]
+    if db_patch:
+        await _db.patch_task(task["id"], db_patch)
+        task = {**task, **db_patch}
+
+    seed_task = {**task, "description": (decision.get("dialog_brief")
+                                         or task.get("description"))}
+    new_lines = await _dialog.compose_dialog(seed_task)
+    new_dialog = await _db.insert_dialog(task["id"],
+                                         version=dialog["version"] + 1,
+                                         lines=new_lines)
+    await _db.supersede_dialog(dialog["id"], new_dialog["id"])
+
+    try:
+        from . import writeback as _wb
+        wb = await _wb.push_to_source(task)
+    except Exception as e:
+        wb = {"ok": False, "error": str(e)}
+
+    return {"decision": decision, "new_dialog": new_dialog,
+            "writeback": wb, "task": task}
+
+
+async def finalize_now(task_id: str) -> dict:
+    """Force the orchestrator to commit a decision on the current dialog,
+    even if fewer than MAX_INTERVENTIONS comments have been recorded.
+
+    Useful for "Finish meeting" — user has heard enough, wants the system
+    to recalibrate now.
+    """
+    task = await _db.get_task(task_id)
+    if not task:
+        return {"ok": False, "error": "task not found"}
+    dialog = await _db.latest_dialog(task_id)
+    if not dialog:
+        return {"ok": False, "error": "no dialog to finalize"}
+    interventions = await _db.list_interventions(dialog["id"])
+    res = await _finalize_dialog(task, dialog, interventions)
+    return {"ok": True, "finalized": True,
+            "orchestrator_decision": res["decision"],
+            "new_dialog": res["new_dialog"],
+            "writeback": res["writeback"],
+            "task": res["task"]}
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 async def intervene(task_id: str, comment: str) -> dict:
@@ -212,31 +274,11 @@ async def intervene(task_id: str, comment: str) -> dict:
         all_interventions = prior + [{
             "turn_index": turn, "user_comment": comment, "agent_replies": replies,
         }]
-        decision = await orchestrator_decide(task, dialog.get("lines") or [], all_interventions)
-
-        # Apply the patch
-        patch = decision.get("task_patch", {}) or {}
-        db_patch: dict = {}
-        if "title" in patch:           db_patch["title"]           = patch["title"]
-        if "description" in patch:     db_patch["description"]     = patch["description"]
-        if "assigned_agents" in patch: db_patch["assigned_agents"] = patch["assigned_agents"]
-        if "status" in patch:          db_patch["status"]          = patch["status"]
-        if db_patch:
-            await _db.patch_task(task_id, db_patch)
-            task = {**task, **db_patch}
-
-        # Compose dialog v(n+1) seeded with the brief
-        seed_task = {**task, "description": (decision.get("dialog_brief") or task.get("description"))}
-        new_lines = await _dialog.compose_dialog(seed_task)
-        new_dialog = await _db.insert_dialog(task_id, version=dialog["version"] + 1, lines=new_lines)
-        await _db.supersede_dialog(dialog["id"], new_dialog["id"])
-
-        # Optional write-back to the source adapter
-        try:
-            from . import writeback as _wb
-            writeback_result = await _wb.push_to_source(task)
-        except Exception as e:
-            writeback_result = {"ok": False, "error": str(e)}
+        res = await _finalize_dialog(task, dialog, all_interventions)
+        decision = res["decision"]
+        new_dialog = res["new_dialog"]
+        writeback_result = res["writeback"]
+        task = res["task"]
 
     saved = await _db.insert_intervention(
         task_id=task_id, dialog_id=dialog["id"], turn_index=turn,

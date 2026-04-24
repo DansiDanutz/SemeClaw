@@ -65,6 +65,17 @@ async def latest_dialog(task_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+async def list_dialogs(task_id: str) -> list[dict]:
+    """All dialog versions for a task, oldest first. Used for history nav in the UI."""
+    return await supa("get",
+        f"semeclaw_dialogs?task_id=eq.{task_id}&order=version.asc&select=*")
+
+
+async def get_dialog(dialog_id: str) -> dict | None:
+    rows = await supa("get", f"semeclaw_dialogs?id=eq.{dialog_id}&select=*&limit=1")
+    return rows[0] if rows else None
+
+
 async def insert_dialog(task_id: str, version: int, lines: list[dict]) -> dict:
     rows = await supa("post", "semeclaw_dialogs", json={
         "task_id": task_id, "version": version, "lines": lines,

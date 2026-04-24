@@ -179,6 +179,32 @@ async def api_list_interventions(task_id: str):
         return _err(str(e))
 
 
+@router.get("/api/tasks/{task_id}/dialogs")
+async def api_list_dialogs(task_id: str):
+    """All dialog versions for a task, oldest first. Lets the UI offer a v1/v2/v3 selector."""
+    try:
+        task = await _db.get_task(task_id)
+        if not task:
+            return _err("task not found", 404)
+        rows = await _db.list_dialogs(task_id)
+        return {"ok": True, "task_id": task_id, "count": len(rows), "dialogs": rows}
+    except Exception as e:
+        return _err(str(e))
+
+
+@router.post("/api/tasks/{task_id}/finalize")
+async def api_finalize(task_id: str):
+    """Force the orchestrator to commit a decision on the current dialog without
+    waiting for the third intervention. Powers the UI's 'Finish meeting' button."""
+    try:
+        result = await _intervene.finalize_now(task_id)
+        if not result.get("ok"):
+            return _err(result.get("error", "finalize failed"), 409)
+        return result
+    except Exception as e:
+        return _err(str(e))
+
+
 @router.post("/api/tasks/{task_id}/dialog")
 async def api_regen_dialog(task_id: str):
     try:

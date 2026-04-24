@@ -41,7 +41,10 @@ async def _supa(method: str, path: str, **kwargs):
 # ---------------------------------------------------------------------------
 # Auth config (public — no bearer required)
 # ---------------------------------------------------------------------------
-_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+_SUPABASE_ANON_KEY = (
+    os.environ.get("SUPABASE_ANON_KEY", "").strip()
+    or os.environ.get("DLS_TEAM_SUPABASE_ANON_KEY", "").strip()
+)
 
 @router.get("/api/advertiser/auth/config")
 async def api_advertiser_auth_config():
@@ -553,6 +556,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
 # Stripe webhook — handles subscription lifecycle (renewal, cancellation, failure)
 # ---------------------------------------------------------------------------
 @router.post("/api/advertiser/stripe/webhook")
+@router.post("/api/advertiser/webhook/stripe")
 async def api_advertiser_stripe_webhook(request: Request):
     """
     Stripe subscription lifecycle:

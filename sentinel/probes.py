@@ -10,7 +10,7 @@ from typing import Optional
 
 import httpx
 
-from sentinel.thresholds import PROBE_TIMEOUT_SEC, DROPLET_PROBES
+from sentinel.thresholds import PROBE_TIMEOUT_SEC, DROPLET_PROBES, SSH_KEY_PATH, AGENT_USERS
 
 logger = logging.getLogger("sentinel.probes")
 
@@ -74,19 +74,12 @@ async def probe_ssh_stats(host: str, port: int, user: str = None) -> dict:
     SSH into host, run a quick stats command.
     Returns dict with ram_free_mb, disk_used_pct, cron_count or empty on failure.
     """
-    # Build the SSH user from agent name mapping
-    agent_users = {
-        "100.94.135.19": "Dexter1981",
-        "100.88.192.48": "Memo1981",
-        "100.124.88.93": "Sienna1981",
-        "100.105.148.29": "Nano1981",
-    }
-    ssh_user = user or agent_users.get(host, "root")
+    ssh_user = user or AGENT_USERS.get(host, "root")
     cmd = [
         "ssh", "-o", "StrictHostKeyChecking=no",
         "-o", "ConnectTimeout=8",
         "-o", "BatchMode=yes",
-        "-i", "/Users/davidai/.ssh/id_ed25519_agent",
+        "-i", SSH_KEY_PATH,
         f"-p", str(port),
         f"{ssh_user}@{host}",
         # Output: ram_free_kb disk_use_pct cron_count

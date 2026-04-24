@@ -5,7 +5,7 @@
 # What it does, in order:
 #   1. Compute a build version: <pyproject_version>+<git_short_sha>.<utc_ts>
 #   2. Write version manifest to ad-semeclaw/version.json AND
-#      war_room/dashboard/static/version.json so /version returns it on each
+#      war_room/dashboard/version.json so /version returns it on each
 #      deployed surface.
 #   3. Commit + push (skipped if --no-commit).
 #   4. Deploy ad-semeclaw to Vercel (skipped if --no-vercel).
@@ -120,7 +120,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  DEPLOY REPORT — $BUILD_VERSION"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 [ -n "$VERCEL_URL" ] && echo "  ad-semeclaw: $VERCEL_URL/version.json"
-[ "$DO_FLY"    -eq 1 ] && echo "  semeclaw  : https://semeclaw.fly.dev/version.json"
+[ "$DO_FLY"    -eq 1 ] && echo "  semeclaw  : https://semeclaw.fly.dev/version"
 if [ "$DO_FLEET" -eq 1 ]; then
   echo "  Fleet:"
   for host in $FLEET_HOSTS; do

@@ -652,7 +652,10 @@ const $ = (s, p=document) => p.querySelector(s);
 let TASKS = [];
 let CURRENT = null;
 let DIALOG = null;
+let DIALOGS = [];
 let INTERVENTIONS = [];
+let LAST_FINALIZED = null;
+let PLAY_ALL = false;
 
 const AGENT_COLORS = {
   host:     'avatar-host',
@@ -775,12 +778,28 @@ async function selectTask(id) {
       <div class="card"><div class="skeleton" style="height:80px"></div></div>
       <div class="card"><div class="skeleton" style="height:120px"></div></div>
     </div>`;
-  const [dRes, ivRes] = await Promise.all([
+  const [dRes, ivRes, dsRes] = await Promise.all([
     api(`/api/tasks/${id}/dialog`),
     api(`/api/tasks/${id}/interventions`),
+    api(`/api/tasks/${id}/dialogs`),
   ]);
   DIALOG = dRes.dialog || null;
   INTERVENTIONS = ivRes.interventions || [];
+  DIALOGS = dsRes.dialogs || (DIALOG ? [DIALOG] : []);
+  renderRight();
+}
+
+async function selectDialogVersion(version) {
+  const d = DIALOGS.find(x => x.version === version);
+  if (!d) return;
+  DIALOG = d;
+  // Load interventions for this specific dialog
+  try {
+    const ivRes = await api(`/api/tasks/${CURRENT}/interventions`);
+    // interventions endpoint returns latest dialog only — filter by dialog_id
+    const all = ivRes.interventions || [];
+    INTERVENTIONS = all.filter(i => i.dialog_id === d.id);
+  } catch (e) { INTERVENTIONS = []; }
   renderRight();
 }
 
@@ -812,12 +831,27 @@ function renderRight() {
           <div class="description">${escapeHtml(t.description)}</div>
         </div>` : ''}
 
+      ${LAST_FINALIZED && DIALOG && LAST_FINALIZED === DIALOG.version - 1 ? `
+        <div class="card" style="border:1px solid rgba(124,92,255,.4);background:linear-gradient(135deg,rgba(124,92,255,.08),rgba(95,168,255,.06))">
+          <div style="display:flex;align-items:center;gap:10px;font-weight:600">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c5cff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Task recalibrated — now showing dialog v${DIALOG.version}
+          </div>
+          <div style="font-size:13px;color:var(--text-faint);margin-top:6px">The orchestrator updated the task and opened a fresh round based on your interventions. Previous dialog is preserved in the version history.</div>
+        </div>` : ''}
+
       <div class="card">
         <div class="card-head">
           <h2>Dialog</h2>
-          <span class="badge">v${DIALOG ? DIALOG.version : '?'}</span>
+          ${DIALOGS.length > 1 ? `<select class="ghost" style="padding:5px 8px;font-size:12px" onchange="selectDialogVersion(parseInt(this.value))">
+            ${DIALOGS.map(d => `<option value="${d.version}" ${DIALOG && d.id===DIALOG.id?'selected':''}>v${d.version}${d.superseded_by?' (superseded)':''}</option>`).join('')}
+          </select>` : `<span class="badge">v${DIALOG ? DIALOG.version : '?'}</span>`}
           <span class="badge">${lines.length} lines</span>
           <div class="grow"></div>
+          ${lines.some(l=>l.audio_url) ? `<button class="ghost" id="play-all-btn" onclick="playAll()" title="Play the full meeting">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            ${PLAY_ALL ? 'Stop' : 'Play all'}
+          </button>` : ''}
           <button class="ghost" onclick="regen()" title="Regenerate dialog">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 5.64 5.64L23 10"/></svg>
             Regenerate
@@ -847,6 +881,11 @@ function renderRight() {
             </span>
             ${remaining===0 ? 'limit reached' : remaining + ' left'}
           </span>
+          ${turn >= 1 && remaining > 0 ? `
+            <button class="ghost" onclick="finishMeeting()" title="Stop early and let the orchestrator commit a decision now" style="margin-left:8px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Finish meeting
+            </button>` : ''}
         </div>
         ${INTERVENTIONS.length ? INTERVENTIONS.map(renderIv).join('') :
           '<div style="color:var(--text-faint);text-align:center;padding:14px 0">No comments yet — start the conversation below.</div>'}
@@ -873,11 +912,13 @@ function renderIv(iv) {
       </div>
     </div>`).join('');
   const dec = iv.orchestrator_decision;
+  const wb = iv.writeback || (iv.meta && iv.meta.writeback);
+  const wbChip = wb ? `<span class="badge" style="background:${wb.ok?'rgba(46,204,113,.15)':'rgba(231,76,60,.15)'};color:${wb.ok?'#2ecc71':'#e74c3c'};margin-left:6px" title="${escapeHtml(JSON.stringify(wb))}">${wb.ok ? '✓ pushed to source' : '✗ writeback failed'}</span>` : '';
   const decHtml = dec ? `
     <div class="decision">
       <div class="decision-head">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Orchestrator decision
+        Orchestrator decision${wbChip}
       </div>
       <div class="decision-rationale">${escapeHtml(dec.rationale||'')}</div>
       ${dec.task_patch ? `<div class="decision-patch">patch: ${escapeHtml(JSON.stringify(dec.task_patch))}</div>` : ''}
@@ -916,6 +957,51 @@ async function sendComment() {
   btn.textContent = 'Send comment';
   if (!r.ok) { toast(r.error||"Intervene failed", 'err'); return; }
   toast(`Turn ${r.turn_index}/3 recorded${r.orchestrator_decision ? ' · orchestrator decided' : ''}`, 'ok');
+  if (r.orchestrator_decision && DIALOG) LAST_FINALIZED = DIALOG.version;
+  await loadTasks();
+  await selectTask(CURRENT);
+}
+
+function playAll() {
+  if (PLAY_ALL) {
+    PLAY_ALL = false;
+    if (AUDIO) AUDIO.pause();
+    if (AUDIO_IDX >= 0) document.getElementById('play-'+AUDIO_IDX)?.classList.remove('playing');
+    AUDIO_IDX = -1; AUDIO = null;
+    document.getElementById('play-all-btn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play all';
+    return;
+  }
+  PLAY_ALL = true;
+  const lines = (DIALOG && DIALOG.lines) || [];
+  const playable = lines.map((l,i)=>({l,i})).filter(x=>x.l.audio_url);
+  if (!playable.length) { PLAY_ALL = false; return; }
+  document.getElementById('play-all-btn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg> Stop';
+  let k = 0;
+  const next = () => {
+    if (!PLAY_ALL || k >= playable.length) {
+      PLAY_ALL = false;
+      const btn = document.getElementById('play-all-btn');
+      if (btn) btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play all';
+      return;
+    }
+    const {l, i} = playable[k++];
+    if (AUDIO_IDX >= 0) document.getElementById('play-'+AUDIO_IDX)?.classList.remove('playing');
+    AUDIO = new Audio(l.audio_url); AUDIO_IDX = i;
+    document.getElementById('play-'+i)?.classList.add('playing');
+    document.getElementById('play-'+i)?.scrollIntoView({behavior:'smooth', block:'center'});
+    AUDIO.onended = () => { document.getElementById('play-'+i)?.classList.remove('playing'); AUDIO_IDX = -1; next(); };
+    AUDIO.play().catch(()=>next());
+  };
+  next();
+}
+
+async function finishMeeting() {
+  if (!confirm('Stop the meeting now and let the orchestrator commit a final decision?')) return;
+  toast('Finalizing meeting…');
+  const r = await api(`/api/tasks/${CURRENT}/finalize`, { method: "POST" });
+  if (!r.ok) { toast(r.error||"Finalize failed", 'err'); return; }
+  toast('Meeting finalized · task recalibrated', 'ok');
+  LAST_FINALIZED = DIALOG ? DIALOG.version : null;
   await loadTasks();
   await selectTask(CURRENT);
 }

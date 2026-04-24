@@ -78,7 +78,8 @@ Env vars on Vercel: **none** — all config is server-side on Fly.io (`semeclaw.
 
 ```
 DLS_TEAM_SUPABASE_URL=https://gvuuauzsucvhghmpdpxf.supabase.co
-DLS_TEAM_SUPABASE_ANON_KEY
+DLS_TEAM_SUPABASE_ANON_KEY   # preferred
+SUPABASE_ANON_KEY            # accepted fallback in the backend
 DLS_TEAM_SUPABASE_SERVICE_KEY
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
@@ -106,6 +107,8 @@ OAuth providers:
 ## Stripe webhook
 
 Point Stripe at `https://semeclaw.fly.dev/api/advertiser/webhook/stripe`.
+The backend also accepts `https://semeclaw.fly.dev/api/advertiser/stripe/webhook`
+for backward compatibility.
 Events: `checkout.session.completed`, `invoice.payment_succeeded`.
 
 ## Related

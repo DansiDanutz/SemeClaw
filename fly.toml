@@ -26,9 +26,10 @@ primary_region = "iad"            # change to your nearest region
 #   ANTHROPIC_API_KEY   — primary LLM (Claude)
 #   OPENROUTER_API_KEY  — fallback LLM
 #   SEMECLAW_API_KEY    — server auth (optional)
-#   SUPABASE_URL        — data persistence
-#   SUPABASE_KEY        — Supabase service key
-#   TELEGRAM_BOT_TOKEN  — Telegram channel (optional)
+#   DLS_TEAM_SUPABASE_URL          — shared Supabase project URL
+#   DLS_TEAM_SUPABASE_SERVICE_KEY  — shared Supabase service key
+#   SUPABASE_ANON_KEY / DLS_TEAM_SUPABASE_ANON_KEY — advertiser auth bootstrap
+#   TELEGRAM_BOT_TOKEN / SEMECLAW_BOT_TOKEN        — Telegram channel (optional)
 
 [[services]]
   protocol = "tcp"
