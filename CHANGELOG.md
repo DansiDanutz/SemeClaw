@@ -2,6 +2,23 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.4] - 2026-04-24
+
+### Added — Structured JSON logs + request-id correlation
+
+- `war_room/utils/logging_config.py` — `setup_logging()` switches to JSON
+  lines when `SEMECLAW_LOG_JSON=1` (otherwise keeps the existing human
+  format). Fields: `ts`, `level`, `logger`, `message`, `request_id`, and
+  `exc` if an exception was logged.
+- Request-id contextvar + `_RequestIdFilter` so every `logger.*` call
+  picks up the current request's id without threading it by hand.
+- `_semeclaw_request_id` middleware honours an incoming `X-Request-ID`
+  header or generates a 12-char hex id. Returned in the response header
+  for client-side correlation.
+- `SEMECLAW_LOG_LEVEL` (default `INFO`) also configurable via env.
+- 5 unit tests cover id generation, contextvar round-trip, JSON payload
+  shape, inbound-header honour, and auto-generation.
+
 ## [0.8.3] - 2026-04-24
 
 ### Added — Shared httpx.AsyncClient pool

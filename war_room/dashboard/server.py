@@ -94,6 +94,10 @@ TELEGRAM_CHATS_FILE = WAR_ROOM_DIR / ".telegram_chats.json"
 
 ROOT = WAR_ROOM_DIR.parent
 
+from war_room.utils.logging_config import new_request_id, set_request_id
+from war_room.utils.logging_config import setup_logging as _semeclaw_setup_logging
+
+_semeclaw_setup_logging()
 logger = logging.getLogger("war_room.dashboard")
 
 # ---------------------------------------------------------------------------
@@ -541,6 +545,19 @@ _PROTECTED_WRITE_PATHS = (
     "/api/reports",
     "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
 )
+
+
+@app.middleware("http")
+async def _semeclaw_request_id(request, call_next):
+    """Attach an X-Request-ID to every request, propagate via contextvar."""
+    rid = (request.headers.get("x-request-id") or "").strip() or new_request_id()
+    set_request_id(rid)
+    try:
+        response = await call_next(request)
+    finally:
+        set_request_id("")
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 @app.middleware("http")
