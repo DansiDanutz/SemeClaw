@@ -265,6 +265,7 @@ try:
     from war_room.dashboard.routes import health, embed, agents, reports
     from war_room.dashboard.routes import meetings, webhooks, paperclip
     from war_room.dashboard.routes import billing, alerts, advertiser
+    from war_room.dashboard.routes import tasks as tasks_routes
 
     app.include_router(health.router)
     app.include_router(embed.router)
@@ -276,6 +277,7 @@ try:
     app.include_router(billing.router)
     app.include_router(alerts.router)
     app.include_router(advertiser.router)
+    app.include_router(tasks_routes.router)
 except Exception as e:
     logger.warning("Router mount skipped (routes may be stubs): %s", e)
 

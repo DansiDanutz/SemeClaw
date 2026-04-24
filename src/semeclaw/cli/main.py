@@ -369,5 +369,18 @@ def live_demo_cmd() -> None:
     raise typer.Exit(_d.run())
 
 
+@app.command("tasks")
+def tasks_cmd(
+    args: Annotated[
+        list[str] | None,
+        typer.Argument(help="sync | list | dialog <id> | quota | gc"),
+    ] = None,
+) -> None:
+    """Task ingest, dialog generation, retention. Hits a running War Room server."""
+    _bootstrap_repo_cli()
+    from cli import tasks as _t
+    raise typer.Exit(_t.run(list(args or [])))
+
+
 if __name__ == "__main__":
     app()

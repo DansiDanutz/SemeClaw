@@ -11,6 +11,7 @@ Usage:
   semeclaw status      Checklist of what's configured + what's missing
   semeclaw agents      List all registered agents (core + adapters)
   semeclaw demo        Run the saved 4-agent live demo task
+  semeclaw tasks ...   Sync / list / dialog / quota / gc (see `semeclaw tasks`)
   semeclaw help        Show this message
 """
 
@@ -33,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "demo":
         from . import demo
         return demo.run()
+    if cmd == "tasks":
+        from . import tasks
+        return tasks.run(args[1:])
     print(f"Unknown command: {cmd}\n")
     print(USAGE)
     return 2
