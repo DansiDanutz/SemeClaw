@@ -2,6 +2,25 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.2] - 2026-04-24
+
+### Added — Deep health endpoint (/api/health/deep)
+
+- `GET /api/health/deep` in `war_room/dashboard/routes/health.py`.
+- Six subsystem checks: **supabase** (REST ping with 3s budget), **stripe**
+  (`/v1/charges?limit=1` probe only if `STRIPE_SECRET_KEY` set), **tts**
+  (env presence for ElevenLabs / edge-tts / Kokoro), **dlq** (reports
+  adclaw and tasks DLQ sizes, degrades above `SEMECLAW_DLQ_WARN_BYTES`
+  default 10 MiB), **disk** (`shutil.disk_usage` on
+  `SEMECLAW_DATA_DIR`, degrades above 90% used), **version**.
+- Response rolls up to `ok` / `degraded` / `down`. HTTP 503 only when at
+  least one subsystem is truly `down`; `degraded` returns 200 so paging
+  is operator choice.
+- Shallow `/api/agent/health` kept unchanged so Fly's cheap healthcheck
+  is unaffected.
+- 3 unit tests cover shape, unconfigured-Supabase degradation, and DLQ
+  byte reporting.
+
 ## [0.8.1] - 2026-04-24
 
 ### Added — Prometheus metrics — /metrics extension + counter wiring
