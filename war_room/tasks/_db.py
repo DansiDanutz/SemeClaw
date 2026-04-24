@@ -5,16 +5,26 @@ war_room.dashboard.routes.deps so we stay consistent with the rest of the app.
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import httpx
 
 from war_room.dashboard.routes.deps import SUPA_URL, SUPA_KEY, SUPA_HEADERS
+from war_room.utils.supa_durable import dlq_append, with_retry
 
 
 class TasksDBError(RuntimeError):
     pass
 
 
-async def supa(method: str, path: str, **kwargs):
+_TASKS_DLQ_PATH = Path(
+    os.environ.get("SEMECLAW_TASKS_DLQ_PATH", "/app/data/semeclaw_tasks_dlq.jsonl")
+).expanduser()
+
+
+async def _supa_once(method: str, path: str, **kwargs):
+    """Single-attempt Supabase REST call. Raises TasksDBError on any failure."""
     if not SUPA_URL or not SUPA_KEY:
         raise TasksDBError("Supabase not configured (DLS_TEAM_SUPABASE_URL / _SERVICE_KEY)")
     async with httpx.AsyncClient(base_url=SUPA_URL, timeout=15.0) as c:
@@ -22,6 +32,28 @@ async def supa(method: str, path: str, **kwargs):
         if r.status_code >= 400:
             raise TasksDBError(f"{method.upper()} {path} -> {r.status_code} {r.text[:240]}")
         return r.json() if r.content else []
+
+
+async def supa(method: str, path: str, **kwargs):
+    """Retrying Supabase REST call.
+
+    Transient failures (network blips, 5xx) are retried with exponential
+    backoff via ``war_room.utils.supa_durable.with_retry``. Non-write calls
+    (GET) that exhaust retries re-raise so callers decide. Write calls
+    (POST/PATCH/DELETE) additionally persist the failed payload to the
+    task DLQ so an operator / cron can replay them when Supabase recovers.
+    """
+    try:
+        return await with_retry(_supa_once, method, path, **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        if method.lower() in ("post", "patch", "put", "delete"):
+            dlq_append(_TASKS_DLQ_PATH, {
+                "kind": f"tasks_{method.lower()}",
+                "path": path,
+                "payload": kwargs.get("json"),
+                "error": str(exc),
+            })
+        raise
 
 
 # ---- task CRUD --------------------------------------------------------------
