@@ -4604,6 +4604,71 @@ async def api_meeting_task(request: Request):
     return JSONResponse({"meeting_id": meeting_id, "status": "starting"})
 
 
+@app.get("/api/meeting/{meeting_id}/replay")
+async def api_meeting_replay(meeting_id: str, speed: float = 1.0, cap: int = 5000):
+    """Stream the persisted meeting transcript back with original-looking timing.
+
+    Query params:
+        speed  — playback multiplier (>0). 1.0 = real time between events,
+                 2.0 = twice as fast, 0.5 = half speed, 10.0 = near-instant.
+        cap    — max events to return (safety cap, default 5000).
+
+    Returns JSON: ``{meeting_id, speed, frames: [{seq, delay_ms, event}...]}``
+
+    For each event we compute the delay until the next one in milliseconds
+    so a client can simply ``await sleep(delay_ms/1000)`` between them. A
+    real streaming version (SSE) is a follow-up — this endpoint is enough
+    for a "re-watch" page that feeds the existing UI code.
+    """
+    speed = max(0.01, min(float(speed), 50.0))
+    cap = max(1, min(int(cap), 10000))
+
+    events = await meeting_log.backfill(meeting_id, since=0, limit=cap)
+    frames: list[dict] = []
+    # Fall back on a steady 80 ms/event when no timestamps exist so the UI
+    # still animates at a readable pace.
+    _DEFAULT_GAP_MS = 80
+
+    def _ts_ms(ev: dict) -> int | None:
+        ts = ev.get("ts") or ev.get("viewed_at") or ev.get("at")
+        if isinstance(ts, (int, float)):
+            # seconds -> ms
+            return int(ts * (1000 if ts < 1e12 else 1))
+        if isinstance(ts, str):
+            try:
+                from datetime import datetime
+
+                # tolerate either "Z" or offset suffixes
+                cleaned = ts.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(cleaned)
+                return int(dt.timestamp() * 1000)
+            except Exception:  # noqa: BLE001
+                return None
+        return None
+
+    prev_ts: int | None = None
+    for ev in events:
+        now_ts = _ts_ms(ev)
+        if now_ts is not None and prev_ts is not None:
+            gap_ms = max(0, now_ts - prev_ts)
+        else:
+            gap_ms = _DEFAULT_GAP_MS
+        # Apply speed: faster playback shortens the gap.
+        delay_ms = int(gap_ms / speed)
+        frames.append({"seq": ev.get("seq"), "delay_ms": delay_ms, "event": ev})
+        if now_ts is not None:
+            prev_ts = now_ts
+
+    return JSONResponse(
+        {
+            "meeting_id": meeting_id,
+            "speed": speed,
+            "frame_count": len(frames),
+            "frames": frames,
+        }
+    )
+
+
 @app.get("/api/meeting/{meeting_id}/transcript")
 async def api_meeting_transcript(meeting_id: str, since: int = 0, limit: int = 2000):
     """Backfill endpoint for mid-meeting reconnection.

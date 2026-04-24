@@ -2,6 +2,24 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.5] - 2026-04-24
+
+### Added — Meeting replay API (/api/meeting/{id}/replay)
+
+- `GET /api/meeting/{meeting_id}/replay?speed=N&cap=M` in server.py,
+  adjacent to the transcript backfill endpoint shipped in v0.7.15.
+- Reads the persisted per-meeting JSONL, reconstructs inter-event delays
+  from `ts` / `viewed_at` / `at` fields (either numeric seconds or
+  ISO-8601), and returns `frames=[{seq, delay_ms, event}, …]`. A client
+  simply `await sleep(delay_ms/1000)` between frames to reproduce the
+  pacing — speed multiplier divides the delay so a late viewer can
+  "catch up" fast and then watch live.
+- Without timestamps, frames default to an 80 ms steady gap — still
+  watchable.
+- Safety caps: `speed` clamped to [0.01, 50], `cap` clamped to [1, 10000].
+- 4 unit tests cover frame timing, speed multiplier, unknown-meeting
+  empty response, and the cap.
+
 ## [0.8.4] - 2026-04-24
 
 ### Added — Structured JSON logs + request-id correlation
