@@ -6,6 +6,14 @@ role: Senior Researcher
 keywords: [research, analyze, find, search, compare, investigate, market, competitor, trend, github]
 output_format: markdown
 output_dir: war_room/research
+core: true                                    # ships in OSS demo
+model_preference:                             # ordered fallback waterfall
+  - openrouter:qwen/qwen3-next-80b-a3b-instruct:free
+  - openrouter:meta-llama/llama-3.3-70b-instruct:free
+  - openrouter:google/gemma-3-27b-it:free
+  - ollama:gemma4:latest
+  - ollama:qwen3:8b
+tools: [browser_search, scrape_url]           # capabilities this agent can call
 ---
 
 # Research Agent — Dan's Lab War Room

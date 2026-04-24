@@ -161,18 +161,52 @@ async def api_agent_manifest():
 
 
 @router.get("/api/agents")
-async def api_agents():
-    agents = {}
-    for md_file in AGENTS_DIR.glob("*.md"):
-        agent_id = md_file.stem
-        text = md_file.read_text(encoding="utf-8")
-        name = agent_id.capitalize()
-        for line in text.splitlines():
-            if line.startswith("name:"):
-                name = line.split(":", 1)[1].strip()
-                break
-        agents[agent_id] = {"id": agent_id, "name": name}
-    # Demo mode: append demo agents so they appear in the dashboard immediately
+async def api_agents(include: str = "all"):
+    """Return all registered agents.
+
+    Query: include=core | adapters | all (default)
+    Reads from war_room.agents._registry — single source of truth.
+    """
+    try:
+        from war_room.agents import registry as _agent_registry
+        items = list(_agent_registry.load_all().values())
+        if include == "core":
+            items = [a for a in items if a.core]
+        elif include == "adapters":
+            items = [a for a in items if a.is_adapter]
+        agents = {a.id: a.to_dict() for a in items}
+    except Exception as e:
+        # If registry can't load, fall back to legacy scan so the dashboard never breaks
+        agents = {}
+        for md_file in AGENTS_DIR.glob("*.md"):
+            agent_id = md_file.stem
+            agents[agent_id] = {"id": agent_id, "name": agent_id.capitalize(), "registry_error": str(e)}
+    # Always append demo agents so a fresh clone shows a populated dashboard
     for demo_agent in _DEMO_AGENTS:
-        agents[demo_agent["id"]] = demo_agent
+        agents.setdefault(demo_agent["id"], demo_agent)
     return JSONResponse(agents)
+
+
+@router.get("/api/agents/adapters/status")
+async def api_adapter_status():
+    """Per-adapter status: which env vars are set, is the adapter ready to call?"""
+    import os as _os
+    try:
+        from war_room.agents import registry as _agent_registry, browser_search as _bs
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    out = {"adapters": [], "browser_search": _bs.status()}
+    for a in _agent_registry.adapters():
+        meta = a.adapter or {}
+        required = meta.get("required_env", []) or []
+        missing = [k for k in required if not _os.environ.get(k)]
+        out["adapters"].append({
+            "id": a.id,
+            "name": a.name,
+            "kind": meta.get("protocol", "http"),
+            "required_env": required,
+            "missing_env": missing,
+            "ready": len(missing) == 0,
+        })
+    return JSONResponse(out)

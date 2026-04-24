@@ -321,5 +321,53 @@ def server(
         raise typer.Exit(1)
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# v0.7.14+ — registry-driven commands (4 core agents + adapters + live demo)
+# These delegate to the stdlib `cli/` package at the repo root so they remain
+# usable via `python -m cli` even outside Typer.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _bootstrap_repo_cli():
+    """Make the repo-root `cli/` package importable from this module."""
+    import sys as _sys
+    from pathlib import Path as _P
+    repo_root = _P(__file__).resolve().parents[3]   # .../SemeClaw
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+
+@app.command("agents")
+def agents_cmd() -> None:
+    """List every registered agent (5 core + 4 adapters) with model + tool info."""
+    _bootstrap_repo_cli()
+    from cli import agents as _a
+    raise typer.Exit(_a.run())
+
+
+@app.command("status")
+def status_cmd() -> None:
+    """Checklist: Python, deps, OpenRouter, Ollama, search backends, agents, demo."""
+    _bootstrap_repo_cli()
+    from cli import status as _s
+    raise typer.Exit(_s.run())
+
+
+@app.command("setup")
+def setup_cmd() -> None:
+    """Interactive onboarding: API key, smoke test, save ~/.semeclaw/env."""
+    _bootstrap_repo_cli()
+    from cli import setup as _su
+    raise typer.Exit(_su.run())
+
+
+@app.command("live-demo")
+def live_demo_cmd() -> None:
+    """Run the saved 4-agent live demo (Browser → Scraping → Research → Writer → Coder)."""
+    _bootstrap_repo_cli()
+    from cli import demo as _d
+    raise typer.Exit(_d.run())
+
+
 if __name__ == "__main__":
     app()

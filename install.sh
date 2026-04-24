@@ -123,22 +123,32 @@ print_next_steps() {
     echo -e "${GREEN}║  SemeClaw is installed and ready!                                    ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${CYAN}Quick start:${NC}"
+    echo -e "${CYAN}Next: 60-second onboarding${NC}"
     echo "  cd $INSTALL_DIR"
     echo "  source .venv/bin/activate"
+    echo "  semeclaw setup        # interactive: API keys, smoke test, save"
+    echo "  semeclaw status       # what's configured / what's missing"
+    echo "  semeclaw agents       # the 5 core agents + 4 adapters available"
+    echo "  semeclaw live-demo    # 4-agent live demo on a real task (~90s)"
     echo ""
-    echo -e "${CYAN}Run the demo (no API keys needed):${NC}"
-    echo "  semeclaw demo"
+    echo -e "${CYAN}When ready to build${NC}"
+    echo "  semeclaw war-room     # start the War Room dashboard"
+    echo "  semeclaw chat         # chat directly with the orchestrator"
     echo ""
-    echo -e "${CYAN}Configure providers:${NC}"
-    echo "  semeclaw init"
-    echo ""
-    echo -e "${CYAN}Start the War Room dashboard:${NC}"
-    echo "  semeclaw war-room"
-    echo ""
-    echo -e "${CYAN}Chat with SemeClaw:${NC}"
-    echo "  semeclaw chat"
-    echo ""
+}
+
+run_onboarding() {
+    if [ -t 0 ] && [ -t 1 ]; then
+        echo ""
+        info "Launching interactive onboarding (semeclaw setup)..."
+        cd "$INSTALL_DIR" || return 0
+        # shellcheck disable=SC1091
+        [ -f .venv/bin/activate ] && source .venv/bin/activate
+        semeclaw setup || warn "Setup did not complete — re-run any time with: semeclaw setup"
+    else
+        info "Non-interactive install — skipping onboarding."
+        info "Run later with: semeclaw setup"
+    fi
 }
 
 # Main
@@ -150,3 +160,4 @@ install_deps
 setup_env
 setup_workspace
 print_next_steps
+run_onboarding

@@ -1,8 +1,8 @@
 {
-  "version": "0.7.14+2d997c0+dirty.20260424T114716Z",
+  "version": "0.7.14+84ec64d+dirty.20260424T121534Z",
   "pyproject_version": "0.7.14",
-  "git_sha": "2d997c0",
+  "git_sha": "84ec64d",
   "git_branch": "main",
-  "built_at": "20260424T114716Z",
+  "built_at": "20260424T121534Z",
   "dirty": true
 }

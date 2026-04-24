@@ -6,6 +6,14 @@ role: Senior Developer / Implementation
 keywords: [implement, build, code, create, write, fix, refactor, test, commit, deploy, integrate]
 output_format: markdown
 output_dir: war_room/research
+core: true
+model_preference:
+  - openrouter:openai/gpt-oss-120b:free
+  - openrouter:qwen/qwen3-next-80b-a3b-instruct:free
+  - openrouter:meta-llama/llama-3.3-70b-instruct:free
+  - ollama:qwen3:8b
+  - ollama:gemma4:latest
+tools: []
 ---
 
 # Coder Agent — Dan's Lab War Room

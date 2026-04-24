@@ -6,6 +6,13 @@ role: Brain / Documentation & Reports
 keywords: [write, document, report, summarize, draft, spec, readme, brief, memo, email, post, article]
 output_format: markdown
 output_dir: war_room/research
+core: true
+model_preference:
+  - openrouter:meta-llama/llama-3.3-70b-instruct:free
+  - openrouter:nousresearch/hermes-3-llama-3.1-405b:free
+  - openrouter:google/gemma-3-27b-it:free
+  - ollama:gemma4:latest
+tools: []
 ---
 
 # Writer Agent — Dan's Lab War Room
