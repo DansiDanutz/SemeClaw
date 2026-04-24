@@ -729,8 +729,9 @@ async def api_advertiser_stripe_webhook(request: Request):
 
 
 @router.get("/api/advertiser/{advertiser_id}/special")
-async def api_advertiser_special(advertiser_id: str):
+async def api_advertiser_special(advertiser_id: str, request: Request):
     """Bundled fetch for the Special tab: referral info + slide analytics."""
+    await require_advertiser_owner(request, advertiser_id)
     try:
         adv = await _supa(
             "get", f"adclaw_advertisers?id=eq.{advertiser_id}&select=id,referral_code,referred_by,wallet_credits,tier"
@@ -774,6 +775,7 @@ async def api_advertiser_special(advertiser_id: str):
 
 @router.post("/api/advertiser/{advertiser_id}/apply-referral")
 async def api_advertiser_apply_referral(advertiser_id: str, request: Request):
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     code = (body.get("code") or "").strip()
     if not code:
@@ -793,6 +795,7 @@ async def api_advertiser_apply_referral(advertiser_id: str, request: Request):
 @router.post("/api/advertiser/{advertiser_id}/slides/{slide_id}/boost")
 async def api_advertiser_slide_boost(advertiser_id: str, slide_id: str, request: Request):
     """Toggle priority_boost on a slide. Diamond-only feature."""
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     enabled = bool(body.get("enabled", False))
     try:
@@ -815,6 +818,7 @@ async def api_advertiser_slide_boost(advertiser_id: str, slide_id: str, request:
 @router.post("/api/advertiser/{advertiser_id}/slides/{slide_id}/targeting")
 async def api_advertiser_slide_targeting(advertiser_id: str, slide_id: str, request: Request):
     """Set target_keywords[] for a slide. Gold+Diamond only."""
+    await require_advertiser_owner(request, advertiser_id)
     body = await request.json()
     kws = body.get("keywords") or []
     if isinstance(kws, str):
@@ -923,6 +927,7 @@ async def api_advertiser_fetch_webpage(advertiser_id: str, request: Request):
     private/loopback/link-local/metadata addresses, non-http(s) schemes, or
     responses larger than 2 MiB.
     """
+    await require_advertiser_owner(request, advertiser_id)
     raw_url = request.query_params.get("url", "").strip()
     if not raw_url:
         return JSONResponse({"error": "missing url"}, status_code=400)
