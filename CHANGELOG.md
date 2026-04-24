@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.9] - 2026-04-24
+
+### Fixed — NERVIX test CI step no-ops when no tests exist
+
+- `ci.yml`'s "Test — NERVIX platform" step hard-referenced
+  `nervix_platform/tests/` which was never created, so pytest exited
+  with code 4 ("file or directory not found") and failed the whole job.
+- Step now guards with `[ -d nervix_platform/tests ] && compgen -G
+  "nervix_platform/tests/test_*.py"` and prints a clear skip message
+  when the directory is empty / missing. Restores a green CI while the
+  NERVIX test suite is still being built out.
+
 ## [0.8.8] - 2026-04-24
 
 ### Fixed — CI lint job + missing runtime dep + flaky tests

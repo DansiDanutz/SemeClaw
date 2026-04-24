@@ -112,7 +112,12 @@ jobs:
           echo "bump_version OK"
 
       - name: Test — NERVIX platform
-        run: uv run pytest nervix_platform/tests/ -q
+        run: |
+          if [ -d nervix_platform/tests ] && compgen -G "nervix_platform/tests/test_*.py" > /dev/null; then
+            uv run pytest nervix_platform/tests/ -q
+          else
+            echo "No NERVIX platform tests yet — skipping."
+          fi
 
   docker-build:
     runs-on: ubuntu-latest
