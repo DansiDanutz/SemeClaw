@@ -237,6 +237,26 @@ static_dir = Path(__file__).parent
 if (static_dir / "agents.html").exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+
+# ── /version — single source of truth for what's running on this machine ──
+@app.get("/version")
+async def _version():
+    """Return the deployed build manifest. Written by scripts/deploy_and_sync.sh."""
+    import json as _json
+    manifest_path = static_dir / "version.json"
+    runtime = {
+        "app_version": APP_VERSION,
+        "service": "semeclaw-war-room",
+    }
+    if manifest_path.exists():
+        try:
+            runtime.update(_json.loads(manifest_path.read_text(encoding="utf-8")))
+        except Exception:
+            runtime["manifest_error"] = "could not parse version.json"
+    else:
+        runtime["manifest"] = "missing — run scripts/deploy_and_sync.sh to generate"
+    return JSONResponse(runtime)
+
 # ---------------------------------------------------------------------------
 # Router mounts (incremental modularization of the monolithic server)
 # Stubs are in war_room/dashboard/routes/ — real extraction is TODO.
