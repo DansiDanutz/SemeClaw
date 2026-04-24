@@ -71,7 +71,7 @@ write_version() {
 EOF
 }
 write_version "ad-semeclaw/version.json"
-write_version "war_room/dashboard/static/version.json"
+write_version "war_room/dashboard/version.json"
 
 # 3. Commit + push ----------------------------------------------------------
 if [ "$DO_COMMIT" -eq 1 ]; then

@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_rRyrkPdMqk5ONc6QgDQBkzGs0exk",
+  "orgId": "team_Qtajbnyu0ZBt3TGPBIbgiyg1",
+  "projectName": "ad-semeclaw",
+  "settings": {
+    "createdAt": 1776769294416,
+    "framework": null,
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
