@@ -66,6 +66,8 @@ except ImportError:
 
 
 from war_room.dashboard.websocket_manager import manager
+from war_room.dashboard.meeting_log import meeting_log
+manager.set_before_broadcast_hook(meeting_log.record)
 # ---------------------------------------------------------------------------
 # Config from environment
 # ---------------------------------------------------------------------------
@@ -4214,6 +4216,18 @@ async def api_meeting_task(request: Request):
     asyncio.create_task(_run_task_meeting(meeting_id, task, lang=lang))
 
     return JSONResponse({"meeting_id": meeting_id, "status": "starting"})
+
+
+@app.get("/api/meeting/{meeting_id}/transcript")
+async def api_meeting_transcript(meeting_id: str, since: int = 0, limit: int = 2000):
+    """Backfill endpoint for mid-meeting reconnection.
+
+    The client keeps the max ``seq`` it has rendered; on WS reconnect it calls
+    this endpoint with ``since=<max_seq>`` and replays the returned events
+    before wiring up the live feed again.
+    """
+    events = await meeting_log.backfill(meeting_id, since=since, limit=min(max(limit, 1), 5000))
+    return JSONResponse({"meeting_id": meeting_id, "since": since, "events": events})
 
 
 @app.get("/api/meeting/history")
