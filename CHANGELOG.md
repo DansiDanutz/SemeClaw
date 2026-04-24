@@ -2,6 +2,82 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.7.14] - 2026-04-24
+
+### Added — Tasks system (Phases A → D)
+
+- **Phase A — Tasks ingest + dialog v1**
+  - `semeclaw_tasks`, `semeclaw_dialogs`, `semeclaw_interventions` Supabase tables
+    plus `semeclaw_upsert_task`, `semeclaw_quota`, `semeclaw_enforce_retention` RPCs.
+  - Adapters auto-discover tasks from Paperclip, Moltica, local JSON files,
+    Claude Code workspace.
+  - `compose_dialog()` produces 6-line meetings with deterministic templates
+    (zero-key) or OpenRouter free models (Qwen3-Next-80B for agents).
+  - 100-task per-tenant cap with oldest-archived-first GC.
+  - Routes: `GET/POST /api/tasks`, `POST /api/tasks/sync`,
+    `GET /api/tasks/quota`, `POST /api/tasks/gc`,
+    `GET /api/tasks/{id}/dialog`, `POST /api/tasks/{id}/dialog`.
+
+- **Phase B — Intervention loop + orchestrator + writeback**
+  - 3-strike intervention engine (`war_room/tasks/intervene.py`).
+    Each `comment` returns `{turn_index, agent_replies}`. Turn 3 triggers the
+    SemeClaw orchestrator which emits a strict-JSON `{task_patch, rationale,
+    dialog_brief}` (with deterministic fallback to `status=needs_review`).
+  - Versioned dialogs with `superseded_by` pointer; v(n+1) auto-composed
+    after orchestrator decision.
+  - Writeback handlers (`war_room/tasks/writeback.py`):
+    `paperclip` PATCH, `moltica` PATCH, `local` JSON rewrite, `claude_code`
+    read-only by design.
+  - Every dialog line carries an `audio_url` of the form
+    `/api/tts?text=…&speaker=…&lang=en`.
+  - Routes: `POST /api/tasks/{id}/intervene`, `GET /api/tasks/{id}/interventions`.
+  - SemeClaw orchestrator agent definition at `war_room/agents/semeclaw.md`.
+
+- **Phase C — Adapter discovery**
+  - `GET /api/agents/adapters/{adapter_id}/agents` — discover agents
+    inside a connected adapter workspace via env-templated path
+    (`{workspace_id}` / `{company_id}` / `{tenant_id}`).
+  - `GET /api/agents/adapters/status` per-adapter readiness probe.
+  - 404 / 400 / 409+`missing_env` / 502 contract for clean UI error handling.
+
+- **Phase D — Telegram bot + Tasks UI**
+  - `POST /api/telegram/webhook` — drive the intervention loop from a
+    Telegram chat. Verifies `X-Telegram-Bot-Api-Secret-Token` when
+    `TELEGRAM_WEBHOOK_SECRET` is set. Commands: `/list`, `/help`,
+    `/comment <task_id> <text>`, plus `<id_prefix>: <text>` shorthand.
+    Replies with agent answers and orchestrator decision summary.
+  - `GET /tasks` — premium-polish single-page UI:
+    - Two-column layout with grouped task list (Needs review / In progress /
+      Open / Done), search filter, status pills.
+    - Dialog timeline with per-agent gradient avatars, role tags, voice
+      play button per line.
+    - Intervention thread with turn dots (filled / warning at turn 3),
+      orchestrator decision card, JSON patch preview.
+    - Sticky composer with Cmd+Enter shortcut, turn counter, contextual hint.
+    - Modal-based task creation, toast notifications, skeleton loading,
+      empty states with CTA.
+    - Inter + JetBrains Mono typography, gradient brand mark.
+
+### Added — OSS positioning
+
+- New `AGENTS.md` at repo root: spec for AI coding agents (Claude Code,
+  Codex, Cursor, Aider) to autonomously set up the repo after `git clone`.
+- New `cli/doctor.py` with structured `--json` output: connectivity probe
+  for DNS, dashboard, Supabase, OpenRouter, DuckDuckGo, every adapter.
+- New CLI commands: `semeclaw tasks create/sync/list/dialog/comment/
+  interventions/quota/gc`. Every command supports `--json`.
+- `scripts/autonomous-setup-prompt.md`: copy-paste prompt for any AI agent.
+- README rewritten end-to-end for OSS audience.
+- New `docs/TASKS.md` with full lifecycle documentation.
+
+### Fixed
+
+- `cli/doctor.py` Windows cp1252 encoding crash (replaced `→` with `->`).
+- `_probe_dashboard` falls back to `/api/agents` when `/version.json` is 404.
+- DuckDuckGo HTTP 202 no longer marked as failure.
+- `war_room/tasks/inbox/*.json` now gitignored (placeholder retained).
+- README license badge corrected from "Proprietary" to MIT.
+
 ## [0.7.0] - 2026-04-20
 
 ### Added

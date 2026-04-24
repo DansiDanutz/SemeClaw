@@ -2,114 +2,684 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SemeClaw — Tasks</title>
+<title>SemeClaw — War Room</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0b0d12; --panel: #141823; --panel2: #1b2030;
-    --line: #232838; --text: #e7ecf3; --muted: #8a93a6;
-    --accent: #6cf; --warn: #f7b955; --err: #ff6b6b; --ok: #4ade80;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* palette */
+    --bg-0: #0a0b10;
+    --bg-1: #0f1118;
+    --bg-2: #161924;
+    --bg-3: #1d2130;
+    --line: #232838;
+    --line-2: #2d3346;
+    --text: #e8ecf3;
+    --text-dim: #9aa3b8;
+    --text-faint: #5d6680;
+    --brand: #7c5cff;
+    --brand-2: #5fa8ff;
+    --brand-grad: linear-gradient(135deg, #7c5cff 0%, #5fa8ff 100%);
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --info: #38bdf8;
+
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.3);
+    --shadow-2: 0 8px 24px rgba(0,0,0,.4);
+    --shadow-glow: 0 0 0 1px rgba(124,92,255,.35), 0 8px 24px rgba(124,92,255,.2);
+
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
-         background: var(--bg); color: var(--text); }
-  header { padding: 14px 22px; border-bottom: 1px solid var(--line);
-           display: flex; gap: 18px; align-items: center; background: var(--panel); }
-  header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .3px; }
-  header .grow { flex: 1; }
-  header .pill { font: 12px var(--mono); color: var(--muted);
-                 padding: 4px 8px; background: var(--panel2);
-                 border: 1px solid var(--line); border-radius: 999px; }
-  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-           padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); color: #021018; border-color: var(--accent);
-                   font-weight: 600; }
-  main { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 53px); }
-  #tasks { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
-  .task { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  .task:hover { background: var(--panel2); }
-  .task.active { background: var(--panel2); border-left: 3px solid var(--accent); }
-  .task .row1 { display: flex; gap: 8px; align-items: baseline; }
-  .task .id { font: 11px var(--mono); color: var(--muted); }
-  .task .status { font-size: 11px; padding: 1px 6px; border-radius: 4px;
-                  background: var(--line); color: var(--muted); text-transform: uppercase; }
-  .task .status.open { background: #1f3a4a; color: var(--accent); }
-  .task .status.needs_review { background: #4a3a1f; color: var(--warn); }
-  .task .status.done { background: #1f4a2a; color: var(--ok); }
-  .task .title { margin-top: 3px; }
-  #right { overflow-y: auto; padding: 18px 22px; }
-  #right h2 { margin: 0 0 4px; font-size: 18px; }
-  #right .meta { color: var(--muted); font: 12px var(--mono); margin-bottom: 16px; }
-  .section { background: var(--panel); border: 1px solid var(--line);
-             border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-  .section h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
-                letter-spacing: .8px; color: var(--muted); font-weight: 600; }
-  .line { display: flex; gap: 10px; align-items: flex-start;
-          padding: 8px 0; border-top: 1px dashed var(--line); }
-  .line:first-of-type { border-top: none; }
-  .line .agent { width: 92px; flex: none; font: 12px var(--mono);
-                 color: var(--accent); text-transform: uppercase; }
-  .line .text { flex: 1; }
-  .line button { padding: 2px 8px; font-size: 12px; }
-  .iv { padding: 8px 0; border-top: 1px dashed var(--line); }
-  .iv:first-child { border-top: none; }
-  .iv .turn { font: 11px var(--mono); color: var(--muted); }
-  .iv .user { color: var(--warn); margin: 4px 0; }
-  .iv .reply { font-size: 13px; padding: 2px 0; }
-  .iv .reply b { color: var(--accent); font: 12px var(--mono); margin-right: 6px; }
-  .iv .decision { background: var(--panel2); border-left: 3px solid var(--warn);
-                  padding: 8px 10px; margin-top: 6px; border-radius: 4px; }
-  textarea { width: 100%; min-height: 70px; resize: vertical;
-             background: var(--bg); color: var(--text);
-             border: 1px solid var(--line); border-radius: 6px;
-             padding: 8px; font: inherit; }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .empty { color: var(--muted); padding: 40px 20px; text-align: center; }
-  .toast { position: fixed; bottom: 20px; right: 20px;
-           background: var(--panel2); border: 1px solid var(--line);
-           padding: 10px 16px; border-radius: 6px; max-width: 340px;
-           opacity: 0; transition: opacity .25s; }
-  .toast.show { opacity: 1; }
-  .toast.err { border-color: var(--err); }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg-0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-2); }
+
+  button, input, textarea {
+    font: inherit; color: inherit;
+  }
+  button {
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all .15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  button:hover { background: var(--bg-2); border-color: var(--line-2); }
+  button.primary {
+    background: var(--brand-grad);
+    border-color: transparent;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(124,92,255,.25);
+  }
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(124,92,255,.35); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
+  button.ghost:hover { background: var(--bg-2); color: var(--text); }
+  button.icon { padding: 6px; width: 30px; height: 30px; justify-content: center; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- layout ---------- */
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  header.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 24px;
+    background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: -0.01em;
+  }
+  .brand .logo {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: var(--brand-grad);
+    display: grid; place-items: center;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(124,92,255,.4);
+  }
+  .brand .sub {
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 13px;
+    margin-left: 2px;
+  }
+  .topbar .grow { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.15);
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    overflow: hidden;
+  }
+
+  /* ---------- sidebar ---------- */
+  aside {
+    background: var(--bg-1);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .side-head {
+    padding: 14px 16px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .search {
+    flex: 1;
+    display: flex; align-items: center;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 0 10px;
+  }
+  .search input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: none;
+    padding: 7px 0;
+    font-size: 13px;
+  }
+  .search svg { width: 14px; height: 14px; color: var(--text-faint); margin-right: 6px; }
+
+  #tasks { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .group-label {
+    padding: 10px 16px 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .task {
+    padding: 11px 16px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: background .12s;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .task:hover { background: var(--bg-2); }
+  .task.active { background: var(--bg-2); border-left-color: var(--brand); }
+  .task .row {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-faint);
+  }
+  .task .id { color: var(--text-faint); }
+  .task .title {
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .status {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 4px;
+    line-height: 1.4;
+  }
+  .status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .status.open         { background: rgba(56,189,248,.12);  color: var(--info); }
+  .status.in_progress  { background: rgba(124,92,255,.15);  color: var(--brand); }
+  .status.needs_review { background: rgba(245,158,11,.15);  color: var(--warn); }
+  .status.done         { background: rgba(34,197,94,.15);   color: var(--ok); }
+  .source-tag {
+    padding: 1px 6px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---------- right panel ---------- */
+  .panel {
+    overflow-y: auto;
+    background: var(--bg-0);
+    background-image:
+      radial-gradient(at 10% 0%, rgba(124,92,255,.06) 0%, transparent 50%),
+      radial-gradient(at 90% 0%, rgba(95,168,255,.04) 0%, transparent 40%);
+  }
+  .panel-inner { max-width: 880px; margin: 0 auto; padding: 28px 32px 80px; }
+
+  .task-head {
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .task-head h1 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+  }
+  .task-head .meta {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    align-items: center;
+  }
+  .task-head .meta .sep { color: var(--line-2); }
+  .agents-list {
+    display: inline-flex; gap: 4px; align-items: center;
+  }
+  .agent-chip {
+    padding: 2px 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .card {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-1);
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .card-head h2 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+  .card-head .grow { flex: 1; }
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    background: var(--bg-3);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .description {
+    color: var(--text);
+    font-size: 14px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+  }
+
+  /* ---------- dialog timeline ---------- */
+  .dialog-line {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+    align-items: flex-start;
+  }
+  .dialog-line:first-of-type { border-top: 0; padding-top: 4px; }
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: white;
+    text-transform: uppercase;
+    flex: none;
+  }
+  .avatar-research  { background: linear-gradient(135deg,#06b6d4,#0891b2); }
+  .avatar-writer    { background: linear-gradient(135deg,#f59e0b,#d97706); }
+  .avatar-scrape    { background: linear-gradient(135deg,#10b981,#059669); }
+  .avatar-coder     { background: linear-gradient(135deg,#ef4444,#dc2626); }
+  .avatar-semeclaw  { background: var(--brand-grad); }
+  .avatar-default   { background: linear-gradient(135deg,#64748b,#475569); }
+  .line-body { min-width: 0; }
+  .line-name {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 2px;
+    text-transform: capitalize;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .line-name .role {
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .line-text { color: var(--text); font-size: 14px; line-height: 1.55; }
+  .play-btn {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all .15s;
+    flex: none;
+  }
+  .play-btn:hover { background: var(--brand); border-color: var(--brand); color: white; }
+  .play-btn.playing { background: var(--brand); border-color: var(--brand); color: white; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(124,92,255,.4); } 50% { box-shadow: 0 0 0 8px rgba(124,92,255,0); } }
+
+  /* ---------- interventions ---------- */
+  .iv {
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  .iv:first-child { border-top: 0; padding-top: 0; }
+  .iv-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .iv-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--bg-3);
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+    color: var(--text-dim);
+  }
+  .iv-comment {
+    background: var(--bg-2);
+    border-left: 3px solid var(--brand);
+    padding: 10px 14px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--text);
+    margin-bottom: 10px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .iv-reply {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    padding: 6px 0;
+    align-items: flex-start;
+  }
+  .iv-reply .avatar { width: 24px; height: 24px; font-size: 10px; border-radius: 6px; }
+  .iv-reply-text { font-size: 13.5px; }
+  .iv-reply-name {
+    font-weight: 600; font-size: 11px;
+    color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 1px;
+  }
+  .decision {
+    margin-top: 12px;
+    background: linear-gradient(135deg, rgba(245,158,11,.1) 0%, rgba(245,158,11,.04) 100%);
+    border: 1px solid rgba(245,158,11,.3);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+  .decision-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+    font-weight: 700;
+    color: var(--warn);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .decision-rationale { color: var(--text); font-size: 14px; line-height: 1.55; }
+  .decision-patch {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(0,0,0,.25);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    overflow-x: auto;
+  }
+
+  /* ---------- composer ---------- */
+  .composer {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-top: 14px;
+    transition: border-color .15s;
+  }
+  .composer:focus-within { border-color: var(--brand); box-shadow: var(--shadow-glow); }
+  .composer textarea {
+    width: 100%;
+    min-height: 70px; max-height: 240px; resize: vertical;
+    background: transparent;
+    border: 0;
+    outline: none;
+    padding: 4px 6px;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .composer textarea::placeholder { color: var(--text-faint); }
+  .composer-bar {
+    display: flex; align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    gap: 10px;
+  }
+  .composer-hint {
+    flex: 1;
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+  .composer-hint kbd {
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    margin: 0 2px;
+  }
+  .turn-counter {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text-dim); font-size: 12px;
+    font-family: var(--mono);
+  }
+  .turn-dots { display: inline-flex; gap: 3px; }
+  .turn-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--bg-3);
+  }
+  .turn-dot.filled { background: var(--brand); }
+  .turn-dot.warn   { background: var(--warn); }
+
+  /* ---------- empty ---------- */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 40px;
+  }
+  .empty .icon {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
+  .empty h3 { color: var(--text); font-size: 16px; margin: 0 0 6px; font-weight: 600; }
+  .empty p  { margin: 0 0 14px; max-width: 320px; line-height: 1.55; }
+  .empty code {
+    background: var(--bg-2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--brand-2);
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-2) 0%, var(--bg-3) 50%, var(--bg-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: var(--radius-sm);
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* ---------- toast ---------- */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--brand);
+    padding: 12px 18px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    max-width: 380px;
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all .25s cubic-bezier(.16,1,.3,1);
+    pointer-events: none;
+    font-size: 13.5px;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .toast.err { border-left-color: var(--err); }
+  .toast.ok  { border-left-color: var(--ok); }
+
+  /* ---------- modal ---------- */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%; max-width: 460px;
+    box-shadow: var(--shadow-2);
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+  .modal p  { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
+  .modal input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    outline: none;
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  .modal input:focus { border-color: var(--brand); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+    aside { display: none; }
+    aside.open { display: flex; position: fixed; inset: 53px 0 0; z-index: 20; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>🪖 SemeClaw — Tasks</h1>
-  <span id="quota" class="pill">quota …</span>
-  <span class="grow"></span>
-  <button onclick="syncTasks()">⟲ Sync</button>
-  <button onclick="newTask()">+ New</button>
-</header>
-<main>
-  <div id="tasks"><div class="empty">Loading…</div></div>
-  <div id="right"><div class="empty">Select a task on the left.</div></div>
-</main>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🪖</div>
+      <div>SemeClaw <span class="sub">War Room</span></div>
+    </div>
+    <div class="grow"></div>
+    <span id="quota" class="pill"><span class="dot"></span><span id="quota-text">connecting…</span></span>
+    <button class="ghost" onclick="syncTasks()" title="Pull from all adapters">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Sync
+    </button>
+    <button class="primary" onclick="openNew()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Task
+    </button>
+  </header>
+
+  <main>
+    <aside>
+      <div class="side-head">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="filter" type="text" placeholder="Filter tasks…" oninput="renderTasks()"/>
+        </div>
+      </div>
+      <div id="tasks"></div>
+    </aside>
+
+    <section class="panel" id="panel">
+      <div class="empty">
+        <div class="icon">⚡</div>
+        <h3>Loading…</h3>
+        <p>Fetching tasks from your tenant.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
 <div id="toast" class="toast"></div>
+
+<div id="modal" class="modal-bg" onclick="if(event.target===this)closeNew()">
+  <div class="modal">
+    <h3>Create a new task</h3>
+    <p>It'll be ingested under the <code>local</code> source and a dialog will be auto-composed when you open it.</p>
+    <input id="new-title" type="text" placeholder="Task title" autofocus onkeydown="if(event.key==='Enter')submitNew();if(event.key==='Escape')closeNew()"/>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeNew()">Cancel</button>
+      <button class="primary" onclick="submitNew()">Create</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = (s, p=document) => p.querySelector(s);
-const $$ = (s, p=document) => Array.from(p.querySelectorAll(s));
 let TASKS = [];
 let CURRENT = null;
 let DIALOG = null;
 let INTERVENTIONS = [];
 
-function toast(msg, isErr=false) {
+const AGENT_COLORS = {
+  research: 'avatar-research',
+  writer:   'avatar-writer',
+  scrape:   'avatar-scrape',
+  scraper:  'avatar-scrape',
+  coder:    'avatar-coder',
+  semeclaw: 'avatar-semeclaw',
+};
+const agentClass = (id) => AGENT_COLORS[(id||'').toLowerCase()] || 'avatar-default';
+const agentInitial = (id) => (id||'?').slice(0,2).toUpperCase();
+const escapeHtml = s => String(s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function toast(msg, kind='') {
   const t = $("#toast");
   t.textContent = msg;
-  t.className = "toast show" + (isErr ? " err" : "");
-  setTimeout(() => t.className = "toast", 2400);
+  t.className = "toast show " + kind;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.className = "toast " + kind, 2800);
 }
 
 async function api(path, opts={}) {
-  const r = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  return r.json();
+  try {
+    const r = await fetch(path, { headers: {"Content-Type": "application/json"}, ...opts });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
 }
 
 async function loadTasks() {
@@ -117,42 +687,87 @@ async function loadTasks() {
   TASKS = r.tasks || [];
   renderTasks();
   loadQuota();
+  if (!CURRENT && TASKS.length) selectTask(TASKS[0].id);
+  else if (!TASKS.length) renderEmpty();
 }
 
 async function loadQuota() {
   const q = await api("/api/tasks/quota");
   if (q.ok) {
-    $("#quota").textContent =
-      `quota ${q.active||0}/${q.cap||100} · ${q.archived||0} archived`;
+    $("#quota-text").textContent = `${q.active||0}/${q.cap||100} active · ${q.archived||0} archived`;
+  } else {
+    $("#quota-text").textContent = 'offline';
   }
 }
 
 function renderTasks() {
   const root = $("#tasks");
-  if (!TASKS.length) {
-    root.innerHTML = '<div class="empty">No tasks yet.<br>Run <code>semeclaw tasks sync</code> or click + New.</div>';
+  const q = ($("#filter")?.value || '').toLowerCase().trim();
+  const filtered = q ? TASKS.filter(t =>
+    (t.title||'').toLowerCase().includes(q) || (t.id||'').includes(q)
+  ) : TASKS;
+
+  if (!filtered.length) {
+    root.innerHTML = `<div style="padding:40px 16px;color:var(--text-faint);text-align:center;font-size:13px">
+      ${q ? 'No matches.' : 'No tasks yet.'}
+    </div>`;
     return;
   }
-  root.innerHTML = TASKS.map(t => `
-    <div class="task ${CURRENT===t.id?'active':''}" onclick="selectTask('${t.id}')">
-      <div class="row1">
-        <span class="id">${t.id.slice(0,8)}</span>
-        <span class="status ${t.status||'open'}">${t.status||'open'}</span>
-        <span style="color:var(--muted);font-size:11px">${t.source||''}</span>
-      </div>
-      <div class="title">${escapeHtml(t.title||'(untitled)')}</div>
-    </div>`).join("");
+
+  // group by status: active first (open, in_progress, needs_review), then done
+  const order = ['needs_review','in_progress','open','done'];
+  const groups = {};
+  filtered.forEach(t => {
+    const k = order.includes(t.status) ? t.status : 'open';
+    (groups[k] = groups[k] || []).push(t);
+  });
+
+  const labels = {
+    needs_review: 'Needs review',
+    in_progress: 'In progress',
+    open: 'Open',
+    done: 'Done',
+  };
+  let html = '';
+  order.forEach(k => {
+    const arr = groups[k]; if (!arr || !arr.length) return;
+    html += `<div class="group-label">${labels[k]} <span style="color:var(--line-2)">·</span> ${arr.length}</div>`;
+    arr.forEach(t => {
+      html += `<div class="task ${CURRENT===t.id?'active':''}" onclick="selectTask('${t.id}')">
+        <div class="title">${escapeHtml(t.title||'(untitled)')}</div>
+        <div class="row">
+          <span class="status ${t.status||'open'}">${(t.status||'open').replace('_',' ')}</span>
+          <span class="source-tag">${t.source||'?'}</span>
+          <span class="id">${t.id.slice(0,8)}</span>
+        </div>
+      </div>`;
+    });
+  });
+  root.innerHTML = html;
 }
 
-function escapeHtml(s) {
-  return String(s||"").replace(/[&<>"']/g, c =>
-    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function renderEmpty() {
+  $("#panel").innerHTML = `
+    <div class="empty">
+      <div class="icon">📋</div>
+      <h3>No tasks yet</h3>
+      <p>Run <code>semeclaw tasks sync</code> to pull from your adapters, or create one manually with the <b>+ New Task</b> button.</p>
+      <button class="primary" onclick="openNew()">Create your first task</button>
+    </div>`;
 }
 
 async function selectTask(id) {
   CURRENT = id;
   renderTasks();
-  $("#right").innerHTML = '<div class="empty">Loading dialog…</div>';
+  $("#panel").innerHTML = `
+    <div class="panel-inner">
+      <div class="task-head">
+        <div class="skeleton" style="height:24px;width:60%;margin-bottom:10px"></div>
+        <div class="skeleton" style="height:14px;width:40%"></div>
+      </div>
+      <div class="card"><div class="skeleton" style="height:80px"></div></div>
+      <div class="card"><div class="skeleton" style="height:120px"></div></div>
+    </div>`;
   const [dRes, ivRes] = await Promise.all([
     api(`/api/tasks/${id}/dialog`),
     api(`/api/tasks/${id}/interventions`),
@@ -168,104 +783,161 @@ function renderRight() {
   const lines = (DIALOG && DIALOG.lines) || [];
   const turn = INTERVENTIONS.length;
   const remaining = Math.max(0, 3 - turn);
+  const agentChips = (t.assigned_agents||[]).map(a => `<span class="agent-chip">${escapeHtml(a)}</span>`).join('');
 
-  $("#right").innerHTML = `
-    <h2>${escapeHtml(t.title||'(untitled)')}</h2>
-    <div class="meta">id=${t.id} · source=${t.source||'?'} · status=${t.status||'?'}
-      · agents=${(t.assigned_agents||[]).join(',')||'–'}</div>
+  $("#panel").innerHTML = `
+    <div class="panel-inner">
+      <div class="task-head">
+        <h1>${escapeHtml(t.title||'(untitled)')}</h1>
+        <div class="meta">
+          <span class="status ${t.status||'open'}">${(t.status||'open').replace('_',' ')}</span>
+          <span class="sep">•</span>
+          <span>${t.source||'?'}</span>
+          <span class="sep">•</span>
+          <span>${t.id}</span>
+          ${agentChips ? `<span class="sep">•</span><div class="agents-list">${agentChips}</div>` : ''}
+        </div>
+      </div>
 
-    ${t.description ? `<div class="section"><h3>Description</h3>
-      <div style="white-space:pre-wrap">${escapeHtml(t.description)}</div></div>` : ''}
+      ${t.description ? `
+        <div class="card">
+          <div class="card-head"><h2>Description</h2></div>
+          <div class="description">${escapeHtml(t.description)}</div>
+        </div>` : ''}
 
-    <div class="section">
-      <h3>Dialog v${DIALOG ? DIALOG.version : '?'}</h3>
-      ${lines.length ? lines.map(l => `
-        <div class="line">
-          <div class="agent">${l.agent_id}</div>
-          <div class="text">${escapeHtml(l.text||'')}</div>
-          ${l.audio_url ? `<button onclick="playAudio('${l.audio_url}')">▶︎</button>` : ''}
-        </div>`).join('') : '<div class="empty">No dialog yet.</div>'}
-      <div style="margin-top:10px"><button onclick="regen()">↻ Regenerate</button></div>
-    </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Dialog</h2>
+          <span class="badge">v${DIALOG ? DIALOG.version : '?'}</span>
+          <span class="badge">${lines.length} lines</span>
+          <div class="grow"></div>
+          <button class="ghost" onclick="regen()" title="Regenerate dialog">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 5.64 5.64L23 10"/></svg>
+            Regenerate
+          </button>
+        </div>
+        ${lines.length ? lines.map((l,i) => `
+          <div class="dialog-line">
+            <div class="avatar ${agentClass(l.agent_id)}">${agentInitial(l.agent_id)}</div>
+            <div class="line-body">
+              <div class="line-name">${escapeHtml(l.agent_id||'')} <span class="role">${escapeHtml(l.role||'')}</span></div>
+              <div class="line-text">${escapeHtml(l.text||'')}</div>
+            </div>
+            ${l.audio_url ? `<button class="play-btn" id="play-${i}" onclick="playAudio('${l.audio_url}', ${i})" title="Play voice">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>` : ''}
+          </div>`).join('') : '<div style="color:var(--text-faint);text-align:center;padding:20px">No dialog yet — click Regenerate.</div>'}
+      </div>
 
-    <div class="section">
-      <h3>Interventions (${turn}/3)</h3>
-      ${INTERVENTIONS.length ? INTERVENTIONS.map(renderIv).join('') :
-        '<div class="empty" style="padding:14px">No comments yet.</div>'}
-      ${remaining > 0 ? `
-        <div style="margin-top:12px">
-          <textarea id="comment" placeholder="Add a comment for the agents…"></textarea>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-            <button class="primary" onclick="sendComment()">Send comment</button>
-            <span class="hint">${remaining} turn${remaining===1?'':'s'} left
-              ${remaining===1?'— next one triggers the orchestrator':''}</span>
-          </div>
-        </div>` :
-        '<div class="hint" style="margin-top:10px">Limit reached. Regenerate dialog to start a new round.</div>'}
+      <div class="card">
+        <div class="card-head">
+          <h2>Interventions</h2>
+          <span class="badge">${turn}/3 turns</span>
+          <div class="grow"></div>
+          <span class="turn-counter">
+            <span class="turn-dots">
+              ${[0,1,2].map(i => `<span class="turn-dot ${i<turn ? (i===2?'warn':'filled') : ''}"></span>`).join('')}
+            </span>
+            ${remaining===0 ? 'limit reached' : remaining + ' left'}
+          </span>
+        </div>
+        ${INTERVENTIONS.length ? INTERVENTIONS.map(renderIv).join('') :
+          '<div style="color:var(--text-faint);text-align:center;padding:14px 0">No comments yet — start the conversation below.</div>'}
+        ${remaining > 0 ? `
+          <div class="composer">
+            <textarea id="comment" placeholder="${turn===2 ? 'Final turn — this triggers the orchestrator decision…' : 'Comment to all assigned agents…'}" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter')sendComment()"></textarea>
+            <div class="composer-bar">
+              <div class="composer-hint">Press <kbd>⌘</kbd>+<kbd>Enter</kbd> to send · ${turn===2 ? '<b style="color:var(--warn)">⚠ this is turn 3 — orchestrator decides</b>' : `${remaining-1} more turn${remaining-1===1?'':'s'} after this`}</div>
+              <button class="primary" id="send-btn" onclick="sendComment()">Send comment</button>
+            </div>
+          </div>` :
+          '<div style="color:var(--text-faint);font-size:13px;margin-top:12px">Limit reached. Click <b>Regenerate</b> above to start a new round.</div>'}
+      </div>
     </div>`;
 }
 
 function renderIv(iv) {
-  const replies = (iv.agent_replies||[]).map(r =>
-    `<div class="reply"><b>${r.agent_id}</b>${escapeHtml(r.text||'')}</div>`).join('');
+  const replies = (iv.agent_replies||[]).map(r => `
+    <div class="iv-reply">
+      <div class="avatar ${agentClass(r.agent_id)}">${agentInitial(r.agent_id)}</div>
+      <div>
+        <div class="iv-reply-name">${escapeHtml(r.agent_id||'')}</div>
+        <div class="iv-reply-text">${escapeHtml(r.text||'')}</div>
+      </div>
+    </div>`).join('');
   const dec = iv.orchestrator_decision;
   const decHtml = dec ? `
     <div class="decision">
-      <div style="font-weight:600">🧭 Orchestrator decision</div>
-      <div>${escapeHtml(dec.rationale||'')}</div>
-      ${dec.task_patch ? `<div class="hint" style="margin-top:4px">
-         patch: ${escapeHtml(JSON.stringify(dec.task_patch))}</div>` : ''}
+      <div class="decision-head">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Orchestrator decision
+      </div>
+      <div class="decision-rationale">${escapeHtml(dec.rationale||'')}</div>
+      ${dec.task_patch ? `<div class="decision-patch">patch: ${escapeHtml(JSON.stringify(dec.task_patch))}</div>` : ''}
     </div>` : '';
-  return `<div class="iv">
-    <div class="turn">turn ${iv.turn_index}</div>
-    <div class="user">› ${escapeHtml(iv.user_comment||'')}</div>
-    ${replies}${decHtml}
-  </div>`;
+  return `
+    <div class="iv">
+      <div class="iv-head">
+        <div class="iv-num">${iv.turn_index}</div>
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600">Turn ${iv.turn_index} of 3</div>
+      </div>
+      <div class="iv-comment">${escapeHtml(iv.user_comment||'')}</div>
+      ${replies}${decHtml}
+    </div>`;
 }
 
-let AUDIO = null;
-function playAudio(url) {
-  if (AUDIO) { AUDIO.pause(); AUDIO = null; }
-  AUDIO = new Audio(url);
-  AUDIO.play().catch(e => toast("audio failed: " + e.message, true));
+let AUDIO = null, AUDIO_IDX = -1;
+function playAudio(url, idx) {
+  if (AUDIO_IDX >= 0) document.getElementById('play-'+AUDIO_IDX)?.classList.remove('playing');
+  if (AUDIO) { AUDIO.pause(); }
+  if (AUDIO_IDX === idx) { AUDIO_IDX = -1; AUDIO = null; return; }
+  AUDIO = new Audio(url); AUDIO_IDX = idx;
+  document.getElementById('play-'+idx)?.classList.add('playing');
+  AUDIO.onended = () => { document.getElementById('play-'+idx)?.classList.remove('playing'); AUDIO_IDX = -1; };
+  AUDIO.play().catch(e => { toast('Audio failed: ' + e.message, 'err'); document.getElementById('play-'+idx)?.classList.remove('playing'); AUDIO_IDX = -1; });
 }
 
 async function sendComment() {
-  const ta = $("#comment");
+  const ta = $("#comment"); const btn = $("#send-btn");
   const text = (ta.value||"").trim();
   if (!text) return;
-  ta.disabled = true;
+  ta.disabled = btn.disabled = true;
+  btn.textContent = 'Sending…';
   const r = await api(`/api/tasks/${CURRENT}/intervene`,
     { method: "POST", body: JSON.stringify({ comment: text }) });
-  ta.disabled = false;
-  if (!r.ok) { toast(r.error||"intervene failed", true); return; }
-  toast(`Turn ${r.turn_index}/3 recorded`);
-  await selectTask(CURRENT);
+  ta.disabled = btn.disabled = false;
+  btn.textContent = 'Send comment';
+  if (!r.ok) { toast(r.error||"Intervene failed", 'err'); return; }
+  toast(`Turn ${r.turn_index}/3 recorded${r.orchestrator_decision ? ' · orchestrator decided' : ''}`, 'ok');
   await loadTasks();
+  await selectTask(CURRENT);
 }
 
 async function regen() {
+  toast('Composing dialog…');
   const r = await api(`/api/tasks/${CURRENT}/dialog`, { method: "POST" });
-  if (!r.ok) { toast(r.error||"regen failed", true); return; }
-  toast(`Dialog v${r.dialog.version} composed`);
+  if (!r.ok) { toast(r.error||"Regenerate failed", 'err'); return; }
+  toast(`Dialog v${r.dialog.version} composed`, 'ok');
   await selectTask(CURRENT);
 }
 
 async function syncTasks() {
-  toast("Syncing…");
+  toast('Syncing adapters…');
   const r = await api("/api/tasks/sync", { method: "POST" });
-  if (!r.ok) { toast(r.error||"sync failed", true); return; }
-  toast(`Synced ${r.synced||0} task(s)`);
+  if (!r.ok) { toast(r.error||"Sync failed", 'err'); return; }
+  toast(`Synced ${r.synced||0} task${r.synced===1?'':'s'}`, 'ok');
   await loadTasks();
 }
 
-async function newTask() {
-  const title = prompt("Task title:");
+function openNew() { $("#modal").classList.add('show'); setTimeout(()=>$("#new-title").focus(), 50); }
+function closeNew() { $("#modal").classList.remove('show'); $("#new-title").value=''; }
+async function submitNew() {
+  const title = $("#new-title").value.trim();
   if (!title) return;
-  const r = await api("/api/tasks", { method: "POST",
-    body: JSON.stringify({ title }) });
-  if (!r.ok) { toast(r.error||"create failed", true); return; }
-  toast("Task created");
+  const r = await api("/api/tasks", { method: "POST", body: JSON.stringify({ title }) });
+  if (!r.ok) { toast(r.error||"Create failed", 'err'); return; }
+  closeNew();
+  toast('Task created', 'ok');
   await loadTasks();
   selectTask(r.task_id);
 }
