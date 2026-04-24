@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from war_room.dashboard.routes.deps import _tenant_id
-from war_room.tasks import _db, sources, dialog as _dialog, retention
+from war_room.tasks import _db, sources, dialog as _dialog, retention, intervene as _intervene
 
 logger = logging.getLogger("war_room.dashboard.tasks")
 router = APIRouter(tags=["tasks"])
@@ -112,6 +112,39 @@ async def api_get_dialog(task_id: str):
         lines = await _dialog.compose_dialog(task)
         d = await _db.insert_dialog(task_id, version=1, lines=lines)
         return {"ok": True, "task_id": task_id, "dialog": d, "generated": True}
+    except Exception as e:
+        return _err(str(e))
+
+
+@router.post("/api/tasks/{task_id}/intervene")
+async def api_intervene(task_id: str, request: Request):
+    """Record a user comment on the latest dialog. On turn 3, runs the orchestrator,
+    patches the task, regenerates v(n+1), and writes back to source."""
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("invalid JSON body", 400)
+    comment = (body.get("comment") or body.get("user_comment") or "").strip()
+    if not comment:
+        return _err("body.comment is required", 400)
+    try:
+        result = await _intervene.intervene(task_id, comment)
+        if not result.get("ok"):
+            return _err(result.get("error", "intervene failed"), 409)
+        return {"ok": True, **result}
+    except Exception as e:
+        return _err(str(e))
+
+
+@router.get("/api/tasks/{task_id}/interventions")
+async def api_list_interventions(task_id: str):
+    try:
+        d = await _db.latest_dialog(task_id)
+        if not d:
+            return {"ok": True, "interventions": []}
+        items = await _db.list_interventions(d["id"])
+        return {"ok": True, "dialog_id": d["id"], "version": d.get("version"),
+                "count": len(items), "interventions": items}
     except Exception as e:
         return _err(str(e))
 

@@ -112,6 +112,56 @@ def cmd_quota() -> int:
     return 0
 
 
+def cmd_comment(task_id: str | None, comment: str | None, as_json: bool = False) -> int:
+    if not task_id or not comment:
+        fail("usage: semeclaw tasks comment <task_id> <\"comment text\">")
+        return 2
+    res = _http("POST", f"/api/tasks/{task_id}/intervene", {"comment": comment})
+    if as_json:
+        print(json.dumps(res, indent=2))
+        return 0 if res.get("ok") else 1
+    banner("semeclaw tasks comment", f"task={task_id[:8]}  turn={res.get('turn_index','?')}/3")
+    if not res.get("ok"):
+        fail(res.get("error", "unknown"))
+        return 1
+    section("Agent replies")
+    for r in res.get("agent_replies", []) or []:
+        print(f"  [{r.get('agent_id'):>10}] {r.get('text')}")
+    if res.get("orchestrator_decision"):
+        section("Orchestrator decision (intervention #3)")
+        d = res["orchestrator_decision"]
+        print(f"  rationale: {d.get('rationale','')}")
+        patch = d.get("task_patch", {}) or {}
+        for k, v in patch.items():
+            print(f"  patch.{k}: {v}")
+        if res.get("new_dialog"):
+            print(f"  new dialog v{res['new_dialog'].get('version')} composed")
+        wb = res.get("writeback") or {}
+        if wb:
+            print(f"  writeback: {wb}")
+    return 0
+
+
+def cmd_interventions(task_id: str | None) -> int:
+    if not task_id:
+        fail("usage: semeclaw tasks interventions <task_id>")
+        return 2
+    res = _http("GET", f"/api/tasks/{task_id}/interventions")
+    if not res.get("ok"):
+        fail(res.get("error", "unknown"))
+        return 1
+    banner("semeclaw tasks interventions",
+           f"dialog v{res.get('version')}  count={res.get('count', 0)}/3")
+    for iv in res.get("interventions", []) or []:
+        section(f"turn {iv.get('turn_index')}")
+        print(f"  user: {iv.get('user_comment')}")
+        for r in iv.get("agent_replies", []) or []:
+            print(f"  [{r.get('agent_id'):>10}] {r.get('text')}")
+        if iv.get("orchestrator_decision"):
+            print(f"  orchestrator: {iv['orchestrator_decision'].get('rationale','')}")
+    return 0
+
+
 def cmd_gc() -> int:
     banner("semeclaw tasks gc", "Enforce 100-task cap (archives oldest)")
     res = _http("POST", "/api/tasks/gc")
@@ -129,8 +179,13 @@ Commands:
   sync                Pull from every configured adapter
   list                List most-recent tasks
   dialog <task_id>    Show (or auto-generate) the meeting-room dialog
+  comment <id> "..."  Add a user comment (intervention). Turn 3 triggers orchestrator.
+  interventions <id>  Show all interventions on the latest dialog
   quota               Show retention quota + over-cap suggestions
   gc                  Enforce the 100-task cap right now
+
+Flags:
+  --json              Machine-readable output (sync, list, dialog, comment)
 """
 
 
@@ -142,6 +197,12 @@ def run(argv: list[str] | None = None) -> int:
     if cmd == "dialog": return cmd_dialog(args[1] if len(args) > 1 else None)
     if cmd == "quota":  return cmd_quota()
     if cmd == "gc":     return cmd_gc()
+    if cmd == "comment":
+        return cmd_comment(args[1] if len(args) > 1 else None,
+                           args[2] if len(args) > 2 else None,
+                           as_json=("--json" in args))
+    if cmd == "interventions":
+        return cmd_interventions(args[1] if len(args) > 1 else None)
     print(USAGE)
     return 0 if cmd in ("", "help", "-h", "--help") else 2
 

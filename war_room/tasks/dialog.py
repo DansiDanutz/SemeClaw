@@ -15,10 +15,17 @@ upgrade gracefully when keys are added.
 from __future__ import annotations
 
 import os
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Iterable
 
 from war_room.agents import registry as _reg
+
+
+def _audio_url(text: str, speaker: str) -> str:
+    """Build a /api/tts URL the frontend can drop straight into <audio src=...>."""
+    qs = urllib.parse.urlencode({"text": text or "", "speaker": speaker, "lang": "en"})
+    return f"/api/tts?{qs}"
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +107,10 @@ async def compose_dialog(task: dict) -> list[dict]:
     now = lambda: datetime.now(timezone.utc).isoformat()
 
     # Scene-setter
+    scene = f"Team — task on the table: '{title}'. Status is {task.get('status', 'open')}. Quick passes please."
     lines.append({
         "agent_id": orch_id, "role": orch_role,
-        "text": f"Team — task on the table: '{title}'. Status is {task.get('status', 'open')}. Quick passes please.",
+        "text": scene, "audio_url": _audio_url(scene, orch_id),
         "ts": now(),
     })
 
@@ -120,15 +128,17 @@ async def compose_dialog(task: dict) -> list[dict]:
         text = (await _llm_line(aid, a.role, model, task)) if model else None
         if not text:
             text = _template_line(aid, a.role, title)
-        lines.append({"agent_id": aid, "role": a.role, "text": text, "ts": now()})
+        lines.append({"agent_id": aid, "role": a.role, "text": text,
+                      "audio_url": _audio_url(text, aid), "ts": now()})
 
     # Closing summary
     next_step = "kick off in priority order — research first, then scrape, then write" \
         if any(x in agents_ids for x in ("research", "writer")) \
         else "assign owners and re-sync in 24h"
+    closer = f"Decision: {next_step}. I'll re-cap once we have intervention #3 or a finish signal."
     lines.append({
         "agent_id": orch_id, "role": orch_role,
-        "text": f"Decision: {next_step}. I'll re-cap once we have intervention #3 or a finish signal.",
+        "text": closer, "audio_url": _audio_url(closer, orch_id),
         "ts": now(),
     })
 

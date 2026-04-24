@@ -104,3 +104,6 @@ UPGRADE_PLAN.md
 war_room/dashboard/audio_cache/
 war_room/dashboard/models/
 integrations/nervix/
+
+# SemeClaw task inbox — local user files only
+war_room/tasks/inbox/*.json

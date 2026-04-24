@@ -72,6 +72,33 @@ async def insert_dialog(task_id: str, version: int, lines: list[dict]) -> dict:
     return rows[0] if rows else {}
 
 
+# ---- interventions ----------------------------------------------------------
+async def list_interventions(dialog_id: str) -> list[dict]:
+    return await supa("get",
+        f"semeclaw_interventions?dialog_id=eq.{dialog_id}&order=turn_index.asc&select=*")
+
+
+async def insert_intervention(*, task_id: str, dialog_id: str, turn_index: int,
+                              user_comment: str, agent_replies: list[dict],
+                              orchestrator_decision: dict | None = None) -> dict:
+    rows = await supa("post", "semeclaw_interventions", json={
+        "task_id": task_id, "dialog_id": dialog_id, "turn_index": turn_index,
+        "user_comment": user_comment, "agent_replies": agent_replies,
+        "orchestrator_decision": orchestrator_decision,
+    })
+    return rows[0] if rows else {}
+
+
+async def supersede_dialog(old_dialog_id: str, new_dialog_id: str) -> None:
+    await supa("patch", f"semeclaw_dialogs?id=eq.{old_dialog_id}",
+               json={"superseded_by": new_dialog_id})
+
+
+async def patch_task(task_id: str, patch: dict) -> dict:
+    rows = await supa("patch", f"semeclaw_tasks?id=eq.{task_id}", json=patch)
+    return rows[0] if rows else {}
+
+
 # ---- retention --------------------------------------------------------------
 async def quota(tenant_id: str = "default") -> dict:
     return await supa("post", "rpc/semeclaw_quota", json={"p_tenant_id": tenant_id})

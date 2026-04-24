@@ -1,0 +1,2 @@
+# Drop *.json task files here to ingest them via the `local` adapter.
+# Files are git-ignored except this placeholder.

@@ -144,13 +144,58 @@ semeclaw tasks list --json | jq '.count'    # expect: integer
 
 ---
 
-## 6. Testing strategy
+## 6. Intervention loop (Phase B)
+
+The full task lifecycle is:
+
+```
+sync -> dialog v1 -> [user comment x1] -> agent replies
+                  -> [user comment x2] -> agent replies
+                  -> [user comment x3] -> agent replies + ORCHESTRATOR DECIDES
+                                          -> task patched
+                                          -> dialog v2 composed
+                                          -> writeback to source (paperclip/moltica/local)
+                  -> [user comment x1 on v2] -> ...
+```
+
+API:
+- `POST /api/tasks/{id}/intervene` body `{"comment": "..."}` → returns `{turn_index, agent_replies, orchestrator_decision?, new_dialog?, writeback?}`
+- `GET  /api/tasks/{id}/interventions` → all interventions on the latest dialog
+
+CLI:
+- `semeclaw tasks comment <task_id> "your comment"` (add `--json` for machine-readable)
+- `semeclaw tasks interventions <task_id>`
+
+Orchestrator decision contract (strict JSON, see `war_room/agents/semeclaw.md`):
+```json
+{
+  "task_patch": {"title": "...", "description": "...",
+                 "assigned_agents": ["..."], "status": "in_progress|needs_review|done"},
+  "rationale":     "1-2 sentences for the audit log",
+  "dialog_brief":  "seed prompt for dialog v2"
+}
+```
+Without `OPENROUTER_API_KEY`, the orchestrator falls back to a deterministic
+patch that moves status to `needs_review` and appends the latest comment.
+
+TTS: every dialog line carries an `audio_url` of the form
+`/api/tts?text=...&speaker=<agent_id>&lang=en` — the frontend just plays it.
+
+Writeback handlers (`war_room/tasks/writeback.py`):
+| source       | behavior |
+|--------------|----------|
+| paperclip    | `PATCH {PAPERCLIP_BASE_URL}/api/tasks/{source_id}` |
+| moltica      | `PATCH {MOLTICA_BASE_URL}/v1/tasks/{source_id}` |
+| local        | rewrites `war_room/tasks/inbox/{source_id}.json` |
+| claude_code  | read-only by design — no writeback |
+
+## 7. Testing strategy
 
 - **Offline**: `python -c "import asyncio; from war_room.tasks.dialog import compose_dialog; ..."` — composer must work with no network.
 - **Live**: `semeclaw doctor --json` — must return `{"hard_fail": false}` against any reachable deployment.
 - **End-to-end**: drop a `.json` file into `war_room/tasks/inbox/`, run `semeclaw tasks sync`, then `semeclaw tasks dialog <id>` — should auto-generate a 6-line dialog.
 
-## 7. When you finish
+## 8. When you finish
 
 Tell the human exactly one of:
 - **"All checks green, ready to use. Try `semeclaw tasks sync`."**
