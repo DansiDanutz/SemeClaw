@@ -17,6 +17,29 @@ except ImportError:  # pragma: no cover
 _BroadcastHook = Any
 
 
+def _bump_gauge(delta: int) -> None:
+    """Best-effort Prom gauge update — never raises."""
+    try:
+        from war_room.dashboard.metrics import ws_connections_active
+
+        if delta > 0:
+            ws_connections_active.inc(delta)
+        else:
+            ws_connections_active.dec(-delta)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _count_broadcast(msg_type: str) -> None:
+    """Increment the per-type broadcast counter. Never raises."""
+    try:
+        from war_room.dashboard.metrics import meeting_broadcasts_total
+
+        meeting_broadcasts_total.labels(type=msg_type).inc()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class ConnectionManager:
     """Manages WebSocket connections for live dashboard updates."""
 
@@ -32,9 +55,11 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.add(websocket)
+        _bump_gauge(1)
 
     def disconnect(self, websocket: WebSocket) -> None:
         self.active_connections.discard(websocket)
+        _bump_gauge(-1)
 
     async def broadcast(self, message: dict) -> None:
         """Send a message to all connected clients.
@@ -56,6 +81,7 @@ class ConnectionManager:
                     "before_broadcast hook failed: %s",
                     exc,
                 )
+        _count_broadcast(message.get("type", "unknown"))
         data = json.dumps(message)
         dead: set = set()
         for ws in list(self.active_connections):

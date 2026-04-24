@@ -2,6 +2,29 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.1] - 2026-04-24
+
+### Added — Prometheus metrics — /metrics extension + counter wiring
+
+- `war_room/dashboard/metrics.py` — new module that declares the full
+  `prometheus_client` registry (Counters, Gauges, Histograms) with graceful
+  fallback when `prometheus-client` isn't installed.
+- `war_room/dashboard/routes/billing.py` `/metrics` endpoint now emits both
+  Dan's hand-rolled `_METRICS` dict AND the `prometheus_client` registry,
+  so a single Prometheus scrape covers everything.
+- `war_room/dashboard/server.py` gains a metrics middleware that counts
+  every HTTP response by method+status-class and records a per-path latency
+  histogram (path truncated to 64 chars to avoid cardinality blowups).
+  Instrumentation is best-effort — failures never break the response.
+- `websocket_manager.py` bumps `semeclaw_ws_connections_active` on
+  connect/disconnect and `semeclaw_meeting_broadcasts_total{type=...}` on
+  every broadcast.
+- `adclaw/server.py` increments `semeclaw_impressions_total{tenant_id}`
+  and `semeclaw_dlq_appends_total{dlq}` on the hot impression path.
+- `pyproject.toml`: `prometheus-client>=0.20.0` added.
+- 4 new tests cover endpoint content, HTTP counter increment, public
+  access, and the no-prom-client fallback path.
+
 ## [0.8.0] - 2026-04-24
 
 ### Added — versioning policy + CI enforcement

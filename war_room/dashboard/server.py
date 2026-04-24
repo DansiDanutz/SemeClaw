@@ -556,6 +556,35 @@ async def _semeclaw_auth_and_csp(request, call_next):
     return response
 
 
+@app.middleware("http")
+async def _semeclaw_metrics_middleware(request, call_next):
+    """Count every HTTP response by method/status-class + per-path latency
+    histogram. Never raises — metrics are best-effort."""
+    import time as _t
+
+    from war_room.dashboard.metrics import http_request_latency_seconds, http_requests_total
+
+    started = _t.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        try:
+            http_requests_total.labels(method=request.method, status_class="5xx").inc()
+        except Exception:  # noqa: BLE001
+            pass
+        raise
+    try:
+        status_class = f"{response.status_code // 100}xx"
+        http_requests_total.labels(method=request.method, status_class=status_class).inc()
+        # Normalise path — cap length so high-cardinality paths don\'t explode the registry
+        path = request.url.path[:64] if request.url.path != "/metrics" else "/metrics"
+        if path != "/metrics":
+            http_request_latency_seconds.labels(method=request.method, path=path).observe(_t.perf_counter() - started)
+    except Exception:  # noqa: BLE001
+        pass
+    return response
+
+
 # ---------------------------------------------------------------------------
 # In-memory sliding-window rate limiter (no external deps)
 # Protects expensive public endpoints (TTS, audio) from abuse.

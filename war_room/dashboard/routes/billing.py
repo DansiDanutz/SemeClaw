@@ -58,7 +58,13 @@ async def api_billing_report_usage(request: Request):
 
 @router.get("/metrics")
 async def metrics():
-    """Prometheus exposition format. Scrape with Prometheus, Grafana Agent, etc."""
+    """Prometheus exposition format. Scrape with Prometheus, Grafana Agent, etc.
+
+    Combines two sources:
+      1. Legacy hand-rolled counters in ``_METRICS`` (meetings_started etc.)
+      2. Full ``prometheus_client`` registry from ``war_room.dashboard.metrics``
+         (impressions, DLQ, WS connections, HTTP latency histograms, …).
+    """
     from fastapi.responses import Response as FR
 
     lines = [
@@ -70,4 +76,13 @@ async def metrics():
         lines.append(f"# HELP semeclaw_{k} Count of {k}")
         lines.append(f"# TYPE semeclaw_{k} counter")
         lines.append(f"semeclaw_{k}_total {v}")
-    return FR("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+    body = "\n".join(lines) + "\n"
+    # Append the prometheus_client registry (impressions, DLQ, WS, HTTP latency…).
+    try:
+        from war_room.dashboard.metrics import metrics_response
+
+        extra, _ = metrics_response()
+        body += extra.decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 — never break /metrics
+        pass
+    return FR(body, media_type="text/plain; version=0.0.4")
