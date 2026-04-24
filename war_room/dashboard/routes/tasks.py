@@ -38,6 +38,36 @@ async def api_list_tasks(request: Request,
         return _err(str(e))
 
 
+@router.post("/api/tasks")
+async def api_create_task(request: Request):
+    """Create a task directly (no adapter needed). Useful for OSS users without
+    Paperclip/Moltica. Body: {title, description?, status?, assigned_agents?, source_id?}"""
+    tenant = _tenant_id(request)
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("invalid JSON body", 400)
+    title = (body.get("title") or "").strip()
+    if not title:
+        return _err("title is required", 400)
+    import uuid
+    sid = body.get("source_id") or f"manual-{uuid.uuid4().hex[:8]}"
+    try:
+        task_id = await _db.upsert_task(
+            source="local",
+            source_id=sid,
+            tenant_id=tenant,
+            title=title,
+            description=body.get("description"),
+            status=body.get("status", "open"),
+            assigned_agents=body.get("assigned_agents") or ["research", "writer"],
+            meta=body.get("meta") or {"created_via": "manual"},
+        )
+        return {"ok": True, "task_id": task_id, "source_id": sid}
+    except Exception as e:
+        return _err(str(e))
+
+
 @router.post("/api/tasks/sync")
 async def api_sync_tasks(request: Request):
     tenant = _tenant_id(request)

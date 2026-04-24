@@ -42,6 +42,23 @@ def _short(s: str, n: int = 60) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def cmd_create(title: str | None, agents: list[str] | None = None) -> int:
+    if not title:
+        fail('usage: semeclaw tasks create "<title>" [--agents research,writer]')
+        return 2
+    body = {"title": title}
+    if agents:
+        body["assigned_agents"] = agents
+    res = _http("POST", "/api/tasks", body)
+    if not res.get("ok"):
+        fail(res.get("error", "unknown"))
+        return 1
+    banner("semeclaw tasks create", f"id={res.get('task_id','')[:8]}")
+    print(f"  source_id: {res.get('source_id')}")
+    hint(f"Next: semeclaw tasks dialog {res.get('task_id')}")
+    return 0
+
+
 def cmd_sync() -> int:
     banner("semeclaw tasks sync", "Pull tasks from every configured adapter")
     res = _http("POST", "/api/tasks/sync")
@@ -176,6 +193,7 @@ USAGE = """\
 semeclaw tasks <command>
 
 Commands:
+  create "<title>"    Create a task manually (no adapter needed)
   sync                Pull from every configured adapter
   list                List most-recent tasks
   dialog <task_id>    Show (or auto-generate) the meeting-room dialog
@@ -193,6 +211,15 @@ def run(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[2:])  # skip "semeclaw tasks"
     cmd = (args[0] if args else "").lower()
     if cmd == "sync":   return cmd_sync()
+    if cmd == "create":
+        # `tasks create "title" [--agents a,b,c]`
+        title = args[1] if len(args) > 1 else None
+        agents = None
+        if "--agents" in args:
+            i = args.index("--agents")
+            if i + 1 < len(args):
+                agents = [a.strip() for a in args[i + 1].split(",") if a.strip()]
+        return cmd_create(title, agents)
     if cmd == "list":   return cmd_list(as_json=("--json" in args))
     if cmd == "dialog": return cmd_dialog(args[1] if len(args) > 1 else None)
     if cmd == "quota":  return cmd_quota()
