@@ -28,7 +28,7 @@ app.add_typer(onboard_app, name="onboard")
 console = Console()
 
 # Commands that do NOT require a pre-loaded config
-_NO_CONFIG_COMMANDS = {"init", "demo", "war-room"}
+_NO_CONFIG_COMMANDS = {"init", "demo", "war-room", "pipeline"}
 
 
 def workspace_callback(ctx: typer.Context, workspace: str) -> Path:
@@ -151,6 +151,75 @@ def demo(
         raise typer.Exit(1)
 
 
+@app.command("pipeline")
+def pipeline(
+    ctx: typer.Context,
+    task: Annotated[
+        str,
+        typer.Option("--task", "-t", help="Task to execute"),
+    ] = "Research open-source AI agent frameworks and write a positioning brief",
+    agents: Annotated[
+        str | None,
+        typer.Option("--agents", "-a", help="Comma-separated agent IDs (default: research,strategist,writer)"),
+    ] = None,
+    project: Annotated[
+        str,
+        typer.Option("--project", "-p", help="Project name for Paperclip issue"),
+    ] = "NERVIX",
+    engine: Annotated[
+        str,
+        typer.Option("--engine", "-e", help="Pipeline engine: native or crewai"),
+    ] = "native",
+    with_coder: Annotated[
+        bool,
+        typer.Option("--with-coder", "-c", help="Include architect + coder in pipeline"),
+    ] = False,
+) -> None:
+    """Run a War Room pipeline with the chosen engine.
+
+    Examples:
+        semeclaw pipeline --task "Build a telemetry pipeline"
+        semeclaw pipeline --task "Research competitors" --engine crewai
+        semeclaw pipeline --task "Design API" --agents research,architect,writer --with-coder
+    """
+    import asyncio
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(repo_root))
+    sys.path.insert(0, str(repo_root / "src"))
+    sys.path.insert(0, str(repo_root / "war_room"))
+
+    from war_room.war_room import cmd_run
+
+    console.print()
+    console.print(f"[bold cyan]🚀 War Room Pipeline[/bold cyan] [dim](engine={engine})[/dim]")
+    console.print(f"[dim]Task:[/dim] {task}")
+    if agents:
+        console.print(f"[dim]Agents:[/dim] {agents}")
+    console.print()
+
+    try:
+        result = asyncio.run(
+            cmd_run(
+                task=task,
+                agents_str=agents,
+                project=project,
+                with_coder=with_coder,
+                engine=engine,
+            )
+        )
+        console.print(f"\n[green]✓ Pipeline complete[/green]")
+        if hasattr(result, "output_file"):
+            console.print(f"[dim]Report:[/dim] {result.output_file}")
+        if hasattr(result, "paperclip_issue") and result.paperclip_issue:
+            console.print(f"[dim]Paperclip:[/dim] {result.paperclip_issue.get('id')}")
+    except Exception as e:
+        console.print(f"[red]Pipeline failed:[/red] {e}")
+        raise typer.Exit(1)
+
+
 @app.command("meeting")
 def meeting(
     ctx: typer.Context,
@@ -166,6 +235,10 @@ def meeting(
         bool,
         typer.Option("--mock", "-m", help="Run in mock mode (no API calls)"),
     ] = False,
+    engine: Annotated[
+        str,
+        typer.Option("--engine", "-e", help="Meeting engine: native or crewai"),
+    ] = "native",
 ) -> None:
     """Run a multi-agent meeting with NERVIX branding.
 
@@ -186,7 +259,7 @@ def meeting(
         raise typer.Exit(1)
 
     agent_ids = [a.strip() for a in agents.split(",") if a.strip()]
-    room = MeetingRoom(topic=topic, agent_ids=agent_ids, config=config)
+    room = MeetingRoom(topic=topic, agent_ids=agent_ids, config=config, engine=engine)
 
     try:
         result = asyncio.run(room.generate_context(mock=mock))

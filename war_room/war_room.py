@@ -920,12 +920,26 @@ def _parse_writer_output(writer_output: str, fallback_task: str) -> tuple[str, s
     return title, description, ac
 
 
-async def cmd_run(task: str, agents_str: str | None = None, project: str = "NERVIX", with_coder: bool = False):
+def get_pipeline(engine: str = "native"):
+    """Factory: return a pipeline instance by engine name."""
+    if engine == "crewai":
+        from war_room.pipelines.crewai_pipeline import CrewAIPipeline
+        return CrewAIPipeline()
+    return WarRoomPipeline()
+
+
+async def cmd_run(
+    task: str,
+    agents_str: str | None = None,
+    project: str = "NERVIX",
+    with_coder: bool = False,
+    engine: str = "native",
+):
     if agents_str:
         agents = agents_str.split(",")
     elif with_coder:
         agents = ["research", "architect", "coder", "writer"]
     else:
         agents = None  # default
-    pipeline = WarRoomPipeline()
+    pipeline = get_pipeline(engine)
     return await pipeline.run(task, agents=agents, project=project)
