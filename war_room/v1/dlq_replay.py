@@ -63,6 +63,26 @@ async def _replay_tasks_supabase(entry: dict) -> bool:
         return False
 
 
+@register("billing_usage")
+async def _replay_billing_usage(entry: dict) -> bool:
+    """Re-queue a billing usage record back through report_usage so the
+    next flush picks it up. Returns True on a clean re-queue."""
+    try:
+        from war_room.v1 import billing
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("billing module unavailable: %s", exc)
+        return False
+    if not billing.is_configured():
+        return False
+    tenant_id = entry.get("tenant_id")
+    kind = entry.get("usage_kind") or entry.get("kind")
+    qty = int(entry.get("quantity", 0) or 0)
+    if not tenant_id or not kind or qty <= 0:
+        return False
+    await billing.report_usage(tenant_id, kind, quantity=qty)
+    return True
+
+
 @register("webhook_delivery")
 async def _replay_webhook(entry: dict) -> bool:
     """Re-POST a webhook payload with the original signature header."""

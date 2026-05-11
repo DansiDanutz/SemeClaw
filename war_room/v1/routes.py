@@ -35,10 +35,12 @@ from fastapi.responses import StreamingResponse
 
 from war_room.v1 import adapters as _adapters
 from war_room.v1 import audit as _audit
+from war_room.v1 import billing as _billing
 from war_room.v1 import citations as _cites
 from war_room.v1 import convergence as _conv
 from war_room.v1 import dlq_replay as _replay
 from war_room.v1 import exports as _exports
+from war_room.v1 import quota as _quota
 from war_room.v1 import spotlight as _spotlight
 from war_room.v1 import sse as _sse
 from war_room.v1 import storage as _s
@@ -74,7 +76,9 @@ def register_v1(app: FastAPI) -> None:
     if getattr(app.state, "_semeclaw_v1_registered", False):  # pragma: no cover
         return
     app.state._semeclaw_v1_registered = True
+    _quota.install(app)
     _audit.install(app)
+    _register_health(app)
     _register_about(app)
     _register_tenants(app)
     _register_admin_routes(app)
@@ -84,7 +88,82 @@ def register_v1(app: FastAPI) -> None:
     _register_usage(app)
     _register_sse(app)
     _register_exports(app)
+    _register_billing(app)
     _register_admin_spa(app)
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/health — subsystem aggregation
+# ---------------------------------------------------------------------------
+def _register_health(app: FastAPI) -> None:
+    @app.get("/api/v1/health")
+    async def v1_health():
+        """Aggregate health check covering: data dir writability, adapter
+        probes, billing config, and DLQ depth. Returns 200 even when
+        sub-systems are degraded — the caller inspects the body for
+        per-subsystem state. Returns 503 only when the data dir itself
+        cannot accept writes (i.e. the v1 surface cannot persist).
+        """
+        from war_room.v1 import adapters as _adapters
+        from war_room.v1 import tenants as _tenants_mod
+
+        data_dir = _s.V1_DATA_DIR.resolve()
+        data_dir_writable = True
+        data_dir_error: str | None = None
+        probe_path = Path(data_dir) / ".health_probe"
+        try:
+            probe_path.write_text("ok", encoding="utf-8")
+            probe_path.unlink(missing_ok=True)
+        except OSError as exc:
+            data_dir_writable = False
+            data_dir_error = str(exc)
+
+        # Tenant count is the cheapest signal that storage is usable.
+        try:
+            tenants_seen = len(await _tenants_mod.list_tenants(include_deleted=True))
+        except Exception as exc:  # noqa: BLE001
+            tenants_seen = -1
+            logger.warning("health: tenant count failed: %s", exc)
+
+        adapter_state = []
+        for probe in _adapters.all_probes():
+            adapter_state.append(
+                {"id": probe["id"], "ok": probe["ok"], "missing": probe.get("missing", [])}
+            )
+
+        # DLQ depth — count lines in each known JSONL without loading it.
+        dlq_depth: dict[str, int] = {}
+        try:
+            from war_room.dashboard.server import _DLQ_REGISTRY
+
+            for name, raw_path in _DLQ_REGISTRY.items():
+                p = Path(raw_path)
+                if not p.exists():
+                    dlq_depth[name] = 0
+                    continue
+                # Quick line count without loading the whole file into memory.
+                count = 0
+                with p.open("rb") as f:
+                    for _ in f:
+                        count += 1
+                dlq_depth[name] = count
+        except Exception as exc:  # noqa: BLE001
+            logger.info("health: DLQ depth scan skipped: %s", exc)
+
+        body = {
+            "ok": data_dir_writable,
+            "version": V1_VERSION,
+            "data_dir": str(data_dir),
+            "data_dir_writable": data_dir_writable,
+            "data_dir_error": data_dir_error,
+            "tenants_total": tenants_seen,
+            "adapters": adapter_state,
+            "billing_configured": _billing.is_configured(),
+            "billing_pending": _billing.pending_count(),
+            "dlq_depth": dlq_depth,
+        }
+        status = 200 if data_dir_writable else 503
+        return JSONResponse(body, status_code=status)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +193,8 @@ def _register_about(app: FastAPI) -> None:
                     "quota_check",
                     "sse_live_admin",
                     "admin_dashboard_tabs",
+                    "stripe_billing",
+                    "stripe_webhooks",
                 ],
                 "endpoints": {
                     "tenants": [
@@ -146,8 +227,15 @@ def _register_about(app: FastAPI) -> None:
                     "usage": ["GET /api/admin/v1/usage"],
                     "events": ["GET /api/admin/v1/events"],
                     "dialog_preview": ["POST /api/v1/dialog/preview"],
+                    "billing": [
+                        "GET /api/v1/billing/status",
+                        "POST /api/v1/billing/customer",
+                        "POST /api/v1/billing/flush",
+                        "POST /api/v1/billing/webhook",
+                    ],
                     "admin": ["GET /admin"],
                 },
+                "billing_configured": _billing.is_configured(),
                 "data_dir": str(_s.V1_DATA_DIR.resolve()),
                 "spotlight_source": str(_spotlight.source_path()),
             }
@@ -567,6 +655,55 @@ def _register_exports(app: FastAPI) -> None:
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=semeclaw_usage.csv"},
         )
+
+
+# ---------------------------------------------------------------------------
+# Stripe billing
+# ---------------------------------------------------------------------------
+def _register_billing(app: FastAPI) -> None:
+    @app.post("/api/v1/billing/customer")
+    async def billing_create_customer(payload: dict = Body(default_factory=dict)):
+        tid = (payload or {}).get("tenant_id")
+        if not tid:
+            return JSONResponse({"error": "tenant_id is required"}, status_code=400)
+        tenant = await _tenants.get_tenant(tid)
+        if tenant is None:
+            return JSONResponse({"error": "tenant not found"}, status_code=404)
+        cid = await _billing.ensure_customer(tenant)
+        return JSONResponse({"tenant_id": tid, "stripe_customer_id": cid, "configured": _billing.is_configured()})
+
+    @app.post("/api/v1/billing/flush")
+    async def billing_flush():
+        result = await _billing.flush()
+        return JSONResponse({"pending_before": result.get("queued", 0), **result})
+
+    @app.get("/api/v1/billing/status")
+    async def billing_status():
+        return JSONResponse(
+            {
+                "configured": _billing.is_configured(),
+                "pending": _billing.pending_count(),
+                "required_env": ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+                "optional_env": [
+                    "STRIPE_PRICE_METER_MEETINGS",
+                    "STRIPE_PRICE_METER_TTS",
+                    "STRIPE_PRICE_METER_LLM",
+                    "STRIPE_SUB_ITEM_{KIND}_{PLAN}",
+                ],
+            }
+        )
+
+    @app.post("/api/v1/billing/webhook")
+    async def billing_webhook(request: Request):
+        # Stripe sends "Stripe-Signature" header + JSON body. We verify HMAC.
+        payload = await request.body()
+        sig = request.headers.get("stripe-signature") or request.headers.get("Stripe-Signature") or ""
+        event = _billing.verify_webhook(payload, sig)
+        if event is None:
+            return JSONResponse({"error": "invalid_signature_or_secret"}, status_code=400)
+        outcome = await _billing.apply_webhook(event)
+        _sse.publish("billing_webhook", {"type": event.type, **outcome})
+        return JSONResponse({"received": True, "type": event.type, **outcome})
 
 
 # ---------------------------------------------------------------------------

@@ -5605,6 +5605,8 @@ _DLQ_REGISTRY = {
     "tasks": os.environ.get("SEMECLAW_TASKS_DLQ_PATH", "/app/data/semeclaw_tasks_dlq.jsonl"),
     # v1: webhook delivery DLQ — populated by webhook handlers when target POSTs fail.
     "webhooks": _default_webhooks_dlq_path(),
+    # v1: Stripe metered-usage records that failed to flush (no creds, 5xx, etc).
+    "billing": os.environ.get("SEMECLAW_BILLING_DLQ_PATH", "data/v1/billing_usage_dlq.jsonl"),
 }
 
 

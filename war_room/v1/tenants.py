@@ -35,6 +35,7 @@ class Tenant:
     deleted_at: str | None = None
     stripe_customer_id: str | None = None
     branding: dict = field(default_factory=dict)
+    last_billing_event: str | None = None
 
 
 def _hash_key(api_key: str) -> str:
@@ -79,9 +80,16 @@ async def create_tenant(name: str, plan: PlanName = "free") -> tuple[Tenant, str
     return tenant, api_key
 
 
+def _row_to_tenant(row: dict) -> Tenant:
+    """Construct a Tenant tolerant of legacy/extra columns."""
+    fields = {f for f in Tenant.__dataclass_fields__}
+    safe = {k: v for k, v in row.items() if k in fields}
+    return Tenant(**safe)
+
+
 async def list_tenants(include_deleted: bool = False) -> list[Tenant]:
     data = await _read_all()
-    out = [Tenant(**row) for row in data.values()]
+    out = [_row_to_tenant(row) for row in data.values()]
     if not include_deleted:
         out = [t for t in out if t.status != "deleted"]
     out.sort(key=lambda t: t.created_at, reverse=True)
@@ -91,7 +99,7 @@ async def list_tenants(include_deleted: bool = False) -> list[Tenant]:
 async def get_tenant(tenant_id: str) -> Tenant | None:
     data = await _read_all()
     row = data.get(tenant_id)
-    return Tenant(**row) if row else None
+    return _row_to_tenant(row) if row else None
 
 
 async def get_tenant_by_api_key(api_key: str) -> Tenant | None:
@@ -101,7 +109,7 @@ async def get_tenant_by_api_key(api_key: str) -> Tenant | None:
     for row in data.values():
         # secrets.compare_digest avoids timing oracles on the comparison.
         if secrets.compare_digest(row.get("api_key_hash", ""), target):
-            return Tenant(**row)
+            return _row_to_tenant(row)
     return None
 
 
@@ -115,7 +123,7 @@ async def soft_delete(tenant_id: str) -> Tenant | None:
         "deleted_at": _s.utcnow_iso(),
     }
     await _write_all(data)
-    return Tenant(**data[tenant_id])
+    return _row_to_tenant(data[tenant_id])
 
 
 async def update_plan(tenant_id: str, plan: PlanName) -> Tenant | None:
@@ -126,7 +134,7 @@ async def update_plan(tenant_id: str, plan: PlanName) -> Tenant | None:
         return None
     data[tenant_id] = {**data[tenant_id], "plan": plan}
     await _write_all(data)
-    return Tenant(**data[tenant_id])
+    return _row_to_tenant(data[tenant_id])
 
 
 def plan_limits(plan: PlanName) -> dict[str, int]:
