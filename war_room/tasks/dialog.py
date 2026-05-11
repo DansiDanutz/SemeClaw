@@ -15,11 +15,14 @@ upgrade gracefully when keys are added.
 
 from __future__ import annotations
 
+import logging
 import os
 import urllib.parse
 from datetime import datetime, timezone
 
 from war_room.agents import registry as _reg
+
+logger = logging.getLogger("semeclaw.dialog")
 
 
 def _audio_url(text: str, speaker: str) -> str:
@@ -262,4 +265,13 @@ async def compose_dialog(task: dict) -> list[dict]:
         }
     )
 
-    return lines
+    # v1: attach inline citations for agents that ground their answers in sources.
+    try:
+        from war_room.v1 import citations as _v1_cites
+    except ImportError:
+        return lines
+    try:
+        return _v1_cites.attach_citations(lines, task)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("v1 attach_citations failed; returning unannotated lines: %s", exc)
+        return lines

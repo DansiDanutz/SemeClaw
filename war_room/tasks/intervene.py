@@ -22,6 +22,15 @@ from war_room.agents import registry as _reg
 from . import _db
 from . import dialog as _dialog
 
+# v1: convergence detection — early-commits when interventions converge fast.
+try:
+    from war_room.v1 import convergence as _conv
+
+    _CONVERGENCE_AVAILABLE = True
+except Exception:  # pragma: no cover - convergence is optional
+    _conv = None  # type: ignore[assignment]
+    _CONVERGENCE_AVAILABLE = False
+
 MAX_INTERVENTIONS = 3
 _now = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -251,12 +260,14 @@ async def finalize_now(task_id: str) -> dict:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
-async def intervene(task_id: str, comment: str) -> dict:
-    """Record a user comment on the latest dialog. On turn 3, runs the orchestrator,
+async def intervene(task_id: str, comment: str, *, early_commit: bool = False) -> dict:
+    """Record a user comment on the latest dialog. On turn 3 (or earlier if
+    convergence is detected and ``early_commit`` is True), runs the orchestrator,
     patches the task, composes dialog v(n+1), and (optionally) writes back to source.
 
     Returns:
-      {ok, turn_index, agent_replies, orchestrator_decision?, new_dialog?, writeback?}
+      {ok, turn_index, convergence?, agent_replies, orchestrator_decision?,
+       new_dialog?, writeback?}
     """
     task = await _db.get_task(task_id)
     if not task:
@@ -275,11 +286,31 @@ async def intervene(task_id: str, comment: str) -> dict:
     turn = len(prior) + 1
     replies = await _gather_replies(task, comment)
 
+    # v1: score convergence on every turn so the UI can surface it.
+    convergence_payload: dict | None = None
+    if _CONVERGENCE_AVAILABLE and _conv is not None:
+        signal = _conv.score_convergence(
+            turn=turn,
+            new_comment=comment,
+            prior_comments=[p.get("user_comment", "") for p in prior],
+            prior_replies=[r.get("text", "") for p in prior for r in (p.get("agent_replies") or [])],
+        )
+        convergence_payload = {
+            "score": signal.score,
+            "agreement": signal.agreement,
+            "overlap": signal.overlap,
+            "early_commit": signal.early_commit,
+            "reason": signal.reason,
+        }
+
     decision = None
     new_dialog = None
     writeback_result = None
 
-    if turn >= MAX_INTERVENTIONS:
+    converged_early = bool(
+        early_commit and convergence_payload and convergence_payload["early_commit"]
+    )
+    if turn >= MAX_INTERVENTIONS or converged_early:
         # Build full intervention list (including the current one) for context
         all_interventions = prior + [
             {
@@ -311,4 +342,6 @@ async def intervene(task_id: str, comment: str) -> dict:
         "orchestrator_decision": decision,
         "new_dialog": new_dialog,
         "writeback": writeback_result,
+        "convergence": convergence_payload,
+        "committed_early": converged_early and decision is not None,
     }

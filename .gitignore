@@ -103,3 +103,7 @@ integrations/nervix/
 # SemeClaw task inbox — local user files only
 war_room/tasks/inbox/*.json
 nervix_platform/data/
+
+# v1 runtime state (tenants store, audit log, DLQ replay log, webhook DLQ).
+# The directory layout is created on startup by war_room.v1.storage.
+data/v1/

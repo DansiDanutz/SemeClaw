@@ -5581,9 +5581,30 @@ async def api_probe_now(request: Request):
 # ---------------------------------------------------------------------------
 # DLQ admin — inspect + replay dead-letter queues
 # ---------------------------------------------------------------------------
+def _default_webhooks_dlq_path() -> str:
+    """Resolve the webhook DLQ default lazily so v1 storage drives it.
+
+    Anchors on ``war_room.v1.storage.V1_DATA_DIR`` (which honours the
+    ``SEMECLAW_V1_DATA_DIR`` env override) so writers and the replay
+    endpoint agree regardless of process CWD. Falls back to the same
+    ``/app/data/...`` shape as the other DLQs if v1 isn't importable.
+    """
+    override = (os.environ.get("SEMECLAW_WEBHOOKS_DLQ_PATH") or "").strip()
+    if override:
+        return override
+    try:
+        from war_room.v1 import storage as _v1_storage
+
+        return str(_v1_storage.V1_DATA_DIR / "webhooks_dlq.jsonl")
+    except Exception:
+        return "/app/data/webhooks_dlq.jsonl"
+
+
 _DLQ_REGISTRY = {
     "adclaw": os.environ.get("ADCLAW_DLQ_PATH", "/app/data/adclaw_dlq.jsonl"),
     "tasks": os.environ.get("SEMECLAW_TASKS_DLQ_PATH", "/app/data/semeclaw_tasks_dlq.jsonl"),
+    # v1: webhook delivery DLQ — populated by webhook handlers when target POSTs fail.
+    "webhooks": _default_webhooks_dlq_path(),
 }
 
 
@@ -5904,6 +5925,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # ---------------------------------------------------------------------------
+# v1.0 enhancements: tenants CRUD, audit log, DLQ replay, admin SPA,
+# Discord adapter, citations + convergence preview. Mounted last so the
+# audit middleware runs closest to the handler.
+# ---------------------------------------------------------------------------
+try:
+    from war_room.v1 import register_v1 as _register_v1
+
+    _register_v1(app)
+    logger.info("SemeClaw v1 enhancements registered (/admin, /api/tenants, /api/admin/audit, ...)")
+except Exception as _v1_exc:  # noqa: BLE001
+    logger.warning("v1 enhancements failed to register: %s", _v1_exc)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -5913,5 +5948,7 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(_os.environ.get("PORT", 8765))
     print(f"🏛  War Room Dashboard (WebSocket) → http://127.0.0.1:{port}")
     print(f"    WebSocket → ws://127.0.0.1:{port}/ws")
+    print(f"    v1 admin   → http://127.0.0.1:{port}/admin")
+    print(f"    v1 about   → http://127.0.0.1:{port}/api/v1/about")
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

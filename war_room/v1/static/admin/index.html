@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SemeClaw · v1 admin</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='90'%3E🪖%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: oklch(15% 0.02 250);
+      --bg-2: oklch(13% 0.018 252);
+      --panel: oklch(20% 0.025 248);
+      --panel-2: oklch(24% 0.03 248);
+      --border: oklch(34% 0.04 246);
+      --border-soft: oklch(28% 0.03 248);
+      --text: oklch(96% 0.01 250);
+      --muted: oklch(72% 0.02 250);
+      --accent: oklch(78% 0.18 78);
+      --accent-2: oklch(76% 0.22 156);
+      --accent-3: oklch(78% 0.21 320);
+      --warn: oklch(80% 0.2 32);
+      --danger: oklch(72% 0.24 26);
+      --good: oklch(78% 0.18 156);
+      --shadow: 0 1px 0 oklch(100% 0 0 / 5%) inset, 0 24px 60px -28px oklch(0% 0 0 / 70%);
+      --r: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 12% -10%, oklch(36% 0.12 254 / 30%), transparent 60%),
+        radial-gradient(900px 500px at 95% 0%, oklch(30% 0.18 80 / 18%), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Inter", sans-serif;
+      min-height: 100vh;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, kbd { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .layout { max-width: 1280px; margin: 0 auto; padding: 32px 28px 72px; }
+    header.bar {
+      display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+      margin-bottom: 22px;
+    }
+    .brand { display: flex; align-items: baseline; gap: 12px; }
+    .brand h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; font-weight: 700; }
+    .brand .tag {
+      font-size: 11px; padding: 4px 8px; border-radius: 999px;
+      background: oklch(28% 0.08 78 / 35%); color: var(--accent);
+      border: 1px solid oklch(50% 0.16 78 / 30%);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .live-dot {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted);
+      padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--border);
+      margin-right: 8px;
+    }
+    .live-dot::before {
+      content: ""; width: 8px; height: 8px; border-radius: 999px; background: oklch(60% 0.04 248);
+      box-shadow: 0 0 8px transparent; transition: all .2s;
+    }
+    .live-dot.connected::before {
+      background: var(--good); box-shadow: 0 0 12px var(--good);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { opacity: .55; } }
+    .auth {
+      display: flex; gap: 8px; align-items: center;
+      background: var(--panel); border: 1px solid var(--border); padding: 6px 10px; border-radius: 999px;
+    }
+    .auth input {
+      background: transparent; border: 0; outline: 0; color: var(--text);
+      font: inherit; min-width: 220px;
+    }
+    .auth button {
+      background: var(--accent); color: oklch(20% 0.04 78); border: 0;
+      padding: 6px 14px; border-radius: 999px; cursor: pointer; font-weight: 600;
+    }
+    .auth button:hover { filter: brightness(1.1); }
+    .ribbon {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px;
+      font-size: 12.5px; color: var(--muted);
+    }
+    .ribbon .pill {
+      padding: 5px 10px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--border);
+    }
+    .ribbon .pill b { color: var(--text); margin-right: 4px; }
+    nav.tabs {
+      display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap;
+      padding: 5px; background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+      width: max-content;
+    }
+    nav.tabs button {
+      background: transparent; color: var(--muted); border: 0;
+      padding: 8px 16px; border-radius: 999px; cursor: pointer; font: inherit;
+      transition: background .2s;
+    }
+    nav.tabs button:hover { color: var(--text); }
+    nav.tabs button.active {
+      background: var(--bg-2); color: var(--accent); box-shadow: var(--shadow);
+    }
+    .pane { display: none; }
+    .pane.active { display: grid; }
+
+    /* === overview pane: 2 cols === */
+    .grid {
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px;
+    }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    section.card {
+      background: linear-gradient(180deg, var(--panel) 0%, oklch(18% 0.02 248) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 22px 22px 20px;
+      box-shadow: var(--shadow);
+    }
+    section.card h2 {
+      margin: 0 0 14px; font-size: 16px; letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 10px;
+    }
+    section.card h2 .dot {
+      width: 8px; height: 8px; border-radius: 999px; background: var(--accent-2);
+      box-shadow: 0 0 12px var(--accent-2);
+    }
+    section.card h2 .count {
+      margin-left: auto; font-size: 11.5px; color: var(--muted);
+      padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px;
+    }
+    .row {
+      display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+      gap: 12px; align-items: center;
+      padding: 12px 0; border-top: 1px dashed var(--border);
+    }
+    .row:first-of-type { border-top: 0; }
+    .row .name { font-weight: 600; }
+    .row .meta { color: var(--muted); font-size: 12.5px; word-break: break-all; }
+    .row .actions { display: flex; gap: 6px; }
+    .btn {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); color: oklch(20% 0.04 78); border-color: transparent; font-weight: 600; }
+    .btn.danger { background: transparent; color: var(--danger); border-color: oklch(50% 0.18 26 / 50%); }
+    .empty { color: var(--muted); padding: 14px 0; font-style: italic; }
+    .form-line { display: flex; gap: 8px; margin: 12px 0 4px; flex-wrap: wrap; }
+    .form-line input, .form-line select {
+      flex: 1; min-width: 180px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; color: var(--text); font: inherit; outline: 0;
+    }
+    .form-line input:focus, .form-line select:focus { border-color: var(--accent); }
+    .badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+    }
+    .badge.plan-free { color: var(--muted); }
+    .badge.plan-pro { color: var(--accent-2); border-color: oklch(50% 0.16 156 / 50%); }
+    .badge.plan-enterprise { color: var(--accent); border-color: oklch(50% 0.16 78 / 50%); }
+    .badge.status-active { color: var(--good); border-color: oklch(50% 0.16 156 / 50%); }
+    .badge.status-deleted { color: var(--danger); border-color: oklch(50% 0.18 26 / 50%); opacity: 0.65; }
+    .badge.ok { color: var(--good); border-color: oklch(50% 0.16 156 / 50%); }
+    .badge.bad { color: var(--warn); border-color: oklch(50% 0.18 32 / 50%); }
+    .audit {
+      max-height: 380px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px;
+      border-top: 1px dashed var(--border); margin-top: 6px;
+    }
+    .audit .e {
+      display: grid; grid-template-columns: 110px 60px 60px 1fr 70px;
+      gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border);
+    }
+    .audit .e .ts { color: var(--muted); }
+    .audit .e .m { color: var(--accent); }
+    .audit .e .s.ok { color: var(--good); }
+    .audit .e .s.err { color: var(--danger); }
+    .footer {
+      margin-top: 30px; color: var(--muted); font-size: 12.5px; display: flex;
+      justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .footer a { color: var(--muted); border-bottom: 1px dashed var(--border); }
+    .toast {
+      position: fixed; right: 20px; bottom: 20px; max-width: 400px;
+      background: var(--panel-2); border: 1px solid var(--border);
+      padding: 12px 14px; border-radius: 12px;
+      box-shadow: var(--shadow);
+      transform: translateY(140%); transition: transform .26s cubic-bezier(.16,1,.3,1);
+      z-index: 50;
+    }
+    .toast.show { transform: translateY(0); }
+    .toast.err { border-color: oklch(50% 0.18 26 / 60%); }
+    .secret {
+      display: block; padding: 10px 12px; margin-top: 8px; border-radius: 8px;
+      background: oklch(28% 0.04 80 / 30%); border: 1px dashed oklch(50% 0.16 80 / 50%);
+      font-family: ui-monospace, monospace; font-size: 12.5px; word-break: break-all;
+    }
+    .citation-demo .line {
+      padding: 10px 0; border-top: 1px dashed var(--border);
+    }
+    .citation-demo .line:first-child { border-top: 0; }
+    .citation-demo .agent {
+      font-size: 11.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .chip {
+      display: inline-block; font-size: 11px; padding: 2px 7px; margin: 2px 4px 0 0;
+      border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border);
+      color: var(--accent-2);
+    }
+    .chip:hover { border-color: var(--accent-2); }
+    .conv-meter {
+      height: 6px; border-radius: 999px; background: oklch(30% 0.04 248);
+      overflow: hidden; margin-top: 6px;
+    }
+    .conv-meter > span {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent));
+      transition: width .35s ease;
+    }
+    .small { font-size: 12px; color: var(--muted); }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .pre {
+      max-height: 220px; overflow: auto;
+      padding: 10px 12px; background: oklch(13% 0.015 250); border: 1px solid var(--border);
+      border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap;
+    }
+    .hint { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+
+    /* === spotlight === */
+    .spot-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .spot-card {
+      background: linear-gradient(180deg, var(--panel) 0%, oklch(17% 0.02 248) 100%);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 18px; position: relative; overflow: hidden;
+    }
+    .spot-card::before {
+      content: ""; position: absolute; inset: 0; opacity: .12;
+      background: linear-gradient(135deg, var(--gf, var(--accent)), var(--gt, var(--accent-3)));
+      pointer-events: none;
+    }
+    .spot-card .logo {
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+      font-family: "Playfair Display", ui-serif, Georgia, serif; font-size: 24px; color: white;
+      margin-bottom: 10px; position: relative;
+    }
+    .spot-card h3 { margin: 0 0 4px; font-size: 16px; position: relative; }
+    .spot-card .tag { font-size: 12.5px; color: var(--muted); margin: 0 0 8px; position: relative; }
+    .spot-card .desc { font-size: 13px; color: oklch(82% 0.02 250); margin: 0 0 10px; position: relative; }
+    .spot-card .meta-row {
+      position: relative; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      font-size: 11.5px; color: var(--muted);
+    }
+    .spot-card .pin {
+      font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+      background: rgba(245,158,11,0.15); color: #fde68a; border: 1px solid rgba(245,158,11,0.4);
+    }
+
+    /* === usage table === */
+    .usage-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .usage-table th {
+      text-align: left; color: var(--muted); font-weight: 500; font-size: 11.5px;
+      letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .usage-table td {
+      padding: 10px; border-bottom: 1px dashed var(--border);
+    }
+    .usage-table .qbar {
+      display: inline-block; height: 6px; min-width: 80px; border-radius: 999px;
+      background: oklch(30% 0.04 248); overflow: hidden; vertical-align: middle;
+      margin-right: 6px;
+    }
+    .usage-table .qbar > span {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, var(--good), var(--accent));
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header class="bar">
+      <div class="brand">
+        <h1>🪖 SemeClaw <span style="color:var(--muted);font-weight:400">/admin</span></h1>
+        <span class="tag" id="versionTag">loading…</span>
+      </div>
+      <div></div>
+      <div style="display:flex;align-items:center">
+        <span class="live-dot" id="liveDot">offline</span>
+        <div class="auth">
+          <span class="small">SEMECLAW_ADMIN_KEY</span>
+          <input id="adminKey" type="password" placeholder="paste bearer token" autocomplete="off" />
+          <button id="connectBtn">Connect</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="ribbon">
+      <span class="pill"><b id="rTenants">·</b> tenants</span>
+      <span class="pill"><b id="rDLQ">·</b> DLQs</span>
+      <span class="pill"><b id="rAudit">·</b> audit</span>
+      <span class="pill"><b id="rHandlers">·</b> replay handlers</span>
+      <span class="pill"><b id="rAdapters">·</b> adapters</span>
+      <span class="pill"><b id="rSpotlight">·</b> spotlight</span>
+      <span class="pill"><b id="rUsage">·</b> active tenants this period</span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="spotlight">Spotlight</button>
+      <button data-tab="adapters">Adapters</button>
+      <button data-tab="usage">Usage</button>
+      <button data-tab="audit">Audit</button>
+      <button data-tab="dlq">DLQ</button>
+    </nav>
+
+    <!-- Overview pane -->
+    <div class="pane active grid" data-pane="overview">
+      <section class="card" id="tenantsCard">
+        <h2><span class="dot"></span> Tenants <span class="count" id="tenantsCount">·</span></h2>
+        <div id="tenantsList" class="stack"></div>
+        <div class="form-line">
+          <input id="newTenantName" placeholder="Tenant name (e.g. Acme Robotics)" />
+          <select id="newTenantPlan">
+            <option value="free">free</option>
+            <option value="pro">pro</option>
+            <option value="enterprise">enterprise</option>
+          </select>
+          <button class="btn primary" id="createTenantBtn">Create</button>
+        </div>
+        <div class="hint">Creating returns the API key once — it is hashed before storage.</div>
+        <div id="newTenantSecret"></div>
+      </section>
+
+      <section class="card">
+        <h2><span class="dot" style="background:var(--accent)"></span> Convergence + Citations preview</h2>
+        <div class="form-line">
+          <input id="previewTitle" placeholder="Task title" />
+          <button class="btn primary" id="previewRunBtn">Compose</button>
+        </div>
+        <div class="form-line">
+          <input id="previewComments" placeholder="Comments separated by | " />
+        </div>
+        <div id="previewOutput" class="stack" style="margin-top:10px"></div>
+      </section>
+    </div>
+
+    <!-- Spotlight pane -->
+    <div class="pane" data-pane="spotlight">
+      <section class="card">
+        <h2><span class="dot" style="background:var(--accent-3)"></span> Subscriber Spotlight <span class="count" id="spotCount">·</span></h2>
+        <p class="small" style="margin-top:0">
+          Pulled from <code>ad-semeclaw/spotlight.json</code>. Anchors stay forever; rotating slots refresh every TTL window.
+          Add an override below to promote a tenant immediately.
+        </p>
+        <div id="spotlightList" class="spot-grid"></div>
+        <details style="margin-top:18px">
+          <summary class="small" style="cursor:pointer">+ Add a spotlight override</summary>
+          <div class="form-line" style="margin-top:10px">
+            <input id="spotName" placeholder="Project name" />
+            <input id="spotTagline" placeholder="One-line tagline" />
+            <input id="spotUrl" placeholder="https://…" />
+          </div>
+          <div class="form-line">
+            <input id="spotLetter" placeholder="Logo letter (e.g. A)" maxlength="2" style="max-width:160px" />
+            <input id="spotGrad1" placeholder="#6366f1" style="max-width:160px" />
+            <input id="spotGrad2" placeholder="#8b5cf6" style="max-width:160px" />
+            <button class="btn primary" id="spotAddBtn">Add to spotlight</button>
+          </div>
+          <div class="hint">Saved to <code>data/v1/spotlight_overrides.json</code> — merged on the fly with the source-of-truth file.</div>
+        </details>
+      </section>
+    </div>
+
+    <!-- Adapters pane -->
+    <div class="pane" data-pane="adapters">
+      <section class="card">
+        <h2><span class="dot" style="background:var(--accent-2)"></span> Task adapters <span class="count" id="adaptersCount">·</span></h2>
+        <p class="small" style="margin-top:0">
+          Each adapter follows the same contract: <code>probe()</code>, <code>ingest(limit)</code>, <code>writeback(task, decision)</code>.
+          Configure the env vars below, then click <b>Sync</b> to pull tasks.
+        </p>
+        <div id="adaptersList" class="stack"></div>
+      </section>
+    </div>
+
+    <!-- Usage pane -->
+    <div class="pane" data-pane="usage">
+      <section class="card">
+        <h2><span class="dot" style="background:var(--good)"></span> Per-tenant usage (this month) <span class="count" id="usageCount">·</span></h2>
+        <p class="small" style="margin-top:0">
+          Counters live in <code>data/v1/usage.json</code>. Quota check returns 402 when a tenant exceeds plan.
+          <a href="/api/admin/v1/usage.csv" id="usageCsvLink">Download CSV</a>.
+        </p>
+        <div style="overflow:auto">
+          <table class="usage-table" id="usageTable">
+            <thead>
+              <tr>
+                <th>Tenant</th><th>Plan</th><th>Meetings</th><th>Quota</th>
+                <th>TTS chars</th><th>LLM tokens</th><th>Interventions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">No rows? Hit <code>POST /api/tenants/{tid}/usage/increment</code> with <code>{"meetings":1}</code> to seed.</div>
+      </section>
+    </div>
+
+    <!-- Audit pane -->
+    <div class="pane" data-pane="audit">
+      <section class="card">
+        <h2><span class="dot" style="background:var(--good)"></span> Audit log (live) <span class="count" id="auditCount">·</span></h2>
+        <div class="form-line">
+          <input id="auditTenant" placeholder="filter tenant" style="max-width:160px" />
+          <input id="auditRoute" placeholder="filter route prefix (e.g. /api/admin)" />
+          <select id="auditMethod">
+            <option value="">any method</option>
+            <option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+          </select>
+          <button class="btn" id="auditApplyBtn">Apply</button>
+          <a class="btn" id="auditCsvBtn" href="/api/admin/audit.csv" download>Download CSV</a>
+          <button class="btn danger" id="auditGcBtn">GC > 90d</button>
+        </div>
+        <div id="auditList" class="audit"></div>
+      </section>
+    </div>
+
+    <!-- DLQ pane -->
+    <div class="pane" data-pane="dlq">
+      <section class="card">
+        <h2><span class="dot" style="background:var(--warn)"></span> DLQ replay <span class="count" id="dlqHandlersCount">·</span></h2>
+        <div id="dlqList" class="stack"></div>
+        <div class="hint" id="dlqHint">Replay handlers register via <code>@register(kind)</code> in <code>war_room/v1/dlq_replay.py</code>. Failed entries re-queue with attempt+1 and drop after 3.</div>
+      </section>
+    </div>
+
+    <div class="footer">
+      <span>SemeClaw v1 admin · vanilla JS, zero build · <a href="/tasks">/tasks</a> · <a href="/spotlight">/spotlight</a> · <a href="/embed">/embed</a> · <a href="/api/v1/about" target="_blank">/api/v1/about</a></span>
+      <span><kbd>⌘K</kbd> focus key · <kbd>R</kbd> refresh · <kbd>1-6</kbd> tabs</span>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const KEY_STORAGE = 'semeclaw_v1_admin_key';
+    const TAB_STORAGE = 'semeclaw_v1_admin_tab';
+    let SSE = null;
+
+    function toast(msg, isErr=false) {
+      const t = $('#toast'); t.textContent = msg;
+      t.classList.toggle('err', !!isErr); t.classList.add('show');
+      clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+    function authHeaders() {
+      const k = $('#adminKey').value.trim();
+      return k ? { 'Authorization': 'Bearer ' + k, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+    }
+    async function api(path, opts = {}) {
+      const r = await fetch(path, { ...opts, headers: { ...authHeaders(), ...(opts.headers||{}) } });
+      const text = await r.text();
+      let body; try { body = JSON.parse(text); } catch { body = text; }
+      if (!r.ok) throw new Error((body && (body.detail||body.error)) || r.statusText);
+      return body;
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, ch =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+    function setTab(name) {
+      sessionStorage.setItem(TAB_STORAGE, name);
+      document.querySelectorAll('nav.tabs button').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === name));
+      document.querySelectorAll('.pane').forEach(p =>
+        p.classList.toggle('active', p.dataset.pane === name));
+    }
+
+    // ------- renderers -------
+    function renderTenants(list) {
+      const root = $('#tenantsList');
+      $('#tenantsCount').textContent = list.length;
+      $('#rTenants').textContent = list.length;
+      if (!list.length) { root.innerHTML = '<div class="empty">No tenants yet — create one below.</div>'; return; }
+      root.innerHTML = list.map(t => `
+        <div class="row">
+          <div>
+            <div class="name">${escapeHtml(t.name)}</div>
+            <div class="meta"><code>${t.id}</code> · ${t.created_at.slice(0,16)}</div>
+          </div>
+          <div>
+            <span class="badge plan-${t.plan}">${t.plan}</span>
+            <span class="badge status-${t.status}">${t.status}</span>
+            <div class="meta">cap: ${t.plan_limits.meetings_per_month}/mo</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-act="upgrade" data-tid="${t.id}">Upgrade</button>
+            <button class="btn danger" data-act="delete" data-tid="${t.id}">Delete</button>
+          </div>
+        </div>
+      `).join('');
+      root.onclick = onTenantAction;
+    }
+    async function onTenantAction(ev) {
+      const btn = ev.target.closest('button[data-act]'); if (!btn) return;
+      const tid = btn.dataset.tid;
+      try {
+        if (btn.dataset.act === 'delete') {
+          if (!confirm('Soft-delete tenant ' + tid + '?')) return;
+          await api(`/api/tenants/${tid}`, { method: 'DELETE' });
+          toast('Tenant deleted');
+        } else {
+          const plan = prompt('New plan: free | pro | enterprise', 'pro') || '';
+          if (!plan) return;
+          await api(`/api/tenants/${tid}/plan`, { method: 'PATCH', body: JSON.stringify({ plan }) });
+          toast('Plan updated to ' + plan);
+        }
+        await refresh();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function renderAudit(rows) {
+      const root = $('#auditList');
+      $('#auditCount').textContent = rows.length;
+      $('#rAudit').textContent = rows.length;
+      if (!rows.length) {
+        root.innerHTML = '<div class="empty" style="padding:18px 4px">No write activity yet.</div>'; return;
+      }
+      root.innerHTML = rows.map(e => `
+        <div class="e">
+          <div class="ts">${(e.ts||'').slice(11,19)}</div>
+          <div class="m">${e.method||''}</div>
+          <div class="s ${e.status >= 400 ? 'err' : 'ok'}">${e.status||''}</div>
+          <div title="${escapeHtml(e.route||'')}">${escapeHtml(e.route||'')}</div>
+          <div class="ts">${e.latency_ms||0}ms</div>
+        </div>
+      `).join('');
+    }
+    function prependAudit(entry) {
+      const root = $('#auditList');
+      const html = `
+        <div class="e" style="background:oklch(20% 0.04 156 / 18%)">
+          <div class="ts">${(entry.ts||'').slice(11,19)}</div>
+          <div class="m">${entry.method||''}</div>
+          <div class="s ${entry.status >= 400 ? 'err' : 'ok'}">${entry.status||''}</div>
+          <div title="${escapeHtml(entry.route||'')}">${escapeHtml(entry.route||'')}</div>
+          <div class="ts">${entry.latency_ms||0}ms</div>
+        </div>`;
+      root.insertAdjacentHTML('afterbegin', html);
+      const count = parseInt($('#auditCount').textContent || '0', 10) + 1;
+      $('#auditCount').textContent = count; $('#rAudit').textContent = count;
+    }
+
+    function renderDLQ(names, handlers, recent) {
+      const root = $('#dlqList');
+      $('#dlqHandlersCount').textContent = handlers.length;
+      $('#rHandlers').textContent = handlers.length;
+      $('#rDLQ').textContent = names.length;
+      if (!names.length) { root.innerHTML = '<div class="empty">No DLQs registered.</div>'; return; }
+      root.innerHTML = names.map(n => `
+        <div class="row">
+          <div>
+            <div class="name">${n}</div>
+            <div class="meta">handlers: ${handlers.join(', ') || '—'}</div>
+          </div>
+          <div class="meta">recent replays: ${recent.filter(r => (r.kind||'').startsWith(n)).length}</div>
+          <div class="actions">
+            <button class="btn" data-dlq="${n}" data-mode="dry">Dry-run</button>
+            <button class="btn primary" data-dlq="${n}">Replay</button>
+          </div>
+        </div>
+      `).join('');
+      root.onclick = onDLQAction;
+    }
+    async function onDLQAction(ev) {
+      const btn = ev.target.closest('button[data-dlq]'); if (!btn) return;
+      const dry = btn.dataset.mode === 'dry';
+      try {
+        const res = await api(`/api/admin/dlq/${btn.dataset.dlq}/replay${dry ? '?dry_run=true' : ''}`, { method: 'POST' });
+        toast(`${dry ? 'Dry-run' : 'Replay'} → replayed=${res.replayed} failed=${res.failed} skipped=${res.skipped} dropped=${res.dropped}`);
+        await refresh();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function renderAdapters(adapters) {
+      const root = $('#adaptersList');
+      $('#adaptersCount').textContent = adapters.length;
+      $('#rAdapters').textContent = adapters.length;
+      root.innerHTML = adapters.map(a => `
+        <div class="row">
+          <div>
+            <div class="name">${a.id}</div>
+            <div class="meta">required: ${(a.required_env||[]).join(', ')}${a.optional_env ? ' · optional: ' + a.optional_env.join(', ') : ''}</div>
+            <div class="meta" style="margin-top:4px">${a.ok ? '<span class="badge ok">configured</span>' : '<span class="badge bad">missing: ' + (a.missing||[]).join(', ') + '</span>'}</div>
+          </div>
+          <div class="meta">${escapeHtml(a.remediation||'')}</div>
+          <div class="actions">
+            <button class="btn ${a.ok ? 'primary' : ''}" data-adapter="${a.id}" ${a.ok ? '' : 'disabled'}>Sync</button>
+          </div>
+        </div>
+      `).join('');
+      root.onclick = onAdapterAction;
+    }
+    async function onAdapterAction(ev) {
+      const btn = ev.target.closest('button[data-adapter]'); if (!btn) return;
+      try {
+        const res = await api(`/api/v1/adapters/${btn.dataset.adapter}/sync`, { method: 'POST' });
+        toast(`${btn.dataset.adapter} sync → ingested=${res.ingested}`);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function renderSpotlight(items, impressions) {
+      const root = $('#spotlightList');
+      $('#spotCount').textContent = items.length;
+      $('#rSpotlight').textContent = items.length;
+      if (!items.length) { root.innerHTML = '<div class="empty">No spotlight items.</div>'; return; }
+      root.innerHTML = items.map(i => `
+        <div class="spot-card" style="--gf:${i.gradient_from};--gt:${i.gradient_to}">
+          <div class="logo" style="background:linear-gradient(135deg,${i.gradient_from},${i.gradient_to})">${i.logo_letter}</div>
+          <h3>${escapeHtml(i.name)}</h3>
+          <p class="tag">${escapeHtml(i.tagline)}</p>
+          <p class="desc">${escapeHtml((i.description||'').slice(0,180))}${(i.description||'').length>180?'…':''}</p>
+          <div class="meta-row">
+            ${i.pinned ? '<span class="pin">Anchor</span>' : ''}
+            <span>${(impressions[i.id]||0)} impressions</span>
+            <a href="${i.url}" target="_blank" rel="noopener">${escapeHtml(i.url)}</a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderUsage(rows) {
+      const tbody = $('#usageTable tbody');
+      $('#usageCount').textContent = rows.length;
+      $('#rUsage').textContent = rows.length;
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty" style="text-align:center">No usage recorded this period.</td></tr>'; return;
+      }
+      const limits = { free: 10, pro: 1000, enterprise: 1000000 };
+      tbody.innerHTML = rows.map(r => {
+        // We don't know the plan from the row directly; default conservatively.
+        const limit = 1000; const pct = Math.min(100, Math.round(100 * r.meetings / limit));
+        return `
+          <tr>
+            <td><code>${r.tenant_id}</code></td>
+            <td>—</td>
+            <td>${r.meetings}</td>
+            <td><span class="qbar" title="${pct}% of ${limit}"><span style="width:${pct}%"></span></span> ${pct}%</td>
+            <td>${r.tts_chars.toLocaleString()}</td>
+            <td>${r.llm_tokens.toLocaleString()}</td>
+            <td>${r.interventions}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    function renderPreview(payload) {
+      const root = $('#previewOutput'); root.innerHTML = '';
+      const dlines = document.createElement('div'); dlines.className = 'citation-demo';
+      payload.lines.forEach(line => {
+        const el = document.createElement('div'); el.className = 'line';
+        const cites = (line.citations||[]).map(c =>
+          `<a class="chip" href="${c.url}" title="${escapeHtml(c.snippet||'')}" target="_blank">[${c.source}]</a>`).join('');
+        el.innerHTML = `<div class="agent">${line.agent_id} · ${escapeHtml(line.role||'')}</div>
+          <div>${escapeHtml(line.text||'')}</div><div>${cites}</div>`;
+        dlines.appendChild(el);
+      });
+      root.appendChild(dlines);
+      if (payload.convergence && payload.convergence.length) {
+        const last = payload.convergence[payload.convergence.length-1];
+        const meter = document.createElement('div'); meter.className='conv-meter';
+        meter.innerHTML = `<span style="width:${Math.round(last.score*100)}%"></span>`;
+        root.appendChild(meter);
+        const conv = document.createElement('div'); conv.className='pre';
+        conv.textContent = payload.convergence.map(s =>
+          `turn ${s.turn} → score ${s.score} | overlap ${s.overlap} | agreement ${s.agreement} | ${s.reason}${s.early_commit ? ' ★ EARLY COMMIT' : ''}\n   ${s.comment}`
+        ).join('\n');
+        root.appendChild(conv);
+      }
+    }
+
+    async function runPreview() {
+      const title = $('#previewTitle').value.trim() || 'Investigate intermittent 500s on /api/tasks (EU)';
+      const comments = $('#previewComments').value.split('|').map(s => s.trim()).filter(Boolean);
+      try {
+        const res = await api('/api/v1/dialog/preview', { method: 'POST', body: JSON.stringify({ title, comments }) });
+        renderPreview(res);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function refresh() {
+      try {
+        const data = await api('/api/admin/v1/overview');
+        $('#versionTag').textContent = 'v' + data.v1_version;
+        renderTenants(data.tenants);
+        renderAudit(data.audit_recent);
+        renderDLQ(data.dlq_names, data.replay_handlers, data.replay_recent);
+        renderAdapters(data.adapters);
+        renderSpotlight(data.spotlight, data.spotlight_impressions || {});
+        renderUsage(data.usage || []);
+      } catch (e) { toast('Auth failed — check the bearer token. ' + e.message, true); }
+    }
+
+    function connectSSE() {
+      if (SSE) { try { SSE.close(); } catch {} }
+      const k = $('#adminKey').value.trim(); if (!k) return;
+      // EventSource doesn't support headers, so we use fetch + ReadableStream.
+      $('#liveDot').classList.remove('connected'); $('#liveDot').textContent = 'connecting…';
+      fetch('/api/admin/v1/events', { headers: { 'Authorization': 'Bearer ' + k } }).then(async (r) => {
+        if (!r.ok || !r.body) { $('#liveDot').textContent = 'offline'; return; }
+        $('#liveDot').classList.add('connected'); $('#liveDot').textContent = 'live';
+        const reader = r.body.getReader(); const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split('\n\n'); buffer = frames.pop() || '';
+          for (const frame of frames) {
+            const evMatch = frame.match(/^event:\s*(.+)$/m);
+            const dataMatch = frame.match(/^data:\s*(.+)$/m);
+            if (!dataMatch) continue;
+            const ev = evMatch ? evMatch[1].trim() : 'message';
+            try {
+              const data = JSON.parse(dataMatch[1]);
+              handleSSE(ev, data);
+            } catch {}
+          }
+        }
+        $('#liveDot').classList.remove('connected'); $('#liveDot').textContent = 'offline';
+      }).catch(() => { $('#liveDot').textContent = 'offline'; });
+    }
+    function handleSSE(event, data) {
+      if (event === 'audit') prependAudit(data);
+      else if (event === 'spotlight_changed' || event === 'usage_incremented' || event === 'adapter_sync') {
+        toast(event + ' · ' + JSON.stringify(data).slice(0, 80));
+        refresh();
+      }
+    }
+
+    function init() {
+      const stored = sessionStorage.getItem(KEY_STORAGE);
+      if (stored) $('#adminKey').value = stored;
+      const tab = sessionStorage.getItem(TAB_STORAGE) || 'overview';
+      setTab(tab);
+
+      $('#tabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setTab(b.dataset.tab); };
+      $('#connectBtn').onclick = async () => {
+        sessionStorage.setItem(KEY_STORAGE, $('#adminKey').value.trim());
+        await refresh(); connectSSE();
+      };
+      $('#createTenantBtn').onclick = async () => {
+        const name = $('#newTenantName').value.trim(); const plan = $('#newTenantPlan').value;
+        if (!name) return toast('Name is required', true);
+        try {
+          const t = await api('/api/tenants', { method: 'POST', body: JSON.stringify({ name, plan }) });
+          $('#newTenantSecret').innerHTML = `<div class="secret"><b>API key for ${escapeHtml(t.name)} — copy now:</b><br>${t.api_key}</div>`;
+          $('#newTenantName').value = ''; await refresh();
+        } catch (e) { toast(e.message, true); }
+      };
+      $('#previewRunBtn').onclick = runPreview;
+      $('#spotAddBtn').onclick = async () => {
+        const name = $('#spotName').value.trim();
+        if (!name) return toast('Name is required', true);
+        try {
+          await api('/api/v1/spotlight/overrides', { method: 'POST', body: JSON.stringify({
+            name,
+            tagline: $('#spotTagline').value,
+            url: $('#spotUrl').value,
+            description: $('#spotTagline').value,
+            logo_letter: $('#spotLetter').value || name[0],
+            gradient_from: $('#spotGrad1').value || '#6366f1',
+            gradient_to: $('#spotGrad2').value || '#8b5cf6',
+            pinned: false,
+            featured_from: new Date().toISOString(),
+          })});
+          toast('Added to spotlight');
+          $('#spotName').value = ''; $('#spotTagline').value=''; $('#spotUrl').value='';
+          await refresh();
+        } catch (e) { toast(e.message, true); }
+      };
+      $('#auditApplyBtn').onclick = async () => {
+        try {
+          const params = new URLSearchParams();
+          if ($('#auditTenant').value) params.set('tenant', $('#auditTenant').value);
+          if ($('#auditRoute').value) params.set('route', $('#auditRoute').value);
+          if ($('#auditMethod').value) params.set('method', $('#auditMethod').value);
+          const r = await api('/api/admin/audit?' + params.toString());
+          renderAudit(r.entries || []);
+        } catch (e) { toast(e.message, true); }
+      };
+      $('#auditCsvBtn').onclick = (ev) => {
+        // Need to send the bearer header — fetch + blob round trip.
+        ev.preventDefault();
+        const params = new URLSearchParams();
+        if ($('#auditTenant').value) params.set('tenant', $('#auditTenant').value);
+        if ($('#auditRoute').value) params.set('route', $('#auditRoute').value);
+        if ($('#auditMethod').value) params.set('method', $('#auditMethod').value);
+        fetch('/api/admin/audit.csv?' + params.toString(), { headers: authHeaders() })
+          .then(r => r.blob()).then(blob => {
+            const url = URL.createObjectURL(blob); const a = document.createElement('a');
+            a.href = url; a.download = 'semeclaw_audit.csv'; document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+          }).catch(e => toast(e.message, true));
+      };
+      $('#usageCsvLink').onclick = (ev) => {
+        ev.preventDefault();
+        fetch('/api/admin/v1/usage.csv', { headers: authHeaders() })
+          .then(r => r.blob()).then(blob => {
+            const url = URL.createObjectURL(blob); const a = document.createElement('a');
+            a.href = url; a.download = 'semeclaw_usage.csv'; document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+          }).catch(e => toast(e.message, true));
+      };
+      $('#auditGcBtn').onclick = async () => {
+        if (!confirm('Garbage-collect audit shards older than 90 days?')) return;
+        try { const r = await api('/api/admin/audit/gc?keep_days=90', { method: 'POST' });
+          toast('Removed ' + r.removed_shards + ' shard(s)'); } catch (e) { toast(e.message, true); }
+      };
+
+      window.addEventListener('keydown', (ev) => {
+        if ((ev.metaKey||ev.ctrlKey) && ev.key === 'k') { ev.preventDefault(); $('#adminKey').focus(); }
+        if (document.activeElement.tagName === 'INPUT') return;
+        if (ev.key === 'r') refresh();
+        const tabs = ['overview','spotlight','adapters','usage','audit','dlq'];
+        const n = parseInt(ev.key, 10);
+        if (n >= 1 && n <= tabs.length) setTab(tabs[n-1]);
+      });
+
+      $('#previewTitle').value = 'Investigate intermittent 500s on /api/tasks (EU)';
+      $('#previewComments').value = 'focus EU only, drop the noisy WAF rule | agreed, ship the patch and notify oncall';
+      runPreview().catch(()=>{});
+      refresh();
+      if (stored) connectSSE();
+    }
+    init();
+  </script>
+</body>
+</html>
