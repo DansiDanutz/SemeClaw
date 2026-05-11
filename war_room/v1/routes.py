@@ -46,6 +46,7 @@ from war_room.v1 import sse as _sse
 from war_room.v1 import storage as _s
 from war_room.v1 import tenants as _tenants
 from war_room.v1 import usage as _usage
+from war_room.v1 import webhooks as _webhooks
 from war_room.v1 import V1_VERSION
 
 logger = logging.getLogger("semeclaw.v1")
@@ -89,6 +90,9 @@ def register_v1(app: FastAPI) -> None:
     _register_sse(app)
     _register_exports(app)
     _register_billing(app)
+    _register_webhooks(app)
+    _register_local_tasks(app)
+    _register_embed_v1(app)
     _register_admin_spa(app)
 
 
@@ -704,6 +708,226 @@ def _register_billing(app: FastAPI) -> None:
         outcome = await _billing.apply_webhook(event)
         _sse.publish("billing_webhook", {"type": event.type, **outcome})
         return JSONResponse({"received": True, "type": event.type, **outcome})
+
+
+# ---------------------------------------------------------------------------
+# Webhook subscriptions
+# ---------------------------------------------------------------------------
+def _register_webhooks(app: FastAPI) -> None:
+    @app.post("/api/v1/webhooks")
+    async def webhooks_subscribe(payload: dict = Body(default_factory=dict)):
+        tenant_id = (payload or {}).get("tenant_id")
+        url = (payload or {}).get("url")
+        events = (payload or {}).get("events") or []
+        if not tenant_id or not url:
+            return JSONResponse({"error": "tenant_id and url are required"}, status_code=400)
+        try:
+            sub = await _webhooks.subscribe(tenant_id=tenant_id, url=url, events=list(events))
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {
+                "id": sub.id,
+                "tenant_id": sub.tenant_id,
+                "url": sub.url,
+                "events": list(sub.events),
+                "status": sub.status,
+                "secret": sub.secret,
+                "secret_warning": "Store this secret now — it is used to verify HMAC signatures.",
+            },
+            status_code=201,
+        )
+
+    @app.get("/api/v1/webhooks")
+    async def webhooks_list(tenant: str | None = Query(default=None)):
+        subs = await _webhooks.list_subscriptions(tenant_id=tenant)
+        return JSONResponse(
+            {
+                "subscriptions": [
+                    {
+                        "id": s.id,
+                        "tenant_id": s.tenant_id,
+                        "url": s.url,
+                        "events": list(s.events),
+                        "status": s.status,
+                        "created_at": s.created_at,
+                        "last_delivery_at": s.last_delivery_at,
+                        "last_status": s.last_status,
+                    }
+                    for s in subs
+                ]
+            }
+        )
+
+    @app.delete("/api/v1/webhooks/{sub_id}")
+    async def webhooks_unsubscribe(sub_id: str):
+        ok = await _webhooks.unsubscribe(sub_id)
+        if not ok:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse({"deleted": sub_id})
+
+    @app.post("/api/v1/webhooks/test")
+    async def webhooks_test(payload: dict = Body(default_factory=dict)):
+        event = (payload or {}).get("event") or "test.ping"
+        tenant_id = (payload or {}).get("tenant_id")
+        data = (payload or {}).get("data") or {"hello": "world"}
+        scheduled = await _webhooks.dispatch(event, data, tenant_id=tenant_id)
+        return JSONResponse({"event": event, "scheduled": scheduled})
+
+
+# ---------------------------------------------------------------------------
+# Local tasks (when Supabase isn't wired)
+# ---------------------------------------------------------------------------
+def _register_local_tasks(app: FastAPI) -> None:
+    try:
+        from war_room.v1 import local_tasks as _lt
+    except Exception:  # pragma: no cover
+        return
+
+    if not _lt.should_activate():
+        return
+
+    @app.on_event("startup")
+    async def _seed_demo_task():  # noqa: D401 — FastAPI hook
+        try:
+            await _lt.seed_demo_task()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("seed_demo_task failed: %s", exc)
+
+    @app.get("/api/v1/tasks")
+    async def v1_tasks_list(tenant: str = Query(default="default"), status: str | None = Query(default=None)):
+        rows = await _lt.list_tasks(tenant_id=tenant, status=status)
+        return JSONResponse({"tasks": rows, "total": len(rows), "store": "local"})
+
+    @app.post("/api/v1/tasks")
+    async def v1_tasks_create(payload: dict = Body(default_factory=dict)):
+        title = (payload or {}).get("title")
+        if not title:
+            return JSONResponse({"error": "title is required"}, status_code=400)
+        tid = await _lt.upsert_task(
+            source=(payload or {}).get("source") or "local",
+            source_id=(payload or {}).get("source_id") or f"ad-hoc-{_s.utcnow_iso()}",
+            tenant_id=(payload or {}).get("tenant_id") or "default",
+            title=title,
+            description=(payload or {}).get("description") or "",
+            status=(payload or {}).get("status") or "open",
+            assigned_agents=(payload or {}).get("assigned_agents") or ["research", "writer"],
+            meta=(payload or {}).get("meta") or {},
+        )
+        task = await _lt.get_task(tid)
+        _sse.publish("task_created", {"task_id": tid})
+        return JSONResponse(task, status_code=201)
+
+
+# ---------------------------------------------------------------------------
+# Embed v1 JS SDK — ad serving + spotlight rendering
+# ---------------------------------------------------------------------------
+EMBED_V1_JS = r"""(function () {
+  var BASE = window.__SEMECLAW_BASE__ || (location.origin || "");
+  var styleInjected = false;
+  function inject(css) {
+    if (styleInjected) return;
+    styleInjected = true;
+    var s = document.createElement("style");
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+  function fmt(card) {
+    var bullets = (card.bullets || []).map(function (b) { return "<li>" + escape(b) + "</li>"; }).join("");
+    return (
+      '<article class="sc-ad" data-id="' + card.id + '">' +
+      '  <div class="sc-ad__logo" style="background:linear-gradient(135deg,' + card.gradient_from + ',' + card.gradient_to + ');">' + escape(card.logo_letter || "?") + '</div>' +
+      '  <h3>' + escape(card.name) + (card.pinned ? ' <span class="sc-ad__pin">Anchor</span>' : "") + "</h3>" +
+      "  <p>" + escape(card.tagline || "") + "</p>" +
+      (bullets ? '<ul class="sc-ad__bullets">' + bullets + "</ul>" : "") +
+      '  <a class="sc-ad__cta" href="' + escape(card.url || "#") + '" target="_blank" rel="noopener">Visit ↗</a>' +
+      "</article>"
+    );
+  }
+  function escape(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+    });
+  }
+  function injectCss() {
+    inject(
+      ".sc-ad{font:14px/1.5 system-ui,sans-serif;background:linear-gradient(180deg,#15171c,#0f1115);" +
+      "border:1px solid #21242d;border-radius:14px;padding:18px;color:#e5e7eb;max-width:340px;" +
+      "box-shadow:0 24px 60px -28px rgba(0,0,0,.6);}" +
+      ".sc-ad__logo{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;" +
+      "font-family:'Playfair Display',ui-serif,Georgia,serif;font-size:26px;color:#fff;margin-bottom:10px;}" +
+      ".sc-ad h3{margin:0 0 4px;font-size:16px;}" +
+      ".sc-ad p{margin:0 0 10px;color:#a1a1aa;font-size:13px;}" +
+      ".sc-ad__bullets{margin:0 0 12px 18px;padding:0;font-size:12.5px;color:#a1a1aa;}" +
+      ".sc-ad__cta{color:#fde68a;font-weight:600;border-bottom:1px solid #5b4a13;text-decoration:none;}" +
+      ".sc-ad__pin{font-size:10.5px;padding:2px 7px;border-radius:999px;background:rgba(245,158,11,.15);" +
+      "color:#fde68a;border:1px solid rgba(245,158,11,.4);margin-left:6px;}"
+    );
+  }
+  async function adNext(opts) {
+    opts = opts || {};
+    var source = opts.source || "embed-v1";
+    var params = "source=" + encodeURIComponent(source);
+    if (opts.tenant_id) params += "&tenant_id=" + encodeURIComponent(opts.tenant_id);
+    var r = await fetch(BASE + "/api/v1/ads/next?" + params);
+    var json = await r.json();
+    return json.item || null;
+  }
+  async function renderAd(target, opts) {
+    var el = typeof target === "string" ? document.querySelector(target) : target;
+    if (!el) throw new Error("renderAd: target not found");
+    injectCss();
+    var card = await adNext(opts || {});
+    if (!card) {
+      el.innerHTML = '<p style="color:#94a3b8;font:14px system-ui">No spotlight items eligible.</p>';
+      return null;
+    }
+    el.innerHTML = fmt(card);
+    return card;
+  }
+  async function spotlight() {
+    var r = await fetch(BASE + "/api/v1/spotlight");
+    return (await r.json()).items || [];
+  }
+  async function renderSpotlight(target) {
+    var el = typeof target === "string" ? document.querySelector(target) : target;
+    if (!el) throw new Error("renderSpotlight: target not found");
+    injectCss();
+    var items = await spotlight();
+    el.innerHTML = items.map(fmt).join("") || '<p style="color:#94a3b8;font:14px system-ui">No spotlight items.</p>';
+    return items;
+  }
+  function autoMount() {
+    document.querySelectorAll("[data-semeclaw-ad]").forEach(function (n) {
+      renderAd(n, { source: n.getAttribute("data-source") || "auto", tenant_id: n.getAttribute("data-tenant") || null }).catch(function () {});
+    });
+    document.querySelectorAll("[data-semeclaw-spotlight]").forEach(function (n) {
+      renderSpotlight(n).catch(function () {});
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoMount);
+  } else {
+    autoMount();
+  }
+  // Extend the existing window.SemeClaw object if present, otherwise create.
+  window.SemeClaw = Object.assign(window.SemeClaw || {}, {
+    base: BASE, adNext: adNext, renderAd: renderAd, spotlight: spotlight, renderSpotlight: renderSpotlight,
+  });
+})();
+"""
+
+
+def _register_embed_v1(app: FastAPI) -> None:
+    @app.get("/embed-v1.js")
+    async def embed_v1_js():
+        from fastapi.responses import Response
+
+        return Response(
+            EMBED_V1_JS,
+            media_type="application/javascript; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
 
 
 # ---------------------------------------------------------------------------

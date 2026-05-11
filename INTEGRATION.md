@@ -1,7 +1,36 @@
 # SemeClaw Agent — Integration Guide
 
-**Version:** 0.7.0
+**Version:** 1.0.0-rc1
 **Target audience:** Paperclip companies, AI platforms (NERVIX), developers embedding SemeClaw in their product.
+
+---
+
+## What's new in v1.0
+
+| Capability | Endpoint |
+|---|---|
+| Multi-tenant lifecycle | `POST /api/tenants`, `PATCH /api/tenants/{id}/plan`, `DELETE /api/tenants/{id}` |
+| Stripe metered billing | `POST /api/v1/billing/customer`, `POST /api/v1/billing/flush`, `POST /api/v1/billing/webhook` |
+| Plan quota gate | 402 Payment Required on `/api/tasks/*/intervene`, `/api/meeting/finalize`, `/api/v1/dialog/preview` when over plan |
+| Audit log + CSV | `GET /api/admin/audit`, `GET /api/admin/audit.csv` |
+| DLQ replay (kinds: `tasks_post`, `tasks_patch`, `webhook_delivery`, `billing_usage`) | `POST /api/admin/dlq/{name}/replay` |
+| Adapters (Discord / Linear / Notion / Jira) | `GET /api/v1/adapters`, `POST /api/v1/adapters/{id}/sync` |
+| Subscriber spotlight + ad serving | `GET /spotlight`, `GET /api/v1/spotlight`, `GET /api/v1/ads/next` |
+| Per-tenant usage rollup | `GET /api/tenants/{id}/usage`, `GET /api/admin/v1/usage[.csv]` |
+| Outbound webhooks (HMAC-signed) | `POST /api/v1/webhooks`, `POST /api/v1/webhooks/test` |
+| Server-sent events for live admin | `GET /api/admin/v1/events` |
+| Orchestrator eval harness | `python -m evals.orchestrator.runner` |
+| Embed v1 ad SDK | `/embed-v1.js` exposes `window.SemeClaw.adNext()` + auto-mount on `[data-semeclaw-ad]` / `[data-semeclaw-spotlight]` |
+
+Apply the v1 schema before enabling Supabase persistence:
+
+```bash
+psql "$DLS_TEAM_SUPABASE_URL" \
+  -f migrations/v1_0001_tenants_billing_webhooks.sql
+```
+
+When Supabase env vars are absent the server uses local JSON files under
+`data/v1/` — perfect for the open-source clone and the demo.
 
 ---
 
