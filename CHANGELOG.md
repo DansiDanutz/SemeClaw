@@ -2,6 +2,70 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [1.0.0-rc1] - 2026-05-11
+
+### Added — v1 production surface
+
+A self-contained `war_room/v1/` package mounted onto the existing
+dashboard. The v1 surface is multi-tenant, billable, and ready to accept
+third-party subscriptions (NERVIX, Paperclip, direct).
+
+- **Tenants CRUD** (`/api/tenants`) with hashed API keys, soft-delete,
+  plan changes, plan limits, and per-tenant audit attribution.
+- **Audit middleware** with SHA-256 body hashing (never raw bytes),
+  date-sharded JSONL log, retention GC (`/api/admin/audit/gc`),
+  CSV export (`/api/admin/audit.csv`).
+- **DLQ replay** with concurrent-append preservation and per-kind
+  handlers (`tasks_post`, `tasks_patch`, `webhook_delivery`,
+  `billing_usage`).
+- **Stripe metered billing** — customer provisioning, batched 60-second
+  flush, HMAC webhook verification, `invoice.payment_failed` → suspend,
+  `customer.subscription.updated` → plan change, fail-safe DLQ when
+  keys absent.
+- **Plan-quota middleware** — 402 with `Retry-After` and
+  `X-SemeClaw-Quota` headers, SSE `quota_blocked` event, X-Tenant-Id
+  attribution under the admin key.
+- **Convergence-scored interventions** — `intervene()` returns a
+  convergence payload (score, agreement, overlap, reason, early_commit)
+  and `early_commit=True` commits before turn 3 on a clear agreement.
+- **Inline citations** on dialog lines with URL trailing-punctuation
+  stripping and per-agent provenance.
+- **Adapters** (Discord, Linear, Notion, Jira) — uniform
+  `probe/ingest/writeback` contract registered via `adapters.REGISTRY`.
+- **Outbound webhooks** (`/api/v1/webhooks`) with HMAC-SHA256 signed
+  delivery and DLQ on transport/HTTP failures. The legacy
+  `_dispatch_webhook` bridges into the v1 dispatcher so every
+  dashboard lifecycle event reaches tenant subscriptions automatically.
+- **Health aggregator** (`/api/v1/health`) covering data-dir
+  writability, adapter probe status, billing config, DLQ depth.
+- **Spotlight ad rotation** with overrides and impression tracking.
+- **SSE live admin** event stream.
+- **Local task store** (`/api/v1/tasks`) for the zero-key demo path.
+- **Vanilla-JS admin SPA** at `/admin`.
+
+### Fixed
+
+- `discord_adapter._message_to_task` no longer leaks the title slice
+  into the description when leading whitespace or >120-char title.
+- `storage.query_audit` returns strictly newest-first across daily
+  shard boundaries.
+- `dlq_replay.replay_dlq` snapshots under the per-path async lock so
+  concurrent appends during replay are preserved (new `preserved`
+  counter in the response).
+- `dialog.compose_dialog` logs runtime citation failures instead of
+  swallowing them silently.
+- Webhook DLQ default path now anchors on
+  `war_room.v1.storage.V1_DATA_DIR` so handler-writers and the replay
+  endpoint always agree.
+
+### Quality
+
+- 121 v1 tests across 13 test files (unit, integration, HTTP smoke,
+  edge-case regression, webhook bridge).
+- Full ruff check + ruff format pass.
+- All routes verified live against
+  `war_room/dashboard/server.py` on port 8276.
+
 ## [0.8.10] - 2026-04-24
 
 ### Security — Close advertiser-owner auth bypass on 5 routes
