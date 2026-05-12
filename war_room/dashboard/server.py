@@ -1120,8 +1120,6 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     # 2. Fan out to HTTP webhooks (async, signed)
     hooks = _load_webhooks()
     matches = [h for h in hooks if event in (h.get("events") or []) or "*" in (h.get("events") or [])]
-    if not matches:
-        return
     raw = json.dumps(body).encode("utf-8")
     for h in matches:
         try:
@@ -1140,6 +1138,18 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
                 )
         except Exception as e:
             logger.warning("webhook %s → %s failed: %s", event, h.get("url"), e)
+
+    # 3. Bridge to v1 tenant-scoped webhook system. The v1 dispatcher
+    # has its own DLQ + HMAC scheme keyed on per-tenant subscriptions,
+    # so legacy events automatically reach NERVIX / Paperclip listeners
+    # that subscribed through /api/v1/webhooks.
+    try:
+        from war_room.v1 import webhooks as _v1_webhooks
+
+        tenant_id = body.get("tenant_id") or SEMECLAW_TENANT_ID
+        asyncio.create_task(_v1_webhooks.dispatch(event, body, tenant_id=tenant_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.info("v1 webhook bridge skipped (%s)", exc)
 
 
 @app.get("/api/events")
