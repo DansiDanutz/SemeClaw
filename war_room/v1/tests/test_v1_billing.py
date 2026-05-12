@@ -222,16 +222,12 @@ async def test_billing_dlq_replay_requeues_when_configured(billing_module, monke
 
     # With Stripe unconfigured, the replay handler must reject (no infinite
     # replay loop) so the DLQ keeps the row instead of silently dropping it.
-    ok = await dlq_replay._HANDLERS["billing_usage"](
-        {"tenant_id": "acme", "usage_kind": "meetings", "quantity": 1}
-    )
+    ok = await dlq_replay._HANDLERS["billing_usage"]({"tenant_id": "acme", "usage_kind": "meetings", "quantity": 1})
     assert ok is False
 
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
     billing_module._LAST_FLUSH = time.time()
-    ok = await dlq_replay._HANDLERS["billing_usage"](
-        {"tenant_id": "acme", "usage_kind": "meetings", "quantity": 3}
-    )
+    ok = await dlq_replay._HANDLERS["billing_usage"]({"tenant_id": "acme", "usage_kind": "meetings", "quantity": 3})
     assert ok is True
     # And the usage record made it back into the in-process queue.
     assert billing_module.pending_count() == 1

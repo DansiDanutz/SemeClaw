@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
 
 from war_room.v1 import storage as _s
 from war_room.v1 import tenants as _tenants
@@ -116,9 +115,7 @@ async def check_quota(tenant_id: str, *, kind: str = "meetings") -> QuotaCheck:
     else:
         plan = tenant.plan
         limits = _tenants.plan_limits(tenant.plan)
-    key = "meetings_per_month" if kind == "meetings" else (
-        "tts_chars_per_month" if kind == "tts_chars" else None
-    )
+    key = "meetings_per_month" if kind == "meetings" else ("tts_chars_per_month" if kind == "tts_chars" else None)
     if key is None or key not in limits:
         return QuotaCheck(True, "untracked_counter", plan, 0, 0)
     used = snap.get(kind, 0)

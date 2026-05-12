@@ -9,7 +9,7 @@ this suite red.
 from __future__ import annotations
 
 import inspect
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -51,8 +51,7 @@ async def test_ingest_returns_async_iterator_and_is_empty_when_unconfigured(adap
         monkeypatch.delenv(env, raising=False)
 
     gen = adapter.ingest(limit=1)
-    assert hasattr(gen, "__aiter__") or inspect.isasyncgen(gen), \
-        f"{adapter.id}.ingest() must return an async iterator"
+    assert hasattr(gen, "__aiter__") or inspect.isasyncgen(gen), f"{adapter.id}.ingest() must return an async iterator"
     tasks: list[dict] = []
     async for task in gen:
         tasks.append(task)

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import importlib
 import json
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -89,10 +87,24 @@ async def test_audit_append_and_query(v1_data_dir):
     import war_room.v1.storage as storage
 
     importlib.reload(storage)
-    await storage.append_audit({"ts": "2026-05-11T10:00:00+00:00", "tenant_id": "acme",
-                                "route": "/api/tenants", "method": "POST", "status": 201})
-    await storage.append_audit({"ts": "2026-05-11T10:01:00+00:00", "tenant_id": "default",
-                                "route": "/api/admin/dlq/tasks/replay", "method": "POST", "status": 200})
+    await storage.append_audit(
+        {
+            "ts": "2026-05-11T10:00:00+00:00",
+            "tenant_id": "acme",
+            "route": "/api/tenants",
+            "method": "POST",
+            "status": 201,
+        }
+    )
+    await storage.append_audit(
+        {
+            "ts": "2026-05-11T10:01:00+00:00",
+            "tenant_id": "default",
+            "route": "/api/admin/dlq/tasks/replay",
+            "method": "POST",
+            "status": 200,
+        }
+    )
 
     by_tenant = storage.query_audit(tenant_id="acme")
     assert len(by_tenant) == 1
@@ -111,8 +123,8 @@ async def test_audit_append_and_query(v1_data_dir):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_replay_drops_after_max_attempts(v1_data_dir, tmp_path, monkeypatch):
-    import war_room.v1.storage as storage
     import war_room.v1.dlq_replay as replay
+    import war_room.v1.storage as storage
 
     importlib.reload(storage)
     importlib.reload(replay)
@@ -147,8 +159,8 @@ async def test_replay_drops_after_max_attempts(v1_data_dir, tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_replay_handler_success_removes_entry(v1_data_dir, tmp_path):
-    import war_room.v1.storage as storage
     import war_room.v1.dlq_replay as replay
+    import war_room.v1.storage as storage
 
     importlib.reload(storage)
     importlib.reload(replay)
@@ -334,19 +346,13 @@ async def test_audit_ordering_across_shards_is_newest_first(v1_data_dir):
     # Older shard
     older = storage.AUDIT_DIR / "2026-05-10.jsonl"
     older.write_text(
-        "\n".join(
-            json.dumps({"ts": f"2026-05-10T0{i}:00:00+00:00", "route": "/x", "method": "POST"})
-            for i in range(6)
-        )
+        "\n".join(json.dumps({"ts": f"2026-05-10T0{i}:00:00+00:00", "route": "/x", "method": "POST"}) for i in range(6))
         + "\n"
     )
     # Newer shard
     newer = storage.AUDIT_DIR / "2026-05-11.jsonl"
     newer.write_text(
-        "\n".join(
-            json.dumps({"ts": f"2026-05-11T0{i}:00:00+00:00", "route": "/y", "method": "POST"})
-            for i in range(3)
-        )
+        "\n".join(json.dumps({"ts": f"2026-05-11T0{i}:00:00+00:00", "route": "/y", "method": "POST"}) for i in range(3))
         + "\n"
     )
 
@@ -366,8 +372,8 @@ async def test_audit_ordering_across_shards_is_newest_first(v1_data_dir):
 async def test_replay_preserves_concurrent_appends(v1_data_dir, tmp_path):
     import asyncio
 
-    import war_room.v1.storage as storage
     import war_room.v1.dlq_replay as replay
+    import war_room.v1.storage as storage
 
     importlib.reload(storage)
     importlib.reload(replay)

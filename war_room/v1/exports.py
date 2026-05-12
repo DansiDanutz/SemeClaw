@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Iterable
+from collections.abc import Iterable
 
 from war_room.v1 import storage as _s
-
 
 AUDIT_COLUMNS = (
     "ts",

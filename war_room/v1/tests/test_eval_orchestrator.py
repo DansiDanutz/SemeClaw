@@ -17,10 +17,7 @@ async def test_eval_baseline_holds():
     assert results, "no eval fixtures loaded"
     failures = [r for r in results if not r.passed]
     if failures:
-        details = "\n".join(
-            f"{r.id} (score={r.score:.2f}):\n  - " + "\n  - ".join(r.failures)
-            for r in failures
-        )
+        details = "\n".join(f"{r.id} (score={r.score:.2f}):\n  - " + "\n  - ".join(r.failures) for r in failures)
         raise AssertionError(f"{len(failures)}/{len(results)} eval cases regressed:\n{details}")
     # Overall average score must stay perfect on the deterministic path.
     assert all(r.score == 1.0 for r in results)

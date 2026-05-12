@@ -167,8 +167,9 @@ def webhook_app(monkeypatch, tmp_path):
 
 
 def test_webhook_endpoint_round_trip_with_valid_signature(webhook_app):
-    from war_room.v1 import billing, tenants
     import asyncio
+
+    from war_room.v1 import tenants
 
     loop = asyncio.new_event_loop()
     try:

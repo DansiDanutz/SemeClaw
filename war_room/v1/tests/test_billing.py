@@ -65,7 +65,9 @@ def test_verify_webhook_accepts_valid_signature(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
     from war_room.v1 import billing
 
-    payload = json.dumps({"id": "evt_1", "type": "invoice.payment_failed", "data": {"object": {"customer": "cus_x"}}}).encode()
+    payload = json.dumps(
+        {"id": "evt_1", "type": "invoice.payment_failed", "data": {"object": {"customer": "cus_x"}}}
+    ).encode()
     ts = str(int(time.time()))
     signed = f"{ts}.{payload.decode()}".encode()
     sig = hmac.new(b"whsec_test", signed, hashlib.sha256).hexdigest()

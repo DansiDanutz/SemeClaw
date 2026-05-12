@@ -48,7 +48,7 @@ async def _resolve_tenant(request) -> _tenants.Tenant | None:
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         return None
-    token = auth[len("Bearer "):].strip()
+    token = auth[len("Bearer ") :].strip()
     # Tenant-scoped keys start with sck_ — global SEMECLAW_API_KEY does not.
     if token.startswith("sck_"):
         return await _tenants.get_tenant_by_api_key(token)

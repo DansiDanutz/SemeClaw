@@ -8,7 +8,6 @@ state fully isolated.
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 
@@ -226,7 +225,14 @@ def test_audit_csv_serialises_known_columns():
     from war_room.v1 import exports
 
     rows = [
-        {"ts": "2026-05-11T10:00:00Z", "tenant_id": "acme", "method": "POST", "route": "/api/x", "status": 201, "latency_ms": 4},
+        {
+            "ts": "2026-05-11T10:00:00Z",
+            "tenant_id": "acme",
+            "method": "POST",
+            "route": "/api/x",
+            "status": 201,
+            "latency_ms": 4,
+        },
         {"ts": "2026-05-11T10:01:00Z", "tenant_id": "globex", "method": "DELETE", "route": "/api/y", "status": 401},
     ]
     csv = exports.audit_csv(rows)

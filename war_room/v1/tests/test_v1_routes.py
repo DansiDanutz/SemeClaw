@@ -8,8 +8,6 @@ that the per-module unit tests can't see.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -159,9 +157,14 @@ def test_dialog_preview_returns_structured_payload(client):
 # ---------------------------------------------------------------------------
 def test_adapters_probe_lists_all(client, monkeypatch):
     for env in (
-        "DISCORD_BOT_TOKEN", "DISCORD_CHANNEL_ID",
-        "LINEAR_API_KEY", "NOTION_TOKEN", "NOTION_DATABASE_ID",
-        "JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN",
+        "DISCORD_BOT_TOKEN",
+        "DISCORD_CHANNEL_ID",
+        "LINEAR_API_KEY",
+        "NOTION_TOKEN",
+        "NOTION_DATABASE_ID",
+        "JIRA_BASE_URL",
+        "JIRA_EMAIL",
+        "JIRA_API_TOKEN",
     ):
         monkeypatch.delenv(env, raising=False)
     r = client.get("/api/v1/adapters")

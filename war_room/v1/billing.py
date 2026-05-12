@@ -16,7 +16,6 @@ without billing wiring, and makes the unit tests deterministic.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import json
@@ -119,11 +118,16 @@ async def report_usage(tenant_id: str, kind: str, quantity: int = 1) -> None:
 
 
 def _price_id_for(kind: str) -> str:
-    return _env({
-        "meetings": "STRIPE_PRICE_METER_MEETINGS",
-        "tts_chars": "STRIPE_PRICE_METER_TTS",
-        "llm_tokens": "STRIPE_PRICE_METER_LLM",
-    }.get(kind, "")) or ""
+    return (
+        _env(
+            {
+                "meetings": "STRIPE_PRICE_METER_MEETINGS",
+                "tts_chars": "STRIPE_PRICE_METER_TTS",
+                "llm_tokens": "STRIPE_PRICE_METER_LLM",
+            }.get(kind, "")
+        )
+        or ""
+    )
 
 
 async def flush() -> dict[str, int]:

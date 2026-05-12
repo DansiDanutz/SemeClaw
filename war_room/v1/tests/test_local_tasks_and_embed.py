@@ -17,12 +17,22 @@ async def test_upsert_dedups_on_source_tuple(v1_data_dir):
     from war_room.v1 import local_tasks as lt
 
     a = await lt.upsert_task(
-        source="discord", source_id="msg-1", tenant_id="acme", title="A",
-        description="", status="open", assigned_agents=[],
+        source="discord",
+        source_id="msg-1",
+        tenant_id="acme",
+        title="A",
+        description="",
+        status="open",
+        assigned_agents=[],
     )
     b = await lt.upsert_task(
-        source="discord", source_id="msg-1", tenant_id="acme", title="A2",
-        description="", status="open", assigned_agents=["research"],
+        source="discord",
+        source_id="msg-1",
+        tenant_id="acme",
+        title="A2",
+        description="",
+        status="open",
+        assigned_agents=["research"],
     )
     assert a == b
     task = await lt.get_task(a)
@@ -35,13 +45,21 @@ async def test_dialog_and_intervention_round_trip(v1_data_dir):
     from war_room.v1 import local_tasks as lt
 
     tid = await lt.upsert_task(
-        source="local", source_id="x", tenant_id="acme", title="Probe",
-        description="d", status="open", assigned_agents=["research"],
+        source="local",
+        source_id="x",
+        tenant_id="acme",
+        title="Probe",
+        description="d",
+        status="open",
+        assigned_agents=["research"],
     )
     d1 = await lt.insert_dialog(tid, version=1, lines=[{"agent_id": "host", "text": "hi"}])
     iv = await lt.insert_intervention(
-        task_id=tid, dialog_id=d1["id"], turn_index=1,
-        user_comment="focus EU", agent_replies=[{"agent_id": "research", "text": "noted"}],
+        task_id=tid,
+        dialog_id=d1["id"],
+        turn_index=1,
+        user_comment="focus EU",
+        agent_replies=[{"agent_id": "research", "text": "noted"}],
     )
     rows = await lt.list_interventions(d1["id"])
     assert [r["id"] for r in rows] == [iv["id"]]

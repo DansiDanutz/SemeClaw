@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 import httpx
 
@@ -60,7 +60,7 @@ class LinearConfig:
     state_map: dict[str, str]  # task_patch.status -> Linear workflow state id
 
     @classmethod
-    def from_env(cls) -> "LinearConfig | None":
+    def from_env(cls) -> LinearConfig | None:
         key = _env("LINEAR_API_KEY")
         if not key:
             return None
@@ -144,7 +144,7 @@ async def ingest(limit: int = 25) -> AsyncIterator[dict]:
         except ValueError:
             logger.warning("linear ingest non-JSON response")
             return
-        for node in (((data.get("data") or {}).get("issues") or {}).get("nodes") or []):
+        for node in ((data.get("data") or {}).get("issues") or {}).get("nodes") or []:
             yield _node_to_task(cfg, node)
 
 

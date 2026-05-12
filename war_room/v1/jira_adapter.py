@@ -11,8 +11,8 @@ import base64
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 import httpx
 
@@ -38,7 +38,7 @@ class JiraConfig:
         return "Basic " + base64.b64encode(creds).decode()
 
     @classmethod
-    def from_env(cls) -> "JiraConfig | None":
+    def from_env(cls) -> JiraConfig | None:
         base = _env("JIRA_BASE_URL")
         email = _env("JIRA_EMAIL")
         token = _env("JIRA_API_TOKEN")
@@ -162,7 +162,10 @@ async def writeback(task: dict, decision: dict) -> dict:
                             {
                                 "type": "paragraph",
                                 "content": [
-                                    {"type": "text", "text": f"SemeClaw decision · status → {patch.get('status', task.get('status'))}"},
+                                    {
+                                        "type": "text",
+                                        "text": f"SemeClaw decision · status → {patch.get('status', task.get('status'))}",
+                                    },
                                 ],
                             },
                             {
@@ -177,5 +180,9 @@ async def writeback(task: dict, decision: dict) -> dict:
         except httpx.HTTPError as exc:
             logger.warning("jira writeback transport error: %s", exc)
             return {"ok": False, "error": f"transport: {exc}", **outcomes}
-        ok = (outcomes["transition"] is None or outcomes["transition"] < 400) and outcomes["comment"] is not None and outcomes["comment"] < 400
+        ok = (
+            (outcomes["transition"] is None or outcomes["transition"] < 400)
+            and outcomes["comment"] is not None
+            and outcomes["comment"] < 400
+        )
         return {"ok": ok, **outcomes}

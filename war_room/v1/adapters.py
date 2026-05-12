@@ -8,7 +8,7 @@ Every v1 adapter exposes the same shape: ``probe()``, ``ingest(limit)``,
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable
 
 from war_room.v1 import discord_adapter as _discord
 from war_room.v1 import jira_adapter as _jira
@@ -26,7 +26,7 @@ class Adapter:
         id: str,
         probe: Callable[[], dict],
         ingest: Callable[..., AsyncIterator[dict]],
-        writeback: Callable[..., "_AsyncDictResult"],
+        writeback: Callable[..., _AsyncDictResult],
     ) -> None:
         self.id = id
         self.probe = probe

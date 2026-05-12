@@ -29,10 +29,9 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
-from fastapi.responses import StreamingResponse
-
+from war_room.v1 import V1_VERSION
 from war_room.v1 import adapters as _adapters
 from war_room.v1 import audit as _audit
 from war_room.v1 import billing as _billing
@@ -47,7 +46,6 @@ from war_room.v1 import storage as _s
 from war_room.v1 import tenants as _tenants
 from war_room.v1 import usage as _usage
 from war_room.v1 import webhooks as _webhooks
-from war_room.v1 import V1_VERSION
 
 logger = logging.getLogger("semeclaw.v1")
 
@@ -131,9 +129,7 @@ def _register_health(app: FastAPI) -> None:
 
         adapter_state = []
         for probe in _adapters.all_probes():
-            adapter_state.append(
-                {"id": probe["id"], "ok": probe["ok"], "missing": probe.get("missing", [])}
-            )
+            adapter_state.append({"id": probe["id"], "ok": probe["ok"], "missing": probe.get("missing", [])})
 
         # DLQ depth — count lines in each known JSONL without loading it.
         dlq_depth: dict[str, int] = {}
@@ -325,10 +321,20 @@ def _register_admin_routes(app: FastAPI) -> None:
             until=until,
             limit=limit,
         )
-        return JSONResponse({"entries": rows, "total": len(rows), "filters": {
-            "tenant": tenant, "route": route, "method": method,
-            "since": since, "until": until, "limit": limit,
-        }})
+        return JSONResponse(
+            {
+                "entries": rows,
+                "total": len(rows),
+                "filters": {
+                    "tenant": tenant,
+                    "route": route,
+                    "method": method,
+                    "since": since,
+                    "until": until,
+                    "limit": limit,
+                },
+            }
+        )
 
     @app.post("/api/admin/dlq/{name}/replay")
     async def dlq_replay_post(name: str, dry_run: bool = False):
@@ -360,6 +366,7 @@ def _register_admin_routes(app: FastAPI) -> None:
         tenants = await _tenants.list_tenants(include_deleted=True)
         try:
             from war_room.dashboard.server import _DLQ_REGISTRY
+
             dlq_names = list(_DLQ_REGISTRY.keys())
         except Exception:
             dlq_names = []
@@ -402,7 +409,9 @@ def _register_adapters(app: FastAPI) -> None:
     async def adapter_sync(adapter_id: str, limit: int = Query(default=25, ge=1, le=100)):
         adapter = _adapters.get(adapter_id)
         if adapter is None:
-            return JSONResponse({"error": f"unknown adapter {adapter_id!r}", "known": list(_adapters.REGISTRY)}, status_code=404)
+            return JSONResponse(
+                {"error": f"unknown adapter {adapter_id!r}", "known": list(_adapters.REGISTRY)}, status_code=404
+            )
         probe = adapter.probe()
         if not probe.get("ok"):
             return JSONResponse({"ok": False, "probe": probe, "ingested": 0})
@@ -434,12 +443,18 @@ def _register_dialog_preview(app: FastAPI) -> None:
         }
         # Compose without hitting Supabase/LLM by using the dialog module directly.
         from war_room.tasks import dialog as _dialog
+
         try:
             lines = await _dialog.compose_dialog(task)
         except Exception as exc:  # noqa: BLE001
             logger.warning("preview compose failed: %s", exc)
             lines = [
-                {"agent_id": "semeclaw", "role": "Orchestrator", "text": f"Preview unavailable: {exc}", "ts": _s.utcnow_iso()}
+                {
+                    "agent_id": "semeclaw",
+                    "role": "Orchestrator",
+                    "text": f"Preview unavailable: {exc}",
+                    "ts": _s.utcnow_iso(),
+                }
             ]
         enriched = _cites.attach_citations(lines, task)
         evidence = _cites.collect_evidence_ids(enriched)
@@ -523,7 +538,7 @@ def _spotlight_card_html(item) -> str:
         <h3>{item.name}{pin}</h3>
         <p class=tag>{item.tagline}</p>
         <p class=desc>{item.description}</p>
-        {f'<ul>{bullets}</ul>' if bullets else ''}
+        {f"<ul>{bullets}</ul>" if bullets else ""}
         <a class=cta href="{item.url}" target=_blank rel=noopener>Visit ↗</a>
       </article>
     """
@@ -576,7 +591,7 @@ def _register_spotlight(app: FastAPI) -> None:
         items = await _spotlight.list_items()
         cards = "".join(_spotlight_card_html(item) for item in items) or "<p>No spotlight items yet.</p>"
         # Approximate ttl_days from source for the lead copy.
-        ttl_days = (_spotlight._source_payload().get("ttl_days") or 7)
+        ttl_days = _spotlight._source_payload().get("ttl_days") or 7
         html = SPOTLIGHT_PAGE_TEMPLATE.replace("$TTL_DAYS$", str(ttl_days)).replace("$ITEMS$", cards)
         return HTMLResponse(html)
 
@@ -626,7 +641,9 @@ def _register_sse(app: FastAPI) -> None:
     @app.get("/api/admin/v1/events")
     async def admin_events():
         # Streamed under /api/admin so the existing admin gate enforces auth.
-        return StreamingResponse(_sse.stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform"})
+        return StreamingResponse(
+            _sse.stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform"}
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +659,9 @@ def _register_exports(app: FastAPI) -> None:
         until: str | None = Query(default=None),
         limit: int = Query(default=1000, ge=1, le=10000),
     ):
-        rows = _s.query_audit(tenant_id=tenant, route_prefix=route, method=method, since=since, until=until, limit=limit)
+        rows = _s.query_audit(
+            tenant_id=tenant, route_prefix=route, method=method, since=since, until=until, limit=limit
+        )
         body = _exports.audit_csv(rows)
         return StreamingResponse(
             iter([body]),

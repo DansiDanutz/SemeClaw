@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable
 
 from war_room.v1 import storage as _s
 
@@ -194,7 +194,7 @@ async def replay_dlq(path: Path, dry_run: bool = False) -> dict:
             # Read whatever is on disk NOW. Anything past the original
             # snapshot length is a concurrent append we must preserve.
             current_bytes = path.read_bytes() if path.exists() else b""
-            new_tail = current_bytes[len(snapshot_bytes):]
+            new_tail = current_bytes[len(snapshot_bytes) :]
             tail_entries: list[dict] = []
             for raw in new_tail.splitlines():
                 if not raw.strip():

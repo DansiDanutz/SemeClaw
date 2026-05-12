@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 import httpx
 
@@ -38,7 +38,7 @@ class DiscordConfig:
     tenant_id: str
 
     @classmethod
-    def from_env(cls) -> "DiscordConfig | None":
+    def from_env(cls) -> DiscordConfig | None:
         token = _env("DISCORD_BOT_TOKEN")
         channel = _env("DISCORD_CHANNEL_ID")
         if not token or not channel:
@@ -74,7 +74,7 @@ def _message_to_task(cfg: DiscordConfig, msg: dict) -> dict | None:
         return None
     # Split into (first line, remainder) from the same normalised buffer so
     # title truncation and leading whitespace can't leak into the description.
-    after_prefix = content[len(TASK_PREFIX):].lstrip()
+    after_prefix = content[len(TASK_PREFIX) :].lstrip()
     head, _, tail = after_prefix.partition("\n")
     full_title = head.strip()
     if not full_title:

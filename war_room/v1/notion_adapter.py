@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 import httpx
 
@@ -35,7 +35,7 @@ class NotionConfig:
     tenant_id: str
 
     @classmethod
-    def from_env(cls) -> "NotionConfig | None":
+    def from_env(cls) -> NotionConfig | None:
         token = _env("NOTION_TOKEN")
         db = _env("NOTION_DATABASE_ID")
         if not token or not db:
@@ -170,7 +170,11 @@ async def writeback(task: dict, decision: dict) -> dict:
                         {
                             "object": "block",
                             "type": "paragraph",
-                            "paragraph": {"rich_text": [{"type": "text", "text": {"content": rationale[:1900] or "(no rationale)"}}]},
+                            "paragraph": {
+                                "rich_text": [
+                                    {"type": "text", "text": {"content": rationale[:1900] or "(no rationale)"}}
+                                ]
+                            },
                         }
                     ],
                 },

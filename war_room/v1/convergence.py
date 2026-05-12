@@ -113,11 +113,7 @@ def score_convergence(
     if disagree_hits and not agree_hits:
         score *= 0.5  # an unmitigated objection halves the score
 
-    early = (
-        turn >= EARLY_COMMIT_MIN_TURN
-        and score >= EARLY_COMMIT_THRESHOLD
-        and disagree_hits == 0
-    )
+    early = turn >= EARLY_COMMIT_MIN_TURN and score >= EARLY_COMMIT_THRESHOLD and disagree_hits == 0
     if early:
         reason = "agreement_threshold_met"
     elif disagree_hits:

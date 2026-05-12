@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 logger = logging.getLogger("semeclaw.v1.sse")
 
@@ -61,4 +61,4 @@ async def stream() -> AsyncIterator[bytes]:
 
 def _frame(event: str, data: dict) -> bytes:
     body = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {body}\n\n".encode()

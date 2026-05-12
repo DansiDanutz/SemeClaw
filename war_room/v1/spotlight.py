@@ -22,7 +22,6 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
 
 from war_room.v1 import storage as _s
 
@@ -64,7 +63,7 @@ class SpotlightItem:
     bullets: tuple[str, ...] = ()
 
     @classmethod
-    def from_dict(cls, row: dict) -> "SpotlightItem":
+    def from_dict(cls, row: dict) -> SpotlightItem:
         return cls(
             id=row.get("id", "") or secrets.token_hex(4),
             name=row.get("name", "(unnamed)"),

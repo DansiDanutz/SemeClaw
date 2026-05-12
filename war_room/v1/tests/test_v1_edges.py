@@ -5,14 +5,12 @@ intervene early-commit code path.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import time
 
 import pytest
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 

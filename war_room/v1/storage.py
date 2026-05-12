@@ -14,10 +14,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+
 
 def _data_dir() -> Path:
     """Resolve the v1 data dir on every call so tests can override
