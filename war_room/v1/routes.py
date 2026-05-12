@@ -787,15 +787,23 @@ def _register_local_tasks(app: FastAPI) -> None:
     if not _lt.should_activate():
         return
 
-    @app.on_event("startup")
-    async def _seed_demo_task():  # noqa: D401 — FastAPI hook
+    # Seed-once flag — first GET /api/v1/tasks lazily seeds the demo row.
+    # Startup hooks register too late (this function runs during module
+    # import which is post-startup for an already-built app).
+    _seeded = {"done": False}
+
+    async def _ensure_seeded() -> None:
+        if _seeded["done"]:
+            return
         try:
             await _lt.seed_demo_task()
         except Exception as exc:  # noqa: BLE001
             logger.warning("seed_demo_task failed: %s", exc)
+        _seeded["done"] = True
 
     @app.get("/api/v1/tasks")
     async def v1_tasks_list(tenant: str = Query(default="default"), status: str | None = Query(default=None)):
+        await _ensure_seeded()
         rows = await _lt.list_tasks(tenant_id=tenant, status=status)
         return JSONResponse({"tasks": rows, "total": len(rows), "store": "local"})
 
