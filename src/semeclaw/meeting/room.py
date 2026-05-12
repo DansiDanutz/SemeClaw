@@ -228,8 +228,9 @@ class MeetingRoom:
 
     async def _run_crewai_meeting(self):
         """Run meeting agents via CrewAI hierarchical process."""
-        from semeclaw.integrations.crewai_runner import build_crewai_agent, build_crewai_task
         from crewai import Crew, Process
+
+        from semeclaw.integrations.crewai_runner import build_crewai_agent, build_crewai_task
 
         print(f"Running {len(self.agent_ids)} agents via CrewAI...\n")
 

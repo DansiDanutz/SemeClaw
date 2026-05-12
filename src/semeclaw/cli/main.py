@@ -210,7 +210,7 @@ def pipeline(
                 engine=engine,
             )
         )
-        console.print(f"\n[green]✓ Pipeline complete[/green]")
+        console.print("\n[green]✓ Pipeline complete[/green]")
         if hasattr(result, "output_file"):
             console.print(f"[dim]Report:[/dim] {result.output_file}")
         if hasattr(result, "paperclip_issue") and result.paperclip_issue:

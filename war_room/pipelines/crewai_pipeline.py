@@ -9,6 +9,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+
+# Allow importing war_room modules directly
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,16 +19,12 @@ from typing import Any
 
 import httpx
 
-# Allow importing war_room modules directly
-import sys
-
 WAR_ROOM_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(WAR_ROOM_DIR))
 
-from paperclip_bridge import AGENT_ASSIGNEES
 from adapters.paperclip import PaperclipAdapter
-from adapters.multica import MulticaAdapter
 from memory import WarRoomMemory
+from paperclip_bridge import AGENT_ASSIGNEES
 
 logger = logging.getLogger("war_room.crewai_pipeline")
 
@@ -125,6 +124,7 @@ def _load_telegram_creds() -> tuple[str | None, str | None]:
     if cfg_path.exists():
         try:
             import yaml
+
             cfg = yaml.safe_load(cfg_path.read_text())
             tg = cfg.get("telegram", {})
             bot_token = tg.get("bot_token") or tg.get("token")
@@ -345,14 +345,16 @@ class CrewAIPipeline:
             state = {}
         state.setdefault("completed_tasks", [])
         state.setdefault("metrics", {"tasks_run": 0, "tasks_succeeded": 0, "paperclip_issues_created": 0})
-        state["completed_tasks"].append({
-            "run_id": run_id,
-            "task": task,
-            "agents": agents,
-            "issue_id": issue.get("id") if issue else None,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "engine": "crewai",
-        })
+        state["completed_tasks"].append(
+            {
+                "run_id": run_id,
+                "task": task,
+                "agents": agents,
+                "issue_id": issue.get("id") if issue else None,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "engine": "crewai",
+            }
+        )
         state["metrics"]["tasks_run"] += 1
         state["metrics"]["tasks_succeeded"] += 1
         if issue:

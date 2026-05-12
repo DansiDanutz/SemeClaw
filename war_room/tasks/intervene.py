@@ -307,9 +307,7 @@ async def intervene(task_id: str, comment: str, *, early_commit: bool = False) -
     new_dialog = None
     writeback_result = None
 
-    converged_early = bool(
-        early_commit and convergence_payload and convergence_payload["early_commit"]
-    )
+    converged_early = bool(early_commit and convergence_payload and convergence_payload["early_commit"])
     if turn >= MAX_INTERVENTIONS or converged_early:
         # Build full intervention list (including the current one) for context
         all_interventions = prior + [

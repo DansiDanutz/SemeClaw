@@ -7,7 +7,6 @@ and runs multi-agent pipelines via CrewAI's Crew/Process orchestration.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +75,7 @@ def build_crewai_agent(agent_id: str, model_cfg: dict[str, Any] | None = None) -
         agent_id: e.g. "research", "strategist", "writer"
         model_cfg: dict with model, api_base, api_key, temperature, max_tokens
     """
-    from crewai import Agent, LLM
+    from crewai import LLM, Agent
 
     frontmatter, body = _parse_agent_md(agent_id)
     role = frontmatter.get("role") or frontmatter.get("name") or agent_id.capitalize()
@@ -128,10 +127,7 @@ Format your output as markdown.
     if initial_context:
         description += f"\n\n## Prior Context\n\n{initial_context[:2000]}\n"
 
-    expected_output = (
-        f"A detailed markdown output from the {agent_id} agent "
-        f"covering all aspects of the task."
-    )
+    expected_output = f"A detailed markdown output from the {agent_id} agent covering all aspects of the task."
 
     return Task(
         description=description,

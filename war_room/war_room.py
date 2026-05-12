@@ -924,6 +924,7 @@ def get_pipeline(engine: str = "native"):
     """Factory: return a pipeline instance by engine name."""
     if engine == "crewai":
         from war_room.pipelines.crewai_pipeline import CrewAIPipeline
+
         return CrewAIPipeline()
     return WarRoomPipeline()
 
