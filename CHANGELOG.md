@@ -2,6 +2,20 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.33] - 2026-05-13
+
+### Changed
+
+- Limited Dependabot automation to GitHub Actions so scheduled maintenance
+  stays green while Python dependency upgrades remain release-managed.
+- Relaxed the version-bump gate for docs and repository-maintenance files so
+  action update PRs can pass without pretending they change the Python package.
+
+### Fixed
+
+- Reset the billing flush timer in the DLQ test so full-suite runtime cannot
+  opportunistically flush one usage record before the assertion.
+
 ## [0.8.32] - 2026-05-13
 
 ### Changed

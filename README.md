@@ -4,7 +4,7 @@
 
 **Every task in your stack becomes a multi-agent meeting you can join, interrupt, and steer — until the orchestrator commits a final decision back to the source.**
 
-[![Version](https://img.shields.io/badge/version-0.8.32-10b981.svg)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.8.33-10b981.svg)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE.md)
@@ -265,9 +265,11 @@ GitHub Actions run ruff, formatting, the full pytest suite, smoke tests, and
 Docker build validation on every PR to `main`. Non-doc changes must bump
 `pyproject.toml` and add a changelog entry.
 
-Dependabot checks GitHub Actions and `uv` dependencies weekly. Workflow jobs
-declare explicit permissions, cancel superseded branch runs, and use timeouts
-so failed automation does not drift silently.
+Dependabot checks GitHub Actions weekly. Python dependency updates stay under
+the release-managed version/changelog flow so dependency resolution changes are
+reviewed with the rest of the shipped package surface. Workflow jobs declare
+explicit permissions, cancel superseded branch runs, and use timeouts so failed
+automation does not drift silently.
 
 ---
 
