@@ -2,6 +2,20 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.30] - 2026-05-13
+
+### Fixed
+
+- Completed the remaining ruff cleanup pass across `cli/`, `coordinator/`,
+  `evals/`, `kpis/`, `scripts/`, `sentinel/`, `integrations/`, and `tests/`
+  after the v1.0.0-rc1 sweep.
+- Removed unused imports, normalized import ordering, split multi-import
+  lines, and dropped pointless f-string prefixes using the existing ruff
+  configuration.
+- Made the GitHub adapter respect explicit empty `repo` and `token` values
+  instead of falling back to environment variables, keeping offline health
+  checks deterministic.
+
 ## [1.0.0-rc1] - 2026-05-11
 
 ### Added — v1 production surface

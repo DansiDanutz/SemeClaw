@@ -39,7 +39,7 @@ GITHUB_STATE_DIR = Path.home() / ".semeclaw"
 
 def _parse_repo(repo: str | None) -> tuple[str, str]:
     """Parse owner/repo from string or env."""
-    raw = repo or os.environ.get("GITHUB_REPO", "")
+    raw = os.environ.get("GITHUB_REPO", "") if repo is None else repo
     if "/" in raw:
         owner, name = raw.split("/", 1)
         return owner.strip(), name.strip()
@@ -58,7 +58,7 @@ class GitHubAdapter(Adapter):
         base_url: str | None = None,
     ) -> None:
         super().__init__("github", base_url or DEFAULT_BASE)
-        self.token = token or os.environ.get("GITHUB_TOKEN", "")
+        self.token = os.environ.get("GITHUB_TOKEN", "") if token is None else token
         self.owner, self.repo_name = _parse_repo(repo)
         self._client: httpx.AsyncClient | None = None
         self._state_file = GITHUB_STATE_DIR / "github_sync.json"
