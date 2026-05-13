@@ -2,13 +2,11 @@
 sentinel/alerts.py — Telegram alert with 10-minute dedup.
 Uses danslabmodel bot → Dan (chat 424184493).
 """
-import asyncio
 import hashlib
 import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -65,7 +63,7 @@ def _fingerprint(text: str) -> str:
 async def send_alert(
     text: str,
     level: str = "⚠️",
-    dedup_key: Optional[str] = None,
+    dedup_key: str | None = None,
     dedup_sec: int = _DEDUP_SEC,
 ) -> bool:
     """
@@ -102,5 +100,5 @@ async def send_alert(
     return False
 
 
-async def send_recovery(text: str, dedup_key: Optional[str] = None) -> bool:
+async def send_recovery(text: str, dedup_key: str | None = None) -> bool:
     return await send_alert(text, level="✅", dedup_key=dedup_key, dedup_sec=60)

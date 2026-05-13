@@ -11,36 +11,28 @@ Alerts Dan via Telegram when thresholds crossed.
 Exposes /health, /status, /probes for War Room dashboard integration.
 """
 import asyncio
-import json
 import logging
-import os
 import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
-import httpx
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 # Add parent to path so we can import sentinel.*
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sentinel.probes import probe_all, ProbeResult
 from sentinel.alerts import send_alert, send_recovery
-from sentinel.tripwire import tripwire_loop
+from sentinel.probes import ProbeResult, probe_all
 from sentinel.thresholds import (
+    DISK_USED_PCT_MAX,
+    GATEWAY_LATENCY_MS_MAX,
     PROBE_INTERVAL_SEC,
     RAM_FREE_MB_MIN,
-    DISK_USED_PCT_MAX,
-    HEARTBEAT_AGE_SEC_MAX,
-    GATEWAY_LATENCY_MS_MAX,
-    AGENT_HEALTH_PCT_MIN,
-    AGENT_HEALTH_PCT_CRIT,
 )
+from sentinel.tripwire import tripwire_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,7 +51,7 @@ def _check_result(r: ProbeResult) -> list[str]:
     """Return list of violation strings for a probe result."""
     issues = []
     if not r.reachable:
-        issues.append(f"unreachable (SSH+gateway both failed)")
+        issues.append("unreachable (SSH+gateway both failed)")
     if r.ram_free_mb is not None and r.ram_free_mb < RAM_FREE_MB_MIN:
         issues.append(f"RAM low: {r.ram_free_mb:.0f}MB free (min {RAM_FREE_MB_MIN}MB)")
     if r.disk_used_pct is not None and r.disk_used_pct > DISK_USED_PCT_MAX:

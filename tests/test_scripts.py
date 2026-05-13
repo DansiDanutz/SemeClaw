@@ -2,7 +2,6 @@
 Tests for scripts/ utilities.
 """
 
-import tempfile
 from pathlib import Path
 
 

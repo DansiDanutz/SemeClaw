@@ -13,16 +13,14 @@ import logging
 import os
 import shutil
 import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from sentinel.alerts import send_alert
 from sentinel.thresholds import (
-    TRIPWIRE_INTERVAL_SEC,
     TRIPWIRE_BASELINE_PATH,
-    TRIPWIRE_VAULT_DIR,
+    TRIPWIRE_INTERVAL_SEC,
     TRIPWIRE_VAULT_DAYS,
+    TRIPWIRE_VAULT_DIR,
     WATCHED_PATHS_MAC,
 )
 
@@ -46,7 +44,7 @@ def _expand_paths(paths: list[str]) -> list[Path]:
     return result
 
 
-def _sha256(path: Path) -> Optional[str]:
+def _sha256(path: Path) -> str | None:
     try:
         h = hashlib.sha256()
         with open(path, "rb") as f:

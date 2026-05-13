@@ -18,7 +18,6 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional
 
 import httpx
 
@@ -212,7 +211,7 @@ async def handle_message(client: httpx.AsyncClient, msg: dict) -> None:
 
 async def main() -> None:
     log.info("SemeClaw Telegram bridge starting. API=%s allow=%s", API_BASE, ALLOWED or "ALL")
-    offset: Optional[int] = None
+    offset: int | None = None
     async with httpx.AsyncClient() as client:
         # Identity check
         try:

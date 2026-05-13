@@ -1,7 +1,6 @@
 """Generate clean ambient background music for NERVIX meeting room."""
 from __future__ import annotations
 
-import math
 import struct
 from pathlib import Path
 

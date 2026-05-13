@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 
 from . import _env
-from ._ui import banner, section, row, hint, ask, confirm, success, fail, OK, MISS, _C
+from ._ui import _C, MISS, OK, ask, banner, confirm, fail, hint, row, section, success
 
 
 async def _smoke_openrouter(key: str) -> tuple[bool, str]:
@@ -102,7 +101,7 @@ def run() -> int:
     # ----- Brave Search (optional) -----
     section("Step 2 / 4 — Brave Search (optional, faster web search)")
     print("  Browser Agent uses DuckDuckGo by default (no key, unlimited).")
-    print(f"  Brave Search gives faster, cleaner results — free 2,000/mo at")
+    print("  Brave Search gives faster, cleaner results — free 2,000/mo at")
     print(f"  {_C.C}https://brave.com/search/api/{_C.OFF}\n")
     if confirm("Add Brave Search API key?", default=False):
         bk = ask("Brave Search API key", default="").strip()

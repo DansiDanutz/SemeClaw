@@ -8,17 +8,15 @@ Usage:
   python3.13 -m sentinel.tripwire_cli reset       — rebuild baseline from current files
   python3.13 -m sentinel.tripwire_cli vault       — list vault entries
 """
-import json
 import sys
 from pathlib import Path
-import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def cmd_status():
-    from sentinel.tripwire import load_baseline, _snapshot, _expand_paths
     from sentinel.thresholds import WATCHED_PATHS_MAC
+    from sentinel.tripwire import _expand_paths, _snapshot, load_baseline
     paths    = _expand_paths(WATCHED_PATHS_MAC)
     baseline = load_baseline()
     current  = _snapshot(paths)
@@ -54,8 +52,8 @@ def cmd_status():
 
 
 def cmd_approve(sha_prefix: str):
-    from sentinel.tripwire import approve, load_baseline, _snapshot, _expand_paths, save_baseline
     from sentinel.thresholds import WATCHED_PATHS_MAC
+    from sentinel.tripwire import _expand_paths, _snapshot, approve, load_baseline, save_baseline
     paths    = _expand_paths(WATCHED_PATHS_MAC)
     baseline = load_baseline()
     current  = _snapshot(paths)
@@ -85,8 +83,8 @@ def cmd_baseline():
 
 
 def cmd_reset():
-    from sentinel.tripwire import _expand_paths, _snapshot, save_baseline
     from sentinel.thresholds import WATCHED_PATHS_MAC
+    from sentinel.tripwire import _expand_paths, _snapshot, save_baseline
     paths = _expand_paths(WATCHED_PATHS_MAC)
     snap  = _snapshot(paths)
     save_baseline(snap)

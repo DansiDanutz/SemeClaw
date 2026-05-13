@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 
 from . import _env
-from ._ui import banner, section, row, hint, success, fail, OK, MISS, ERR, INFO, _C
+from ._ui import _C, ERR, INFO, MISS, OK, banner, fail, hint, row, section, success
 
 _REPO_RE = re.compile(r"https?://github\.com/([^/\s)>\"]+)/([^/\s)>\"#?]+)")
 

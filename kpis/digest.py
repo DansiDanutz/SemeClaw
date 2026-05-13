@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from kpis.collector import get_today_kpis, get_projects_state, _today
+from kpis.collector import _today, get_projects_state, get_today_kpis
 from sentinel.alerts import send_alert
 
 logger = logging.getLogger("kpis.digest")

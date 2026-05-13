@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 
 from . import _env
-from ._ui import banner, section, row, hint, OK, MISS, INFO, _C
+from ._ui import _C, MISS, OK, banner, hint, section
 
 
 def run() -> int:

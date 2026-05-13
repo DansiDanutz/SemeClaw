@@ -10,10 +10,8 @@ import asyncio
 import json
 import logging
 import os
-import time
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("kpis.collector")
 
@@ -56,7 +54,7 @@ def _today() -> str:
 
 async def upsert_kpi(
     project: str,
-    day: Optional[str] = None,
+    day: str | None = None,
     *,
     tasks_completed: int = 0,
     tasks_failed: int = 0,
@@ -64,9 +62,9 @@ async def upsert_kpi(
     cost_usd: float = 0.0,
     new_commits: int = 0,
     deploys: int = 0,
-    blockers: Optional[list] = None,
-    evolved: Optional[bool] = None,
-    owner_agent: Optional[str] = None,
+    blockers: list | None = None,
+    evolved: bool | None = None,
+    owner_agent: str | None = None,
 ) -> bool:
     """Upsert daily KPI row for a project. Increments numeric counters."""
     sb  = _get_supabase()

@@ -35,9 +35,9 @@ import asyncio
 import json
 import os
 import sys
-from dataclasses import asdict, dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 DEFAULT_FIXTURES = Path(__file__).parent / "fixtures"
 

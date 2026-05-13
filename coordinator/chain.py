@@ -12,13 +12,11 @@ Circuit breaker rules:
   - HALF_OPEN: 1 probe every 30s — 2 successes → CLOSE
   - If ALL OPEN → safe_mode activates
 """
-import asyncio
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
 
 import httpx
 
@@ -56,9 +54,9 @@ CB_HALF_OPEN_SUCCESSES = 2     # successes needed to CLOSE
 class Backend:
     name:    str
     url:     str
-    model:   Optional[str] = None
+    model:   str | None = None
     style:   str = "openai"   # openai | ollama | gemini
-    env_key: Optional[str] = None
+    env_key: str | None = None
 
     state:           CBState = CBState.CLOSED
     failure_count:   int     = 0
@@ -146,7 +144,8 @@ _backends: list[Backend] = []
 
 
 def _load_backends():
-    import json, os
+    import json
+    import os
     raw = os.environ.get("COORDINATOR_BACKENDS")
     cfg = json.loads(raw) if raw else DEFAULT_BACKENDS
     return [Backend(**{k: v for k, v in b.items() if k in Backend.__dataclass_fields__}) for b in cfg]
@@ -217,8 +216,8 @@ async def call_with_fallback(payload: dict, timeout: float = 60.0) -> tuple[dict
     Try each backend in order. Returns (response, backend_name).
     Falls back to safe_mode stub if all fail.
     """
-    from coordinator.safe_mode import activate, queue_request, deactivate, is_active
     import coordinator.safe_mode as sm
+    from coordinator.safe_mode import activate, deactivate, is_active, queue_request
 
     backends = get_backends()
     last_error = None

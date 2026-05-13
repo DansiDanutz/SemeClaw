@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "war_room" / "dashboard"))
 
 import server as srv
+
 from semeclaw.tools import builtin_tools
 
 
