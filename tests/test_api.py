@@ -15,10 +15,8 @@ Run:
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -37,7 +35,6 @@ _TEST_API_KEY = "test-secret-key"
 # ── app import ───────────────────────────────────────────────────────────────
 import server as srv  # war_room/dashboard/server.py
 from fastapi.testclient import TestClient
-
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 

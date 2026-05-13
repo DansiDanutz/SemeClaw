@@ -8,10 +8,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
-from cli._ui import banner, section, row, OK, ERR, INFO, MISS, hint, success, fail
+from cli._ui import INFO, MISS, OK, banner, fail, hint, row, section, success
 
 
 def _api_base() -> str:

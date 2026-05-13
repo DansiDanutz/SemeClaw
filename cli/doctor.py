@@ -18,12 +18,11 @@ import json
 import os
 import socket
 import sys
-import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 from . import _env
-from ._ui import OK, MISS, ERR, INFO, banner, section, row, hint, success, fail
+from ._ui import ERR, MISS, OK, banner, fail, hint, row, section, success
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +186,7 @@ def run(argv: list[str] | None = None) -> int:
 
     for name, ready, detail in _probe_adapters():
         record("adapters", name, ready, detail,
-               f"set the listed env vars in .env then re-run")
+               "set the listed env vars in .env then re-run")
 
     # ---------- output ----------
     if as_json:

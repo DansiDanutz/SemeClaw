@@ -14,6 +14,7 @@ os.environ.setdefault("NERVIX_SESSION_SECRET", "test-secret-for-ci")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
 from fastapi.testclient import TestClient
+
 from nervix_platform.main import app, db
 
 client = TestClient(app)

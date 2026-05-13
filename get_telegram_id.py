@@ -4,18 +4,21 @@ It will print your user ID and exit.
 """
 import asyncio
 
+
 async def main():
     try:
         from telegram import Update
-        from telegram.ext import Application, MessageHandler, filters, ContextTypes
+        from telegram.ext import Application, ContextTypes, MessageHandler, filters
     except ImportError:
         print("Installing python-telegram-bot...")
-        import subprocess, sys
+        import subprocess
+        import sys
         subprocess.check_call([sys.executable, "-m", "pip", "install", "python-telegram-bot"])
         from telegram import Update
-        from telegram.ext import Application, MessageHandler, filters, ContextTypes
+        from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
-    import os as _os, pathlib as _pl
+    import os as _os
+    import pathlib as _pl
     BOT_TOKEN = _os.environ.get("TELEGRAM_BOT_TOKEN") or _os.environ.get("DLS_DAVID_BOT_TOKEN") or ""
     if not BOT_TOKEN:
         fe = _pl.Path.home() / ".openclaw" / "fleet.env"
@@ -44,7 +47,7 @@ async def main():
         user_id_result["username"] = user.username or "no username"
         user_id_result["name"] = user.first_name or "unknown"
 
-        print(f"Found you!")
+        print("Found you!")
         print(f"  Name: {user_id_result['name']}")
         print(f"  Username: @{user_id_result['username']}")
         print(f"  User ID: {user_id_result['id']}")

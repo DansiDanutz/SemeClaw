@@ -15,20 +15,20 @@ API:
 """
 import asyncio
 import logging
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from coordinator.chain import call_with_fallback, chain_status, get_backends, CBState
+from coordinator.chain import CBState, call_with_fallback, chain_status, get_backends
 from coordinator.safe_mode import is_active, queue_depth
 from sentinel.alerts import send_alert
 

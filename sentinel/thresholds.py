@@ -5,6 +5,7 @@ All values can be overridden via env vars prefixed SENTINEL_.
 import json
 import os
 
+
 def _int(key: str, default: int) -> int:
     return int(os.environ.get(f"SENTINEL_{key}", default))
 

@@ -12,7 +12,6 @@ Tests:
 5. Voice synthesis fallback chain
 """
 
-import json
 import sys
 from pathlib import Path
 

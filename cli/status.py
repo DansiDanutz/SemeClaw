@@ -5,7 +5,7 @@ import os
 import shutil
 
 from . import _env
-from ._ui import OK, MISS, ERR, INFO, _C, banner, section, row, hint
+from ._ui import _C, ERR, INFO, MISS, OK, banner, hint, row, section
 
 
 def _check_python() -> tuple[bool, str]:

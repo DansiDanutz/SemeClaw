@@ -6,12 +6,9 @@ this stub activates. It never returns null — it queues the request
 and returns a structured "degraded" response so callers can handle
 gracefully instead of crashing.
 """
-import asyncio
-import json
 import logging
 import time
 from collections import deque
-from typing import Any, Optional
 
 logger = logging.getLogger("coordinator.safe_mode")
 
@@ -63,10 +60,10 @@ def queue_request(request_id: str, payload: dict) -> dict:
                     "role": "assistant",
                     "content": (
                         "⚠️ All AI backends are temporarily unavailable. "
-                        "Your request has been queued (position: {pos}) and will be "
+                        f"Your request has been queued (position: {len(_queue)}) and will be "
                         "replayed automatically when a backend recovers. "
                         "Estimated wait: unknown. Contact Dan via Telegram if urgent."
-                    ).format(pos=len(_queue)),
+                    ),
                 },
                 "finish_reason": "safe_mode",
             }

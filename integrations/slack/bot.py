@@ -18,16 +18,16 @@ Deploy:
 """
 from __future__ import annotations
 
-import hmac
 import hashlib
+import hmac
 import json
 import os
 from typing import Any
 
 import httpx
+from flask import Flask, Response, jsonify, request
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
-from flask import Flask, request, jsonify, Response
 
 # ---------------------------------------------------------------------------
 # Config
@@ -63,10 +63,10 @@ def _build_markdown(subject: str, bullets: list[str]) -> str:
         f"Context captured from Slack:\n\n" +
         "\n".join(f"- {b}" for b in bullets) +
         "\n\n"
-        f"## Strategist Agent\n\n"
-        f"Synthesize the above into the 3 most likely strategic paths, tradeoffs, and pick one with conviction.\n\n"
-        f"## Writer Agent\n\n"
-        f"Draft the 3-sentence public-facing summary + a 3-bullet action list.\n"
+        "## Strategist Agent\n\n"
+        "Synthesize the above into the 3 most likely strategic paths, tradeoffs, and pick one with conviction.\n\n"
+        "## Writer Agent\n\n"
+        "Draft the 3-sentence public-facing summary + a 3-bullet action list.\n"
     )
 
 

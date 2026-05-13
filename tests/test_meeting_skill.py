@@ -15,15 +15,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "war_room" / "dashb
 
 import pytest  # noqa: E402
 from meeting_skill import (  # noqa: E402
+    DAN_SPEAKER,
     HOST_SPEAKER,
     ORCHESTRATOR_SPEAKER,
-    DAN_SPEAKER,
     MeetingScript,
     Segment,
     build_script,
     parse_report,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

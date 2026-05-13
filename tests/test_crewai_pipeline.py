@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_load_crewai_runner():
     """Adapter module imports cleanly."""
     from semeclaw.integrations.crewai_runner import (
         _parse_agent_md,
-        _extract_goal_and_backstory,
         build_crewai_agent,
         build_crewai_task,
         run_crewai_pipeline,
@@ -21,9 +18,10 @@ def test_load_crewai_runner():
 
 
 def test_parse_agent_md_extracts_frontmatter():
-    from semeclaw.integrations.crewai_runner import _parse_agent_md
     import tempfile
     from pathlib import Path
+
+    from semeclaw.integrations.crewai_runner import _parse_agent_md
 
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "agents"
@@ -51,7 +49,7 @@ def test_crewai_pipeline_class_imports():
 
 
 def test_get_pipeline_factory():
-    from war_room.war_room import get_pipeline, WarRoomPipeline
+    from war_room.war_room import WarRoomPipeline, get_pipeline
     native = get_pipeline("native")
     assert isinstance(native, WarRoomPipeline)
     # CrewAI pipeline requires imports; just verify factory dispatches

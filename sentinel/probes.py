@@ -6,11 +6,10 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
-from sentinel.thresholds import PROBE_TIMEOUT_SEC, DROPLET_PROBES, SSH_KEY_PATH, AGENT_USERS
+from sentinel.thresholds import AGENT_USERS, DROPLET_PROBES, PROBE_TIMEOUT_SEC, SSH_KEY_PATH
 
 logger = logging.getLogger("sentinel.probes")
 
@@ -20,21 +19,21 @@ class ProbeResult:
     agent: str
     ts: float = field(default_factory=time.time)
     reachable: bool = False
-    latency_ms: Optional[float] = None
+    latency_ms: float | None = None
     gateway_ok: bool = False
     ssh_ok: bool = False
-    ram_free_mb: Optional[float] = None
-    disk_used_pct: Optional[float] = None
-    heartbeat_age_sec: Optional[float] = None
-    cron_count: Optional[int] = None
-    gateway_version: Optional[str] = None
-    error: Optional[str] = None
+    ram_free_mb: float | None = None
+    disk_used_pct: float | None = None
+    heartbeat_age_sec: float | None = None
+    cron_count: int | None = None
+    gateway_version: str | None = None
+    error: str | None = None
     # Mac Studio extra
-    balancer_ok: Optional[bool] = None
-    ollama_ok: Optional[bool] = None
+    balancer_ok: bool | None = None
+    ollama_ok: bool | None = None
 
 
-async def probe_gateway(host: str, gateway_url: str, timeout: float = PROBE_TIMEOUT_SEC) -> tuple[bool, Optional[float], Optional[str]]:
+async def probe_gateway(host: str, gateway_url: str, timeout: float = PROBE_TIMEOUT_SEC) -> tuple[bool, float | None, str | None]:
     """Try gateway HTTP /health. Returns (ok, latency_ms, version)."""
     t0 = time.monotonic()
     try:
@@ -50,7 +49,7 @@ async def probe_gateway(host: str, gateway_url: str, timeout: float = PROBE_TIME
         return False, None, None
 
 
-async def probe_tcp(host: str, port: int, timeout: float = PROBE_TIMEOUT_SEC) -> tuple[bool, Optional[float]]:
+async def probe_tcp(host: str, port: int, timeout: float = PROBE_TIMEOUT_SEC) -> tuple[bool, float | None]:
     """TCP connect probe. Returns (ok, latency_ms)."""
     t0 = time.monotonic()
     try:
@@ -80,7 +79,7 @@ async def probe_ssh_stats(host: str, port: int, user: str = None) -> dict:
         "-o", "ConnectTimeout=8",
         "-o", "BatchMode=yes",
         "-i", SSH_KEY_PATH,
-        f"-p", str(port),
+        "-p", str(port),
         f"{ssh_user}@{host}",
         # Output: ram_free_kb disk_use_pct cron_count
         "bash -c 'echo RAM=$(awk \"/MemAvailable/{print \\$2}\" /proc/meminfo); "
@@ -112,7 +111,7 @@ async def probe_ssh_stats(host: str, port: int, user: str = None) -> dict:
 
 async def probe_local_mac() -> ProbeResult:
     """Probe Mac Studio itself (localhost services)."""
-    import subprocess, platform
+    import subprocess
 
     result = ProbeResult(agent="David (Mac Studio)", reachable=True)
     try:

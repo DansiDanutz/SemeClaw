@@ -13,7 +13,8 @@ sys.path.insert(0, str(ROOT))
 os.environ.setdefault("NERVIX_SESSION_SECRET", "test-secret-for-ci")
 
 from fastapi.testclient import TestClient
-from nervix_platform.main import app, db, _processed_stripe_events
+
+from nervix_platform.main import _processed_stripe_events, app, db
 
 client = TestClient(app)
 
