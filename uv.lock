@@ -4722,7 +4722,7 @@ wheels = [
 
 [[package]]
 name = "semeclaw"
-version = "0.8.31"
+version = "0.8.32"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
