@@ -2,6 +2,16 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.32] - 2026-05-13
+
+### Changed
+
+- Added Dependabot coverage for GitHub Actions and `uv` dependencies.
+- Hardened workflow configuration with explicit permissions, concurrency
+  cancellation, and job timeouts.
+- Added repository-wide editor defaults, file normalization rules, and a
+  pull request checklist for release and verification hygiene.
+
 ## [0.8.31] - 2026-05-13
 
 ### Changed

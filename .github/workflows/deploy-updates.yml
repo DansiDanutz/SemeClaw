@@ -12,9 +12,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy-manifest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     name: Deploy manifest to Cloudflare Pages
     steps:
       - uses: actions/checkout@v6.0.2
@@ -28,6 +33,7 @@ jobs:
 
   upload-assets:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     name: Upload assets to R2
     needs: deploy-manifest
     steps:

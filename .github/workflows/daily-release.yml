@@ -9,9 +9,14 @@ permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   bump-and-tag:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       new_version: ${{ steps.bump.outputs.NEW_VERSION }}
       new_tag: ${{ steps.bump.outputs.NEW_TAG }}
@@ -66,6 +71,7 @@ jobs:
 
   deploy-manifest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: bump-and-tag
     steps:
       - uses: actions/checkout@v6.0.2
@@ -83,6 +89,7 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: bump-and-tag
     steps:
       - uses: actions/checkout@v6.0.2
@@ -116,6 +123,7 @@ jobs:
 
   deploy-fly:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [bump-and-tag, build-and-push]
     steps:
       - uses: actions/checkout@v6.0.2
@@ -132,6 +140,7 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [bump-and-tag, build-and-push]
     steps:
       - uses: actions/checkout@v6.0.2
