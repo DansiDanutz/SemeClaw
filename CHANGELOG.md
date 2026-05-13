@@ -2,6 +2,13 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.8.31] - 2026-05-13
+
+### Changed
+
+- Updated GitHub Actions workflow dependencies to current Node 24-compatible
+  majors across CI, release, daily release, deploy updates, and credit sync.
+
 ## [0.8.30] - 2026-05-13
 
 ### Fixed
