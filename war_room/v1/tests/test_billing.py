@@ -32,8 +32,9 @@ async def test_report_usage_lands_in_dlq_when_unconfigured(monkeypatch, v1_data_
     monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     from war_room.v1 import billing
 
-    # Reset module state between tests — _PENDING is module-global.
+    # Reset module state between tests — billing keeps in-memory queue timers.
     billing._PENDING.clear()
+    billing._LAST_FLUSH = billing.time.time()
 
     await billing.report_usage("acme", "meetings", quantity=2)
     await billing.report_usage("acme", "tts_chars", quantity=3500)
