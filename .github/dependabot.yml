@@ -1,21 +1,21 @@
 version: 2
-
 updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+    # Use pip ecosystem for pyproject.toml instead of uv to work around
+    # Dependabot uv updater failures on update_files command
+    # (see observations #7879, #7880, #7881).
+    # The CI workflow regenerates uv.lock via `uv sync` on each PR.
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "08:00"
-      timezone: "Europe/Bucharest"
-    open-pull-requests-limit: 3
-    groups:
-      actions:
-        patterns:
-          - "*"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "github-actions"
+    open-pull-requests-limit: 10
