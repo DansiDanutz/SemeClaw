@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 15
     name: Deploy manifest to Cloudflare Pages
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4.0.0
@@ -37,7 +37,7 @@ jobs:
     name: Upload assets to R2
     needs: deploy-manifest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
