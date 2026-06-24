@@ -21,7 +21,7 @@ jobs:
       new_version: ${{ steps.bump.outputs.NEW_VERSION }}
       new_tag: ${{ steps.bump.outputs.NEW_TAG }}
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -74,7 +74,7 @@ jobs:
     timeout-minutes: 15
     needs: bump-and-tag
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.0
         with:
           ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
@@ -92,7 +92,7 @@ jobs:
     timeout-minutes: 30
     needs: bump-and-tag
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.0
         with:
           ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
@@ -126,7 +126,7 @@ jobs:
     timeout-minutes: 20
     needs: [bump-and-tag, build-and-push]
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.0
         with:
           ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
@@ -143,7 +143,7 @@ jobs:
     timeout-minutes: 15
     needs: [bump-and-tag, build-and-push]
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.0
         with:
           ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
