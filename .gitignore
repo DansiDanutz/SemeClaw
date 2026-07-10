@@ -110,3 +110,6 @@ data/v1/
 
 # Voice Agent Builder — agent definitions are runtime data, never committed
 war_room/voice_agents/
+
+# Digital Assistant — transcripts + memory are personal runtime data
+war_room/assistant/

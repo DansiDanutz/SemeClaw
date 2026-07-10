@@ -13,6 +13,15 @@ All notable changes to SemeClaw will be documented in this file.
   the agent's assigned voice. Writes are bearer-gated via the existing
   `_PROTECTED_WRITE_PATHS` middleware; manifest, INTEGRATION.md, and
   CLAUDE.md document the new surface.
+- Digital Assistant: port of DansiDanutz/DigitalAssistant's core into
+  SemeClaw. New `/assistant` UI and `/api/assistant/*` endpoints —
+  multilingual chat with per-session subject/mission, slash commands
+  (`/lang /subject /remember /recall /call /end`), long-term memory with
+  transcript archiving + LLM summaries, knowledge search over rolling
+  research reports (plus optional `SEMECLAW_VAULT_DIR`), and real
+  outbound phone calls via Twilio `<Gather speech>` webhooks with
+  `X-Twilio-Signature` validation. WhatsApp/Asterisk channels remain in
+  the original repo.
 
 ## [0.8.33] - 2026-05-13
 

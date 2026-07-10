@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Assistant — SemeClaw</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131824; --panel-2: #1a2130; --border: #263043;
+    --text: #e6ebf4; --muted: #8a93a6; --accent: #7c5cff; --accent-2: #2dd4bf;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #10141f, var(--bg));
+  }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .tag { font-size: 12px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  header a { color: var(--accent-2); text-decoration: none; font-size: 13px; margin-left: 12px; }
+  #apiKey {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; width: 190px;
+  }
+  main {
+    flex: 1; display: grid; grid-template-columns: 1fr 320px; gap: 18px;
+    padding: 20px 24px; max-width: 1200px; width: 100%; margin: 0 auto;
+  }
+  @media (max-width: 950px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  #chat {
+    flex: 1; min-height: 420px; max-height: 62vh; overflow-y: auto;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+  }
+  .bubble { max-width: 82%; padding: 9px 13px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; }
+  .bubble.user { align-self: flex-end; background: #2b3a5e; }
+  .bubble.assistant { align-self: flex-start; background: #22304a; border: 1px solid var(--border); }
+  .bubble.sys { align-self: center; color: var(--muted); font-size: 12px; background: none; }
+  #bar { display: flex; gap: 8px; }
+  #input {
+    flex: 1; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 14px;
+  }
+  #input:focus { outline: none; border-color: var(--accent); }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.25); }
+  button.primary { background: linear-gradient(90deg, var(--accent), #5b8cff); border: none; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #micBtn.listening { background: #7f1d1d; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { filter: brightness(1.6); } }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  select, input[type=text] {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
+  .side-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  #memoryBox {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-size: 12px; color: var(--muted); max-height: 180px;
+    overflow-y: auto; white-space: pre-wrap; margin-top: 8px;
+  }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); margin-left: 6px;
+  }
+  .badge.on { color: var(--accent-2); border-color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 <span id="asstName">Assistant</span></h1>
+  <span class="tag">your personal digital assistant · voice + memory + missions</span>
+  <span class="spacer"></span>
+  <input id="apiKey" type="password" placeholder="API key (only if server sets one)">
+  <a href="/voice-builder">🎙️ Voice Builder</a>
+  <a href="/">← War Room</a>
+</header>
+
+<main>
+  <!-- ── Chat ─────────────────────────────────────────────────── -->
+  <section class="panel">
+    <h2>Conversation <span id="langBadge" class="badge"></span><span id="subjBadge" class="badge" style="display:none"></span></h2>
+    <div id="chat"><div class="bubble sys">Say something — or type /help for commands (/subject, /lang, /remember, /recall, /call, /end).</div></div>
+    <div id="bar">
+      <button id="micBtn" onclick="toggleMic()" title="Talk to the assistant">🎤</button>
+      <input id="input" type="text" placeholder="Type a message or /command…">
+      <button class="primary" onclick="sendFromInput()">Send</button>
+    </div>
+    <div class="hint">Replies are spoken aloud with the assistant's voice. Mic uses your browser's speech recognition (Chrome/Edge) in the session language.</div>
+  </section>
+
+  <!-- ── Controls ─────────────────────────────────────────────── -->
+  <aside class="panel">
+    <h2>Session</h2>
+    <label>Language</label>
+    <select id="langSel" onchange="sendText('/lang ' + this.value)"></select>
+    <label>Subject / mission</label>
+    <input id="subjInput" type="text" placeholder="e.g. plan Friday's demo call">
+    <div class="side-actions">
+      <button onclick="setSubject()">🎯 Set subject</button>
+      <button onclick="sendText('/end')">🗄️ End session (archive + summary)</button>
+    </div>
+
+    <h2 style="margin-top:20px">Phone call <span id="callsBadge" class="badge">checking…</span></h2>
+    <label>Number (E.164)</label>
+    <input id="callTo" type="text" placeholder="+40712345678">
+    <div class="side-actions">
+      <button id="callBtn" onclick="startPhoneCall()" disabled>📞 Call via Twilio</button>
+    </div>
+    <div class="hint">The assistant calls the number and holds the conversation about the current subject, in the session language.</div>
+
+    <h2 style="margin-top:20px">Memory</h2>
+    <div class="side-actions">
+      <button onclick="loadMemory()">🧠 Show recent memory</button>
+    </div>
+    <div id="memoryBox" style="display:none"></div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const SESSION_ID = "browser-" + Math.random().toString(36).slice(2, 8);
+let listening = false, recog = null, currentLang = "en";
+const player = new Audio();
+
+$("apiKey").value = localStorage.getItem("semeclaw_api_key") || "";
+$("apiKey").addEventListener("change", () => localStorage.setItem("semeclaw_api_key", $("apiKey").value.trim()));
+function apiFetch(url, opts = {}) {
+  const key = $("apiKey").value.trim();
+  opts.headers = Object.assign({}, opts.headers);
+  if (key) opts.headers["Authorization"] = "Bearer " + key;
+  if (opts.body) opts.headers["Content-Type"] = "application/json";
+  return fetch(url, opts);
+}
+
+function addBubble(cls, text) {
+  const b = document.createElement("div");
+  b.className = "bubble " + cls;
+  b.textContent = text;
+  $("chat").appendChild(b);
+  $("chat").scrollTop = $("chat").scrollHeight;
+  return b;
+}
+
+async function init() {
+  try {
+    const cfg = await (await apiFetch("/api/assistant/config")).json();
+    $("asstName").textContent = cfg.name;
+    document.title = cfg.name + " — Digital Assistant";
+    currentLang = cfg.default_lang || "en";
+    $("langSel").innerHTML = cfg.languages.map(l =>
+      `<option value="${l}" ${l === currentLang ? "selected" : ""}>${l}</option>`).join("");
+    $("langBadge").textContent = "lang: " + currentLang;
+    const cb = $("callsBadge");
+    cb.textContent = cfg.calls_enabled ? "Twilio ready" : "Twilio not configured";
+    cb.classList.toggle("on", cfg.calls_enabled);
+    $("callBtn").disabled = !cfg.calls_enabled;
+  } catch (e) { console.error(e); }
+}
+
+function updateBadges(d) {
+  if (d.lang) { currentLang = d.lang; $("langBadge").textContent = "lang: " + d.lang; $("langSel").value = d.lang; }
+  const sb = $("subjBadge");
+  if (d.subject) { sb.textContent = "🎯 " + d.subject.slice(0, 40); sb.style.display = ""; }
+  else if (d.command) { sb.style.display = "none"; }
+}
+
+async function sendText(text) {
+  if (!text.trim()) return;
+  addBubble("user", text);
+  const thinking = addBubble("sys", "…");
+  try {
+    const r = await apiFetch("/api/assistant/message", {
+      method: "POST",
+      body: JSON.stringify({ session_id: SESSION_ID, text }),
+    });
+    thinking.remove();
+    if (!r.ok) { addBubble("sys", "⚠️ " + ((await r.json()).error || r.status)); return; }
+    const d = await r.json();
+    addBubble("assistant", d.reply);
+    updateBadges(d);
+    if (d.tts) {
+      player.src = d.tts;
+      player.play().catch(() => {});
+    }
+  } catch (e) { thinking.remove(); addBubble("sys", "⚠️ " + e.message); }
+}
+function sendFromInput() {
+  const t = $("input").value.trim();
+  if (!t) return;
+  $("input").value = "";
+  sendText(t);
+}
+$("input").addEventListener("keydown", e => { if (e.key === "Enter") sendFromInput(); });
+
+function setSubject() {
+  const s = $("subjInput").value.trim();
+  if (s) sendText("/subject " + s);
+}
+
+async function startPhoneCall() {
+  const to = $("callTo").value.trim();
+  if (!to) { addBubble("sys", "Enter a number first."); return; }
+  addBubble("sys", "📞 Starting call to " + to + "…");
+  const r = await apiFetch("/api/assistant/call", {
+    method: "POST",
+    body: JSON.stringify({ to, subject: $("subjInput").value.trim() || null, lang: currentLang }),
+  });
+  const d = await r.json();
+  addBubble("sys", r.ok ? "✅ " + d.info : "⚠️ " + (d.error || r.status));
+}
+
+async function loadMemory() {
+  const d = await (await apiFetch("/api/assistant/memory")).json();
+  const box = $("memoryBox");
+  box.style.display = "";
+  box.textContent = d.result || "(memory is empty)";
+}
+
+// ── mic via Web Speech API, follows session language ─────────────
+const SPEECH_LOCALES = { en: "en-US", ro: "ro-RO", fr: "fr-FR", de: "de-DE", es: "es-ES", it: "it-IT", pt: "pt-PT", nl: "nl-NL", ru: "ru-RU", ja: "ja-JP", zh: "zh-CN", ar: "ar-SA" };
+function speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function toggleMic() { listening ? stopMic() : startMic(); }
+function startMic() {
+  if (!speechSupported()) { addBubble("sys", "⚠️ Speech recognition not supported in this browser — type instead."); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recog = new SR();
+  recog.lang = SPEECH_LOCALES[currentLang] || "en-US";
+  recog.interimResults = false;
+  recog.onresult = e => {
+    const text = e.results[e.results.length - 1][0].transcript.trim();
+    if (text) sendText(text);
+  };
+  recog.onend = () => { if (listening) { recog.lang = SPEECH_LOCALES[currentLang] || "en-US"; try { recog.start(); } catch (_) {} } };
+  recog.onerror = ev => { if (ev.error === "not-allowed") { addBubble("sys", "⚠️ Mic permission denied"); stopMic(); } };
+  try { recog.start(); listening = true; $("micBtn").classList.add("listening"); } catch (_) {}
+}
+function stopMic() {
+  listening = false;
+  $("micBtn").classList.remove("listening");
+  if (recog) { try { recog.stop(); } catch (_) {} recog = null; }
+}
+
+window.addEventListener("beforeunload", () => {
+  navigator.sendBeacon && navigator.sendBeacon("/api/assistant/end", new Blob([JSON.stringify({ session_id: SESSION_ID })], { type: "application/json" }));
+});
+
+init();
+</script>
+</body>
+</html>

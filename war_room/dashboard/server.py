@@ -370,6 +370,7 @@ try:
         reports,
         webhooks,
     )
+    from war_room.dashboard.routes import assistant as assistant_routes
     from war_room.dashboard.routes import tasks as tasks_routes
     from war_room.dashboard.routes import telegram as telegram_routes
     from war_room.dashboard.routes import voice_agents as voice_agents_routes
@@ -387,6 +388,7 @@ try:
     app.include_router(tasks_routes.router)
     app.include_router(telegram_routes.router)
     app.include_router(voice_agents_routes.router)
+    app.include_router(assistant_routes.router)
 except Exception as e:
     logger.warning("Router mount skipped (routes may be stubs): %s", e)
 
@@ -548,6 +550,11 @@ _PROTECTED_WRITE_PATHS = (
     "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
     "/api/admin",  # DLQ inspect/replay — fully bearer-gated (incl. GET)
     "/api/voice-agents",  # POST create/update, DELETE, POST {id}/respond
+    # Assistant writes — twilio webhooks excluded (Twilio can't send our bearer;
+    # they validate X-Twilio-Signature instead)
+    "/api/assistant/message",
+    "/api/assistant/end",
+    "/api/assistant/call",
 )
 
 
@@ -2779,6 +2786,9 @@ async def api_agent_manifest():
                 "compound.engineering",  # compound-engineering-plugin integration
                 "voice.agents.builder",  # no-code voice agents (/voice-builder UI)
                 "voice.agents.respond",  # conversational turn with a voice agent
+                "assistant.chat",  # personal digital assistant (/assistant UI)
+                "assistant.memory",  # rolling long-term memory + recall
+                "assistant.calls.twilio",  # real outbound phone calls
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -2816,6 +2826,12 @@ async def api_agent_manifest():
                 "voice_agent_create": "POST /api/voice-agents",
                 "voice_agent_respond": "POST /api/voice-agents/{agent_id}/respond",
                 "voice_agent_voices": "/api/voice-agents/voices",
+                # Digital Assistant — personal assistant (chat + memory + calls)
+                "assistant_ui": "/assistant",
+                "assistant_message": "POST /api/assistant/message",
+                "assistant_end": "POST /api/assistant/end",
+                "assistant_call": "POST /api/assistant/call",
+                "assistant_memory": "/api/assistant/memory?q={query}",
             },
             "auth": {
                 "required_for_writes": auth_required,

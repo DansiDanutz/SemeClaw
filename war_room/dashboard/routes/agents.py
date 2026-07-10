@@ -107,6 +107,9 @@ async def api_agent_manifest():
                 "compound.engineering",
                 "voice.agents.builder",
                 "voice.agents.respond",
+                "assistant.chat",
+                "assistant.memory",
+                "assistant.calls.twilio",
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -142,6 +145,12 @@ async def api_agent_manifest():
                 "voice_agent_create": "POST /api/voice-agents",
                 "voice_agent_respond": "POST /api/voice-agents/{agent_id}/respond",
                 "voice_agent_voices": "/api/voice-agents/voices",
+                # Digital Assistant — personal assistant (chat + memory + calls)
+                "assistant_ui": "/assistant",
+                "assistant_message": "POST /api/assistant/message",
+                "assistant_end": "POST /api/assistant/end",
+                "assistant_call": "POST /api/assistant/call",
+                "assistant_memory": "/api/assistant/memory?q={query}",
             },
             "auth": {
                 "required_for_writes": auth_required,
