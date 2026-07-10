@@ -246,9 +246,7 @@ async def api_voice_agents_create(request: Request):
 
     voice = _clip(data.get("voice"), 40) or "David"
     if voice not in BUILDER_VOICES:
-        return JSONResponse(
-            {"error": f"unknown voice '{voice}'", "available": list(BUILDER_VOICES)}, status_code=400
-        )
+        return JSONResponse({"error": f"unknown voice '{voice}'", "available": list(BUILDER_VOICES)}, status_code=400)
 
     agent_id = _slugify(name)
     now = datetime.now(timezone.utc).isoformat()

@@ -82,17 +82,13 @@ def test_create_get_list_delete_roundtrip(client, tenant_headers):
 
 def test_create_rejects_missing_name_and_bad_voice(client, tenant_headers):
     assert client.post("/api/voice-agents", json={}, headers=tenant_headers).status_code == 400
-    r = client.post(
-        "/api/voice-agents", json={"name": "X", "voice": "NotAVoice"}, headers=tenant_headers
-    )
+    r = client.post("/api/voice-agents", json={"name": "X", "voice": "NotAVoice"}, headers=tenant_headers)
     assert r.status_code == 400
     assert "available" in r.json()
 
 
 def test_respond_unknown_agent_404(client, tenant_headers):
-    r = client.post(
-        "/api/voice-agents/ghost/respond", json={"message": "hi"}, headers=tenant_headers
-    )
+    r = client.post("/api/voice-agents/ghost/respond", json={"message": "hi"}, headers=tenant_headers)
     assert r.status_code == 404
 
 
@@ -128,9 +124,7 @@ def test_respond_returns_reply_and_tts_url(client, tenant_headers):
 def test_respond_503_when_all_models_down(client, tenant_headers):
     from war_room.dashboard.routes import voice_agents as va
 
-    client.post(
-        "/api/voice-agents", json={"name": "Down Bot", "voice": "David"}, headers=tenant_headers
-    )
+    client.post("/api/voice-agents", json={"name": "Down Bot", "voice": "David"}, headers=tenant_headers)
 
     async def dead(model, messages):
         return None
