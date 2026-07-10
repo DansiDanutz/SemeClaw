@@ -1,6 +1,6 @@
 [project]
 name = "semeclaw"
-version = "0.8.91"
+version = "0.8.92"
 description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
