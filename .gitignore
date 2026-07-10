@@ -107,3 +107,6 @@ nervix_platform/data/
 # v1 runtime state (tenants store, audit log, DLQ replay log, webhook DLQ).
 # The directory layout is created on startup by war_room.v1.storage.
 data/v1/
+
+# Voice Agent Builder — agent definitions are runtime data, never committed
+war_room/voice_agents/

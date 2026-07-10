@@ -105,6 +105,8 @@ async def api_agent_manifest():
                 "meeting.agents",
                 "meeting.inject",
                 "compound.engineering",
+                "voice.agents.builder",
+                "voice.agents.respond",
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -135,6 +137,11 @@ async def api_agent_manifest():
                 "skill_detail": "/api/agents/skills/{skill_id}",
                 "meeting_agents": "/api/meeting/agents?name={name}",
                 "inject": "POST /api/meeting/inject",
+                "voice_builder_ui": "/voice-builder",
+                "voice_agents": "/api/voice-agents",
+                "voice_agent_create": "POST /api/voice-agents",
+                "voice_agent_respond": "POST /api/voice-agents/{agent_id}/respond",
+                "voice_agent_voices": "/api/voice-agents/voices",
             },
             "auth": {
                 "required_for_writes": auth_required,

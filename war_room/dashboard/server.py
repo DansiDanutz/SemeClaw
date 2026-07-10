@@ -372,6 +372,7 @@ try:
     )
     from war_room.dashboard.routes import tasks as tasks_routes
     from war_room.dashboard.routes import telegram as telegram_routes
+    from war_room.dashboard.routes import voice_agents as voice_agents_routes
 
     app.include_router(health.router)
     app.include_router(embed.router)
@@ -385,6 +386,7 @@ try:
     app.include_router(advertiser.router)
     app.include_router(tasks_routes.router)
     app.include_router(telegram_routes.router)
+    app.include_router(voice_agents_routes.router)
 except Exception as e:
     logger.warning("Router mount skipped (routes may be stubs): %s", e)
 
@@ -545,6 +547,7 @@ _PROTECTED_WRITE_PATHS = (
     "/api/reports",
     "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
     "/api/admin",  # DLQ inspect/replay — fully bearer-gated (incl. GET)
+    "/api/voice-agents",  # POST create/update, DELETE, POST {id}/respond
 )
 
 
@@ -2774,6 +2777,8 @@ async def api_agent_manifest():
                 "meeting.agents",  # discover agents in a specific meeting
                 "meeting.inject",  # human injects requirement/question mid-meeting
                 "compound.engineering",  # compound-engineering-plugin integration
+                "voice.agents.builder",  # no-code voice agents (/voice-builder UI)
+                "voice.agents.respond",  # conversational turn with a voice agent
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -2805,6 +2810,12 @@ async def api_agent_manifest():
                 "skill_detail": "/api/agents/skills/{skill_id}",
                 "meeting_agents": "/api/meeting/agents?name={name}",
                 "inject": "POST /api/meeting/inject",
+                # Voice Agent Builder — no-code voice agents
+                "voice_builder_ui": "/voice-builder",
+                "voice_agents": "/api/voice-agents",
+                "voice_agent_create": "POST /api/voice-agents",
+                "voice_agent_respond": "POST /api/voice-agents/{agent_id}/respond",
+                "voice_agent_voices": "/api/voice-agents/voices",
             },
             "auth": {
                 "required_for_writes": auth_required,
