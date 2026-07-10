@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.9.0] - 2026-07-10
+
+### Added
+
+- Voice Agent Builder: no-code voice agents with browser test calls.
+  New `/voice-builder` UI plus `/api/voice-agents` CRUD and
+  `/api/voice-agents/{id}/respond` chat-turn endpoint that runs the
+  free-model waterfall and returns a ready-to-play `/api/tts` URL in
+  the agent's assigned voice. Writes are bearer-gated via the existing
+  `_PROTECTED_WRITE_PATHS` middleware; manifest, INTEGRATION.md, and
+  CLAUDE.md document the new surface.
+
 ## [0.8.33] - 2026-05-13
 
 ### Changed
