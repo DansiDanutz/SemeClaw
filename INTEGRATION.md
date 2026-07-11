@@ -233,6 +233,13 @@ c.post("/api/assistant/call", json={"to": "+40712345678",
   `SEMECLAW_VAULT_DIR` at any folder of `.md` notes (e.g. a synced Obsidian
   vault) to extend it. WhatsApp and Asterisk channels stay in the original
   repo — they need a linked device / PBX on the host.
+- Durability: active sessions are persisted under `war_room/assistant/sessions/`
+  and restored after a server restart; `/end` archives the transcript and
+  removes the persisted state.
+- Rate limiting: `POST /api/assistant/message` and
+  `POST /api/voice-agents/{id}/respond` are limited to
+  `SEMECLAW_RATE_LIMIT_PER_MIN` requests per minute per tenant+IP
+  (default 30; `0` disables). Exceeding it returns `429`.
 
 ---
 

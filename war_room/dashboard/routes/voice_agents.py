@@ -23,7 +23,14 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from war_room.dashboard.routes.deps import WAR_ROOM_DIR, _cost_bump, _tenant_id, logger
+from war_room.dashboard.routes.deps import (
+    WAR_ROOM_DIR,
+    _cost_bump,
+    _tenant_id,
+    logger,
+    rate_limit_key,
+    rate_limit_ok,
+)
 
 try:
     import httpx
@@ -308,6 +315,8 @@ async def api_voice_agents_respond(request: Request, agent_id: str):
     message = _clip(data.get("message"), 2000)
     if not message:
         return JSONResponse({"error": "message required"}, status_code=400)
+    if not rate_limit_ok(rate_limit_key(request, "voice-agents.respond", tenant)):
+        return JSONResponse({"error": "rate limit exceeded — try again in a minute"}, status_code=429)
 
     messages = [{"role": "system", "content": _build_system_prompt(agent)}]
     history = data.get("history") or []

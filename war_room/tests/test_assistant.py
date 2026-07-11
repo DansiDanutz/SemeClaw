@@ -28,11 +28,15 @@ def client():
 def sandbox(tmp_path):
     """Isolated storage + open writes + a fresh session table per test."""
     from war_room.dashboard.routes import assistant as ast
+    from war_room.dashboard.routes import deps
 
     with (
         patch.object(ast, "TRANSCRIPTS_DIR", tmp_path / "transcripts"),
         patch.object(ast, "MEMORY_FILE", tmp_path / "memory" / "summaries.md"),
+        patch.object(ast, "SESSIONS_DIR", tmp_path / "sessions"),
         patch.object(ast, "_sessions", {}),
+        patch.object(deps, "SEMECLAW_RATE_LIMIT_PER_MIN", 0),
+        patch.object(deps, "_RATE_BUCKETS", {}),
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
     ):
         yield ast
@@ -277,3 +281,78 @@ def test_inbound_rejects_bad_signature(client, sandbox):
             headers={"X-Twilio-Signature": "bogus"},
         )
     assert r.status_code == 403
+
+
+def test_sessions_survive_restart(client, sandbox):
+    """Active conversations persist to disk and are restored after a restart."""
+    with (
+        patch.object(sandbox, "_chat_openrouter", _fake_brain),
+        patch.object(sandbox, "_chat_ollama", _dead_brain),
+    ):
+        client.post("/api/assistant/message", json={"session_id": "keep", "text": "/lang ro"})
+        client.post("/api/assistant/message", json={"session_id": "keep", "text": "remember the demo"})
+
+    # Simulate a server restart: in-memory table wiped, disk remains
+    sandbox._sessions.clear()
+
+    captured = {}
+
+    async def spy(model, messages):
+        captured["messages"] = messages
+        return "Da."
+
+    with (
+        patch.object(sandbox, "_chat_openrouter", spy),
+        patch.object(sandbox, "_chat_ollama", _dead_brain),
+    ):
+        r = client.post("/api/assistant/message", json={"session_id": "keep", "text": "salut"})
+    assert r.status_code == 200
+    assert r.json()["lang"] == "ro"  # language restored from disk
+    history = [m["content"] for m in captured["messages"]]
+    assert "remember the demo" in history  # prior turns restored
+
+    # /end works after the restart too, and removes the persisted file
+    sandbox._sessions.clear()
+    with (
+        patch.object(sandbox, "_chat_openrouter", _fake_brain),
+        patch.object(sandbox, "_chat_ollama", _dead_brain),
+    ):
+        r = client.post("/api/assistant/end", json={"session_id": "keep"})
+    assert r.status_code == 200
+    assert not list(sandbox.SESSIONS_DIR.glob("*.json"))
+
+
+def test_message_rate_limited(client, sandbox):
+    from war_room.dashboard.routes import deps
+
+    with (
+        patch.object(deps, "SEMECLAW_RATE_LIMIT_PER_MIN", 2),
+        patch.object(deps, "_RATE_BUCKETS", {}),
+        patch.object(sandbox, "_chat_openrouter", _fake_brain),
+        patch.object(sandbox, "_chat_ollama", _dead_brain),
+    ):
+        assert client.post("/api/assistant/message", json={"text": "1"}).status_code == 200
+        assert client.post("/api/assistant/message", json={"text": "2"}).status_code == 200
+        r = client.post("/api/assistant/message", json={"text": "3"})
+    assert r.status_code == 429
+    assert "rate limit" in r.json()["error"]
+
+
+def test_voice_agent_respond_rate_limited(client, sandbox, tmp_path):
+    from war_room.dashboard.routes import deps
+    from war_room.dashboard.routes import voice_agents as va
+
+    async def agent_brain(model, messages):
+        return "Hi."
+
+    with (
+        patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
+        patch.object(deps, "SEMECLAW_RATE_LIMIT_PER_MIN", 1),
+        patch.object(deps, "_RATE_BUCKETS", {}),
+        patch.object(va, "_chat_openrouter", agent_brain),
+        patch.object(va, "_chat_ollama", _dead_brain),
+    ):
+        client.post("/api/voice-agents", json={"name": "RL Bot", "voice": "David"})
+        assert client.post("/api/voice-agents/rl-bot/respond", json={"message": "a"}).status_code == 200
+        r = client.post("/api/voice-agents/rl-bot/respond", json={"message": "b"})
+    assert r.status_code == 429

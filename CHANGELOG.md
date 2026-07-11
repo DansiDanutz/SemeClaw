@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.11.0] - 2026-07-11
+
+### Added
+
+- Assistant session persistence: active conversations are written to
+  `war_room/assistant/sessions/` and restored after a server restart;
+  `/end` archives the transcript and removes the persisted state.
+- Rate limiting on LLM-consuming endpoints (`/api/assistant/message`,
+  `/api/voice-agents/{id}/respond`): `SEMECLAW_RATE_LIMIT_PER_MIN`
+  requests per minute per tenant+IP (default 30, `0` disables), 429 on
+  excess.
+
 ## [0.10.0] - 2026-07-11
 
 ### Added
