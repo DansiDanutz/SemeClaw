@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Agent Builder — SemeClaw</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131824;
+    --panel-2: #1a2130;
+    --border: #263043;
+    --text: #e6ebf4;
+    --muted: #8a93a6;
+    --accent: #7c5cff;
+    --accent-2: #2dd4bf;
+    --danger: #f66;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #10141f, var(--bg));
+  }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .tag {
+    font-size: 12px; color: var(--muted);
+  }
+  header .spacer { flex: 1; }
+  header a { color: var(--accent-2); text-decoration: none; font-size: 13px; }
+  #apiKey {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; width: 200px;
+  }
+  main {
+    display: grid; grid-template-columns: 280px 1fr 380px; gap: 18px;
+    padding: 20px 24px; max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 14px; }
+  /* agent list */
+  .agent-card {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s;
+  }
+  .agent-card:hover, .agent-card.active { border-color: var(--accent); }
+  .agent-card .name { font-weight: 600; }
+  .agent-card .voice { font-size: 12px; color: var(--muted); }
+  .agent-card .row { display: flex; gap: 8px; margin-top: 8px; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+    transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.25); }
+  button.primary {
+    background: linear-gradient(90deg, var(--accent), #5b8cff);
+    border: none; font-weight: 600;
+  }
+  button.call { background: linear-gradient(90deg, #16a34a, var(--accent-2)); border: none; font-weight: 600; }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  /* form */
+  label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 5px; }
+  input[type=text], select, textarea {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  /* call panel */
+  #transcript {
+    height: 380px; overflow-y: auto; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .bubble { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
+  .bubble.user { align-self: flex-end; background: #2b3a5e; }
+  .bubble.agent { align-self: flex-start; background: #22304a; border: 1px solid var(--border); }
+  .bubble.sys { align-self: center; color: var(--muted); font-size: 12px; background: none; }
+  #callBar { display: flex; gap: 8px; }
+  #callInput { flex: 1; }
+  #micBtn.listening { background: #7f1d1d; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { filter: brightness(1.6); } }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 6px; }
+  .status-dot.live { background: #22c55e; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ Voice Agent Builder</h1>
+  <span class="tag">no-code voice agents · build in under 2 minutes · call from your browser</span>
+  <span class="spacer"></span>
+  <input id="apiKey" type="password" placeholder="API key (only if server sets one)" title="Sent as Bearer token on writes. Stored in this browser only.">
+  <a href="/assistant">🧠 Assistant</a>
+  <a href="/">← War Room</a>
+</header>
+
+<main>
+  <!-- ── Agent roster ─────────────────────────────────────────── -->
+  <section class="panel">
+    <h2>Your agents</h2>
+    <div id="agentList"><div class="empty">No agents yet — build one →</div></div>
+    <button class="primary" style="width:100%" onclick="newAgent()">＋ New agent</button>
+  </section>
+
+  <!-- ── Builder form ─────────────────────────────────────────── -->
+  <section class="panel">
+    <h2 id="formTitle">Build an agent</h2>
+    <label>Name *</label>
+    <input type="text" id="fName" placeholder="e.g. Front Desk, Pizza Line, Crypto Concierge">
+    <label>Voice</label>
+    <select id="fVoice"></select>
+    <label>Greeting</label>
+    <input type="text" id="fGreeting" placeholder="Hi, you've reached … How can I help?">
+    <div class="hint">Spoken as soon as the call connects.</div>
+    <label>Persona / instructions</label>
+    <textarea id="fPersona" rows="4" placeholder="Who is this agent? Tone, job, personality. e.g. 'You are the friendly booking assistant for Dan's Lab. You help callers schedule demos.'"></textarea>
+    <label>Knowledge (optional)</label>
+    <textarea id="fKnowledge" rows="5" placeholder="Paste FAQs, price lists, opening hours — anything the agent should answer from."></textarea>
+    <label>Guardrails (optional)</label>
+    <textarea id="fGuardrails" rows="3" placeholder="Hard limits. e.g. 'Never quote prices not in the knowledge base. Never discuss competitors.'"></textarea>
+    <div style="display:flex; gap:10px; margin-top:16px">
+      <button class="primary" onclick="saveAgent()">💾 Save agent</button>
+      <span id="saveMsg" class="hint" style="align-self:center"></span>
+    </div>
+  </section>
+
+  <!-- ── Browser call ─────────────────────────────────────────── -->
+  <section class="panel">
+    <h2><span id="callDot" class="status-dot"></span>Test call <span id="callWith" style="text-transform:none;color:var(--text)"></span></h2>
+    <div id="transcript"><div class="bubble sys">Select an agent and press 📞 Call to talk to it.</div></div>
+    <div id="callBar">
+      <button id="callBtn" class="call" onclick="toggleCall()" disabled>📞 Call</button>
+      <button id="micBtn" onclick="toggleMic()" disabled title="Hold a conversation by voice">🎤</button>
+      <input type="text" id="callInput" placeholder="…or type and press Enter" disabled>
+    </div>
+    <div class="hint" style="margin-top:8px">Voice input uses your browser's speech recognition (Chrome/Edge). Replies are spoken with the agent's voice via the SemeClaw TTS pipeline.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let agents = [], selected = null, inCall = false, history = [], recog = null, listening = false;
+const player = new Audio();
+
+// ── auth-aware fetch ─────────────────────────────────────────────
+$("apiKey").value = localStorage.getItem("semeclaw_api_key") || "";
+$("apiKey").addEventListener("change", () => localStorage.setItem("semeclaw_api_key", $("apiKey").value.trim()));
+function apiFetch(url, opts = {}) {
+  const key = $("apiKey").value.trim();
+  opts.headers = Object.assign({}, opts.headers);
+  if (key) opts.headers["Authorization"] = "Bearer " + key;
+  if (opts.body) opts.headers["Content-Type"] = "application/json";
+  return fetch(url, opts);
+}
+
+// ── voices + roster ──────────────────────────────────────────────
+async function loadVoices() {
+  try {
+    const r = await apiFetch("/api/voice-agents/voices");
+    const d = await r.json();
+    $("fVoice").innerHTML = d.voices.map(v =>
+      `<option value="${v.speaker}">${v.speaker} — ${v.description}</option>`).join("");
+  } catch (e) { console.error(e); }
+}
+async function loadAgents() {
+  try {
+    const r = await apiFetch("/api/voice-agents");
+    const d = await r.json();
+    agents = d.agents || [];
+    renderList();
+  } catch (e) { console.error(e); }
+}
+function renderList() {
+  const box = $("agentList");
+  if (!agents.length) { box.innerHTML = '<div class="empty">No agents yet — build one →</div>'; return; }
+  box.innerHTML = agents.map(a => `
+    <div class="agent-card ${selected && selected.id === a.id ? "active" : ""}" onclick="selectAgent('${a.id}')">
+      <div class="name">${esc(a.name)}</div>
+      <div class="voice">🗣️ ${esc(a.voice)}</div>
+      <div class="row">
+        <button onclick="event.stopPropagation(); selectAgent('${a.id}', true)">📞 Call</button>
+        <button class="danger" onclick="event.stopPropagation(); deleteAgent('${a.id}')">✕</button>
+      </div>
+    </div>`).join("");
+}
+function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+// ── builder ──────────────────────────────────────────────────────
+function newAgent() {
+  selected = null;
+  ["fName","fGreeting","fPersona","fKnowledge","fGuardrails"].forEach(id => $(id).value = "");
+  $("formTitle").textContent = "Build an agent";
+  $("callBtn").disabled = true;
+  renderList();
+}
+function selectAgent(id, andCall = false) {
+  selected = agents.find(a => a.id === id) || null;
+  if (!selected) return;
+  $("fName").value = selected.name;
+  $("fVoice").value = selected.voice;
+  $("fGreeting").value = selected.greeting;
+  $("fPersona").value = selected.persona;
+  $("fKnowledge").value = selected.knowledge || "";
+  $("fGuardrails").value = selected.guardrails || "";
+  $("formTitle").textContent = "Edit: " + selected.name;
+  $("callBtn").disabled = false;
+  $("callWith").textContent = "· " + selected.name;
+  renderList();
+  if (andCall && !inCall) toggleCall();
+}
+async function saveAgent() {
+  const name = $("fName").value.trim();
+  if (!name) { $("saveMsg").textContent = "Name is required"; return; }
+  $("saveMsg").textContent = "Saving…";
+  const body = JSON.stringify({
+    name,
+    voice: $("fVoice").value,
+    greeting: $("fGreeting").value.trim(),
+    persona: $("fPersona").value.trim(),
+    knowledge: $("fKnowledge").value.trim(),
+    guardrails: $("fGuardrails").value.trim(),
+  });
+  const r = await apiFetch("/api/voice-agents", { method: "POST", body });
+  if (!r.ok) { $("saveMsg").textContent = "Error: " + ((await r.json()).error || r.status); return; }
+  const agent = await r.json();
+  $("saveMsg").textContent = "Saved ✓ — press 📞 Call to try it";
+  await loadAgents();
+  selectAgent(agent.id);
+}
+async function deleteAgent(id) {
+  if (!confirm("Delete this agent?")) return;
+  await apiFetch("/api/voice-agents/" + encodeURIComponent(id), { method: "DELETE" });
+  if (selected && selected.id === id) { endCall(); newAgent(); }
+  await loadAgents();
+}
+
+// ── browser call ─────────────────────────────────────────────────
+function addBubble(cls, text) {
+  const t = $("transcript");
+  const b = document.createElement("div");
+  b.className = "bubble " + cls;
+  b.textContent = text;
+  t.appendChild(b);
+  t.scrollTop = t.scrollHeight;
+}
+function speak(url) {
+  return new Promise(res => {
+    player.src = url;
+    player.onended = res;
+    player.onerror = res;
+    player.play().catch(res);
+  });
+}
+function toggleCall() { inCall ? endCall() : startCall(); }
+async function startCall() {
+  if (!selected) return;
+  inCall = true; history = [];
+  $("transcript").innerHTML = "";
+  $("callBtn").textContent = "📵 Hang up";
+  $("callDot").classList.add("live");
+  $("micBtn").disabled = !speechSupported();
+  $("callInput").disabled = false;
+  $("callInput").focus();
+  addBubble("sys", "☎️ Connected to " + selected.name);
+  const greeting = selected.greeting || "Hello!";
+  addBubble("agent", greeting);
+  history.push({ role: "assistant", content: greeting });
+  await speak("/api/tts?text=" + encodeURIComponent(greeting) + "&speaker=" + encodeURIComponent(selected.voice) + "&lang=en");
+}
+function endCall() {
+  inCall = false;
+  stopMic();
+  player.pause();
+  $("callBtn").textContent = "📞 Call";
+  $("callDot").classList.remove("live");
+  $("micBtn").disabled = true;
+  $("callInput").disabled = true;
+  addBubble("sys", "Call ended.");
+}
+async function sendTurn(text) {
+  if (!inCall || !text.trim()) return;
+  addBubble("user", text);
+  const payload = JSON.stringify({ message: text, history });
+  history.push({ role: "user", content: text });
+  const thinking = document.createElement("div");
+  thinking.className = "bubble sys"; thinking.textContent = "…";
+  $("transcript").appendChild(thinking);
+  try {
+    const r = await apiFetch("/api/voice-agents/" + encodeURIComponent(selected.id) + "/respond",
+      { method: "POST", body: payload });
+    thinking.remove();
+    if (!r.ok) { addBubble("sys", "⚠️ " + ((await r.json()).error || r.status)); return; }
+    const d = await r.json();
+    addBubble("agent", d.reply);
+    history.push({ role: "assistant", content: d.reply });
+    await speak(d.tts);
+  } catch (e) {
+    thinking.remove();
+    addBubble("sys", "⚠️ " + e.message);
+  }
+}
+$("callInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && $("callInput").value.trim()) {
+    const t = $("callInput").value.trim();
+    $("callInput").value = "";
+    sendTurn(t);
+  }
+});
+
+// ── mic via Web Speech API ───────────────────────────────────────
+function speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function toggleMic() { listening ? stopMic() : startMic(); }
+function startMic() {
+  if (!speechSupported() || !inCall) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recog = new SR();
+  recog.lang = "en-US";
+  recog.interimResults = false;
+  recog.onresult = e => {
+    const text = e.results[e.results.length - 1][0].transcript.trim();
+    if (text) sendTurn(text);
+  };
+  recog.onend = () => { if (listening && inCall) { try { recog.start(); } catch (_) {} } };
+  recog.onerror = ev => { if (ev.error === "not-allowed") { addBubble("sys", "⚠️ Mic permission denied"); stopMic(); } };
+  try { recog.start(); listening = true; $("micBtn").classList.add("listening"); } catch (_) {}
+}
+function stopMic() {
+  listening = false;
+  $("micBtn").classList.remove("listening");
+  if (recog) { try { recog.stop(); } catch (_) {} recog = null; }
+}
+
+loadVoices();
+loadAgents();
+</script>
+</body>
+</html>

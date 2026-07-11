@@ -176,6 +176,10 @@ _PROTECTED_WRITE_PATHS = (
     "/api/agent/run-complete",
     "/api/voices/clone",
     "/api/voices/map",
+    "/api/voice-agents",
+    "/api/assistant/message",
+    "/api/assistant/end",
+    "/api/assistant/call",
     "/api/billing/report-usage",
     "/api/alert-dan",
 )

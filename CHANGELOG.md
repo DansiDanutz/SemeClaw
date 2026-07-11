@@ -2,6 +2,27 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.9.0] - 2026-07-10
+
+### Added
+
+- Voice Agent Builder: no-code voice agents with browser test calls.
+  New `/voice-builder` UI plus `/api/voice-agents` CRUD and
+  `/api/voice-agents/{id}/respond` chat-turn endpoint that runs the
+  free-model waterfall and returns a ready-to-play `/api/tts` URL in
+  the agent's assigned voice. Writes are bearer-gated via the existing
+  `_PROTECTED_WRITE_PATHS` middleware; manifest, INTEGRATION.md, and
+  CLAUDE.md document the new surface.
+- Digital Assistant: port of DansiDanutz/DigitalAssistant's core into
+  SemeClaw. New `/assistant` UI and `/api/assistant/*` endpoints —
+  multilingual chat with per-session subject/mission, slash commands
+  (`/lang /subject /remember /recall /call /end`), long-term memory with
+  transcript archiving + LLM summaries, knowledge search over rolling
+  research reports (plus optional `SEMECLAW_VAULT_DIR`), and real
+  outbound phone calls via Twilio `<Gather speech>` webhooks with
+  `X-Twilio-Signature` validation. WhatsApp/Asterisk channels remain in
+  the original repo.
+
 ## [0.8.33] - 2026-05-13
 
 ### Changed

@@ -50,6 +50,10 @@ SemeClaw/
 - `POST /api/meeting/finalize` — append Q&A + verdict pass to the source report
 - `POST /api/meeting/pin` / `/unpin`
 - `GET  /api/tts?text=&speaker=&lang=en`
+- `GET  /voice-builder` — no-code Voice Agent Builder UI
+- `GET/POST /api/voice-agents` + `POST /api/voice-agents/{id}/respond` — voice agent CRUD + chat turn
+- `GET  /assistant` — Digital Assistant UI (personal assistant: memory, missions, Twilio calls)
+- `POST /api/assistant/message` / `/end` / `/call` + `GET /api/assistant/memory?q=` — assistant API
 - `GET  /embed?meeting=&v=1&theme=dark` — iframe-ready page
 - `GET  /embed.js` — `<script>`-tag JS SDK
 
