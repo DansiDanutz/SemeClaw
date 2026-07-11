@@ -2789,6 +2789,7 @@ async def api_agent_manifest():
                 "assistant.chat",  # personal digital assistant (/assistant UI)
                 "assistant.memory",  # rolling long-term memory + recall
                 "assistant.calls.twilio",  # real outbound phone calls
+                "voice.agents.inbound",  # voice agents answer inbound Twilio calls
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -2832,6 +2833,7 @@ async def api_agent_manifest():
                 "assistant_end": "POST /api/assistant/end",
                 "assistant_call": "POST /api/assistant/call",
                 "assistant_memory": "/api/assistant/memory?q={query}",
+                "voice_agent_inbound": "POST /api/assistant/twilio/inbound/{agent_id}",
             },
             "auth": {
                 "required_for_writes": auth_required,

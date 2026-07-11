@@ -43,6 +43,8 @@ from war_room.dashboard.routes.deps import (
     logger,
 )
 from war_room.dashboard.routes.voice_agents import _VA_MODELS, _chat_ollama, _chat_openrouter
+from war_room.dashboard.routes.voice_agents import _build_system_prompt as _build_agent_prompt
+from war_room.dashboard.routes.voice_agents import _load_agent as _load_voice_agent
 
 try:
     import httpx
@@ -291,15 +293,32 @@ async def _run_waterfall(messages: list[dict]) -> str | None:
     return None
 
 
+def _agent_system_prompt(session: dict) -> str | None:
+    """If this session is bound to a voice agent (inbound call), use the
+    agent's persona/knowledge/guardrails instead of the assistant brain."""
+    agent_id = session.get("agent_id")
+    if not agent_id:
+        return None
+    agent = _load_voice_agent(session["tenant"], agent_id)
+    if not agent:
+        return None
+    return _build_agent_prompt(agent)
+
+
 async def think(session: dict, user_text: str) -> str | None:
-    vault_context = search_knowledge(user_text, 3)
-    memory_context = recent_memory(2000)
+    agent_prompt = _agent_system_prompt(session)
+    if agent_prompt:
+        system = agent_prompt
+    else:
+        vault_context = search_knowledge(user_text, 3)
+        memory_context = recent_memory(2000)
+        system = _system_prompt(session, vault_context, memory_context)
     history = [
         {"role": "assistant" if m["role"] == "assistant" else "user", "content": m["content"]}
         for m in session["messages"][-_MAX_TURNS_IN_PROMPT:]
     ]
     messages = [
-        {"role": "system", "content": _system_prompt(session, vault_context, memory_context)},
+        {"role": "system", "content": system},
         *history,
         {"role": "user", "content": user_text},
     ]
@@ -483,6 +502,40 @@ async def twilio_status(request: Request, tenant: str = "default"):
         if result:
             logger.info("assistant call archived: %s", result["file"])
     return JSONResponse({"ok": True})
+
+
+@router.post("/api/assistant/twilio/inbound/{agent_id}")
+async def twilio_inbound(request: Request, agent_id: str, lang: str = "en", tenant: str = "default"):
+    """Answer an INCOMING call with a voice agent built in /voice-builder.
+
+    Point a Twilio number's Voice webhook at
+    ``{PUBLIC_URL}/api/assistant/twilio/inbound/{agent_id}`` and the agent
+    picks up: it speaks its greeting, then holds the conversation with its
+    persona, knowledge, and guardrails. Follow-up turns reuse the standard
+    /api/assistant/twilio/turn loop (the session carries the agent binding).
+    """
+    form = dict(await request.form())
+    if not _twilio_signature_ok(request, form):
+        return JSONResponse({"error": "bad signature"}, status_code=403)
+    agent = _load_voice_agent(tenant, agent_id)
+    if not agent:
+        # Twilio expects 200 + TwiML; speak the failure instead of erroring
+        return Response(
+            content=(
+                '<?xml version="1.0" encoding="UTF-8"?><Response>'
+                "<Say>Sorry, this line is not configured. Goodbye.</Say><Hangup/></Response>"
+            ),
+            media_type="text/xml",
+        )
+    sid = form.get("CallSid", "unknown")
+    session = get_session(tenant, sid, "call", form.get("From", ""))
+    session["agent_id"] = agent["id"]
+    session["is_owner"] = False
+    session["lang"] = (lang or "en").lower()
+    session["subject"] = session["subject"] or f"Answering an inbound call as {agent['name']}"
+    greeting = agent.get("greeting") or f"Hello, you've reached {agent['name']}."
+    add_turn(session, "assistant", greeting)
+    return Response(content=_twiml_gather(session, greeting), media_type="text/xml")
 
 
 # ---------------------------------------------------------------------------

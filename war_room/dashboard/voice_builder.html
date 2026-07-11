@@ -138,6 +138,11 @@
       <button class="primary" onclick="saveAgent()">💾 Save agent</button>
       <span id="saveMsg" class="hint" style="align-self:center"></span>
     </div>
+    <div id="inboundBox" style="display:none; margin-top:14px">
+      <label>📲 Inbound phone webhook</label>
+      <input type="text" id="inboundUrl" readonly onclick="this.select()">
+      <div class="hint">Set this as the Voice webhook of a Twilio number and this agent answers incoming calls with its persona, knowledge, and guardrails.</div>
+    </div>
   </section>
 
   <!-- ── Browser call ─────────────────────────────────────────── -->
@@ -208,6 +213,7 @@ function newAgent() {
   ["fName","fGreeting","fPersona","fKnowledge","fGuardrails"].forEach(id => $(id).value = "");
   $("formTitle").textContent = "Build an agent";
   $("callBtn").disabled = true;
+  $("inboundBox").style.display = "none";
   renderList();
 }
 function selectAgent(id, andCall = false) {
@@ -220,6 +226,8 @@ function selectAgent(id, andCall = false) {
   $("fKnowledge").value = selected.knowledge || "";
   $("fGuardrails").value = selected.guardrails || "";
   $("formTitle").textContent = "Edit: " + selected.name;
+  $("inboundBox").style.display = "";
+  $("inboundUrl").value = location.origin + "/api/assistant/twilio/inbound/" + encodeURIComponent(selected.id);
   $("callBtn").disabled = false;
   $("callWith").textContent = "· " + selected.name;
   renderList();

@@ -2,6 +2,16 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.0] - 2026-07-11
+
+### Added
+
+- Inbound phone calls answered by voice agents: point a Twilio number's
+  Voice webhook at `POST /api/assistant/twilio/inbound/{agent_id}` and the
+  agent built in `/voice-builder` picks up with its greeting, persona,
+  knowledge, and guardrails. Follow-up turns reuse the existing
+  `<Gather speech>` loop; the builder UI shows each agent's webhook URL.
+
 ## [0.9.0] - 2026-07-10
 
 ### Added
