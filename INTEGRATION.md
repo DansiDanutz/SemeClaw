@@ -223,6 +223,12 @@ c.post("/api/assistant/call", json={"to": "+40712345678",
 - Twilio webhooks (`/api/assistant/twilio/answer|turn|status`) drive the call
   loop with `<Gather input="speech">`; they are excluded from bearer auth and
   validate `X-Twilio-Signature` instead.
+- **Inbound calls answered by a voice agent**: point a Twilio number's Voice
+  webhook at `POST {PUBLIC_URL}/api/assistant/twilio/inbound/{agent_id}`
+  (optional `?lang=` and `?tenant=`) and the agent built in `/voice-builder`
+  picks up — it speaks its greeting, then holds the conversation with its own
+  persona, knowledge, and guardrails. The builder UI shows this URL for each
+  saved agent.
 - Knowledge: the assistant searches `war_room/research/` reports; point
   `SEMECLAW_VAULT_DIR` at any folder of `.md` notes (e.g. a synced Obsidian
   vault) to extend it. WhatsApp and Asterisk channels stay in the original

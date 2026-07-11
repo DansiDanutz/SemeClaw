@@ -110,6 +110,7 @@ async def api_agent_manifest():
                 "assistant.chat",
                 "assistant.memory",
                 "assistant.calls.twilio",
+                "voice.agents.inbound",
             ],
             "endpoints": {
                 "health": "/api/agent/health",
@@ -151,6 +152,7 @@ async def api_agent_manifest():
                 "assistant_end": "POST /api/assistant/end",
                 "assistant_call": "POST /api/assistant/call",
                 "assistant_memory": "/api/assistant/memory?q={query}",
+                "voice_agent_inbound": "POST /api/assistant/twilio/inbound/{agent_id}",
             },
             "auth": {
                 "required_for_writes": auth_required,

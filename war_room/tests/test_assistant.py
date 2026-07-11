@@ -207,3 +207,73 @@ def test_message_bearer_gated_when_key_set(client, sandbox):
     with patch("war_room.dashboard.server.SEMECLAW_API_KEY", "sekret"):
         r = client.post("/api/assistant/message", json={"session_id": "x", "text": "hi"})
         assert r.status_code == 401
+
+
+def test_inbound_call_answers_with_agent_persona(client, sandbox, tmp_path):
+    from war_room.dashboard.routes import voice_agents as va
+
+    with (
+        patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
+        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),
+    ):
+        client.post(
+            "/api/voice-agents",
+            json={
+                "name": "Front Desk",
+                "voice": "David",
+                "greeting": "Hi, Front Desk here!",
+                "knowledge": "Demos run Mon-Fri.",
+            },
+        )
+        # inbound: agent's greeting is spoken inside a <Gather>
+        r = client.post(
+            "/api/assistant/twilio/inbound/front-desk?tenant=default",
+            data={"CallSid": "CAIN1", "From": "+40711111111"},
+        )
+        assert r.status_code == 200
+        assert "<Gather" in r.text
+        assert "Hi, Front Desk here!" in r.text
+
+        # follow-up turn goes through the AGENT prompt, not the assistant brain
+        captured = {}
+
+        async def spy(model, messages):
+            captured["system"] = messages[0]["content"]
+            return "Demos are on weekdays."
+
+        with (
+            patch.object(sandbox, "_chat_openrouter", spy),
+            patch.object(sandbox, "_chat_ollama", _dead_brain),
+        ):
+            r = client.post(
+                "/api/assistant/twilio/turn?tenant=default",
+                data={"CallSid": "CAIN1", "To": "+1555", "SpeechResult": "When are demos?"},
+            )
+        assert "Demos are on weekdays." in r.text
+        assert "Front Desk" in captured["system"]
+        assert "Demos run Mon-Fri." in captured["system"]
+
+
+def test_inbound_unknown_agent_hangs_up_politely(client, sandbox, tmp_path):
+    from war_room.dashboard.routes import voice_agents as va
+
+    with (
+        patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
+        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),
+    ):
+        r = client.post(
+            "/api/assistant/twilio/inbound/ghost",
+            data={"CallSid": "CAIN2", "From": "+1555"},
+        )
+    assert r.status_code == 200
+    assert "<Hangup/>" in r.text
+
+
+def test_inbound_rejects_bad_signature(client, sandbox):
+    with patch.object(sandbox, "TWILIO_AUTH_TOKEN", "tok123"):
+        r = client.post(
+            "/api/assistant/twilio/inbound/any",
+            data={"CallSid": "CAIN3"},
+            headers={"X-Twilio-Signature": "bogus"},
+        )
+    assert r.status_code == 403
