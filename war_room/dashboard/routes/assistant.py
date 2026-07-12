@@ -23,6 +23,7 @@ Room's rolling research reports. Point SEMECLAW_VAULT_DIR at any folder of
 
 import hashlib
 import hmac
+import json
 import os
 import re
 from base64 import b64encode
@@ -41,6 +42,8 @@ from war_room.dashboard.routes.deps import (
     _cost_bump,
     _tenant_id,
     logger,
+    rate_limit_key,
+    rate_limit_ok,
 )
 from war_room.dashboard.routes.voice_agents import _VA_MODELS, _chat_ollama, _chat_openrouter
 from war_room.dashboard.routes.voice_agents import _build_system_prompt as _build_agent_prompt
@@ -58,6 +61,7 @@ router = APIRouter(tags=["assistant"])
 ASSISTANT_DIR = WAR_ROOM_DIR / "assistant"
 TRANSCRIPTS_DIR = ASSISTANT_DIR / "transcripts"
 MEMORY_FILE = ASSISTANT_DIR / "memory" / "summaries.md"
+SESSIONS_DIR = ASSISTANT_DIR / "sessions"
 
 ASSISTANT_NAME = os.environ.get("ASSISTANT_NAME", "Seme")
 DEFAULT_LANG = os.environ.get("ASSISTANT_DEFAULT_LANG", "en")
@@ -106,10 +110,35 @@ def _session_key(tenant: str, session_id: str) -> str:
     return f"{tenant}:{session_id}"
 
 
+def _session_file(tenant: str, session_id: str) -> Path:
+    safe = re.sub(r"[^\w.-]", "_", f"{tenant}__{session_id}")[:120]
+    return SESSIONS_DIR / f"{safe}.json"
+
+
+def _persist_session(session: dict) -> None:
+    """Write the session to disk so active conversations survive a restart."""
+    try:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        _session_file(session["tenant"], session["id"]).write_text(json.dumps(session), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001 — persistence is best-effort
+        logger.warning("assistant session persist failed: %s", e)
+
+
+def _restore_session(tenant: str, session_id: str) -> dict | None:
+    path = _session_file(tenant, session_id)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def get_session(tenant: str, session_id: str, kind: str = "chat", peer: str = "") -> dict:
     key = _session_key(tenant, session_id)
     if key not in _sessions:
-        _sessions[key] = {
+        restored = _restore_session(tenant, session_id)
+        _sessions[key] = restored or {
             "id": session_id,
             "tenant": tenant,
             "kind": kind,  # "chat" | "call"
@@ -125,6 +154,7 @@ def get_session(tenant: str, session_id: str, kind: str = "chat", peer: str = ""
 
 def add_turn(session: dict, role: str, content: str) -> None:
     session["messages"].append({"role": role, "content": content, "t": datetime.now(timezone.utc).isoformat()})
+    _persist_session(session)
 
 
 def _transcript_markdown(s: dict) -> str:
@@ -147,7 +177,10 @@ async def end_session(tenant: str, session_id: str) -> dict | None:
     key = _session_key(tenant, session_id)
     s = _sessions.pop(key, None)
     if not s:
+        s = _restore_session(tenant, session_id)  # survives a restart mid-conversation
+    if not s:
         return None
+    _session_file(tenant, session_id).unlink(missing_ok=True)
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = s["started_at"][:16].replace(":", "-").replace("T", "_")
     safe_peer = re.sub(r"[^\w+@.-]", "_", s["peer"] or s["id"])[:48]
@@ -350,9 +383,11 @@ async def handle_command(tenant: str, session: dict, text: str) -> str | None:
         )
     if cmd == "lang":
         session["lang"] = (rest or "en").lower()
+        _persist_session(session)
         return f"Language switched to: {session['lang']}"
     if cmd == "subject":
         session["subject"] = rest or None
+        _persist_session(session)
         return f"Subject set: {session['subject']}" if rest else "Subject cleared."
     if cmd == "remember":
         if not rest:
@@ -567,6 +602,8 @@ async def api_assistant_message(request: Request):
     text = str(data.get("text") or "").strip()[:4000]
     if not text:
         return JSONResponse({"error": "text required"}, status_code=400)
+    if not rate_limit_ok(rate_limit_key(request, "assistant.message", tenant)):
+        return JSONResponse({"error": "rate limit exceeded — try again in a minute"}, status_code=429)
     session_id = str(data.get("session_id") or "api").strip()[:64] or "api"
 
     session = get_session(tenant, session_id, "chat", "api")

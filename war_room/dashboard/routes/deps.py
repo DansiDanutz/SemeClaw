@@ -187,6 +187,46 @@ _PROTECTED_WRITE_PATHS = (
 MEETING_RETENTION_HOURS = 48
 REPORT_RETENTION_HOURS = 48
 
+# ---------------------------------------------------------------------------
+# Rate limiting — sliding window per key, shared by LLM-consuming endpoints
+# (assistant messages, voice-agent responds). 0 disables.
+# ---------------------------------------------------------------------------
+try:
+    SEMECLAW_RATE_LIMIT_PER_MIN = int(os.environ.get("SEMECLAW_RATE_LIMIT_PER_MIN", "30") or 0)
+except ValueError:
+    SEMECLAW_RATE_LIMIT_PER_MIN = 30
+
+from collections import deque as _deque  # noqa: E402
+
+_RATE_BUCKETS: dict[str, "_deque[float]"] = {}
+
+
+def rate_limit_ok(key: str, limit: int | None = None, window: float = 60.0) -> bool:
+    """Record one hit for `key`; False when the key exceeded `limit` per window."""
+    import time as _time
+
+    if limit is None:
+        limit = SEMECLAW_RATE_LIMIT_PER_MIN
+    if limit <= 0:
+        return True
+    now = _time.time()
+    bucket = _RATE_BUCKETS.setdefault(key, _deque())
+    while bucket and bucket[0] <= now - window:
+        bucket.popleft()
+    if len(bucket) >= limit:
+        return False
+    bucket.append(now)
+    return True
+
+
+def rate_limit_key(request, scope: str, tenant: str) -> str:
+    """Bucket key: endpoint scope + tenant + caller IP (best-effort)."""
+    try:
+        host = request.client.host if request.client else "unknown"
+    except Exception:
+        host = "unknown"
+    return f"{scope}:{tenant}:{host}"
+
 
 # ---------------------------------------------------------------------------
 # Supabase — shared credentials for all routers
