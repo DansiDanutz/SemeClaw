@@ -28,7 +28,7 @@ fi
 # Versions match — only pass if all touched files are docs or repo maintenance
 # metadata. This lets Dependabot keep GitHub Actions current without forcing a
 # package version bump for changes that do not affect the shipped Python app.
-EXEMPT_PATTERN='^(\.editorconfig$|\.gitattributes$|\.gitignore$|\.github/|docs/|README|AUDIT|CHANGELOG|CONTRIBUTING|LICENSE|VERSIONING|INTEGRATION|PLAN|PRODUCTION|STATUS|OPENCLAW|SEMECLAW_AGENT|AGENTS|CLAUDE)'
+EXEMPT_PATTERN='^(\.editorconfig$|\.gitattributes$|\.gitignore$|\.github/|greptile\.json$|scripts/check_version_bumped\.sh$|docs/|README|AUDIT|CHANGELOG|CONTRIBUTING|LICENSE|VERSIONING|INTEGRATION|PLAN|PRODUCTION|STATUS|OPENCLAW|SEMECLAW_AGENT|AGENTS|CLAUDE)'
 RELEASE_AFFECTING=$(git diff --name-only "$BASE"...HEAD | grep -vE "$EXEMPT_PATTERN" | grep -v '\.md$' || true)
 
 if [[ -z "$RELEASE_AFFECTING" ]]; then
