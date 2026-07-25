@@ -34,6 +34,7 @@ def tenant_headers(tmp_path):
     with (
         patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=True),
     ):
         yield {"X-Tenant-Id": "pytest-tenant"}
 

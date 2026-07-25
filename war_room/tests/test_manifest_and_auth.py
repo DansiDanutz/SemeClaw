@@ -53,15 +53,30 @@ def test_embed_returns_iframe_html(client):
     assert "Content-Security-Policy" in r.headers
 
 
-def test_write_endpoints_open_when_no_api_key(client):
-    """If SEMECLAW_API_KEY is unset, writes should succeed without auth."""
+def test_write_endpoints_open_on_loopback_when_no_api_key(client):
     with (
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=True),
         patch("war_room.dashboard.server._build_meeting_mp3", return_value=None),
     ):
         r = client.post("/api/meeting/pin", params={"name": "x.md"})
         # _build_meeting_mp3 returns None for missing report → 500
         assert r.status_code in (200, 500)
+
+
+def test_write_endpoints_fail_closed_off_loopback_without_api_key(client):
+    with (
+        patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=False),
+    ):
+        r = client.post("/api/meeting/pin", params={"name": "x.md"})
+        assert r.status_code == 503
+        assert "required" in r.json()["error"]
+
+
+def test_unlisted_write_endpoint_still_requires_bearer(client):
+    with patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"):
+        assert client.post("/api/run", json={}).status_code == 401
 
 
 def test_write_endpoints_require_bearer_when_key_set(client):

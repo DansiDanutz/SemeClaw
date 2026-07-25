@@ -34,6 +34,7 @@ def sandbox(tmp_path):
         patch.object(ast, "MEMORY_FILE", tmp_path / "memory" / "summaries.md"),
         patch.object(ast, "_sessions", {}),
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=True),
     ):
         yield ast
 
@@ -152,7 +153,7 @@ def test_twilio_answer_returns_gather_twiml(client, sandbox):
     with (
         patch.object(sandbox, "_chat_openrouter", _fake_brain),
         patch.object(sandbox, "_chat_ollama", _dead_brain),
-        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),  # skip signature in dev mode
+        patch.object(sandbox, "_twilio_signature_ok", return_value=True),
     ):
         r = client.post(
             "/api/assistant/twilio/answer?lang=ro&subject=demo&tenant=default",
@@ -168,7 +169,7 @@ def test_twilio_answer_returns_gather_twiml(client, sandbox):
     with (
         patch.object(sandbox, "_chat_openrouter", _fake_brain),
         patch.object(sandbox, "_chat_ollama", _dead_brain),
-        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),
+        patch.object(sandbox, "_twilio_signature_ok", return_value=True),
     ):
         r = client.post(
             "/api/assistant/twilio/turn?tenant=default",
@@ -183,6 +184,15 @@ def test_twilio_webhook_rejects_bad_signature(client, sandbox):
             "/api/assistant/twilio/answer",
             data={"CallSid": "CA9", "To": "+1555"},
             headers={"X-Twilio-Signature": "bogus"},
+        )
+    assert r.status_code == 403
+
+
+def test_twilio_webhook_fails_closed_without_auth_token(client, sandbox):
+    with patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""):
+        r = client.post(
+            "/api/assistant/twilio/answer",
+            data={"CallSid": "CA10", "To": "+1555"},
         )
     assert r.status_code == 403
 
@@ -214,7 +224,7 @@ def test_inbound_call_answers_with_agent_persona(client, sandbox, tmp_path):
 
     with (
         patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
-        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),
+        patch.object(sandbox, "_twilio_signature_ok", return_value=True),
     ):
         client.post(
             "/api/voice-agents",
@@ -259,7 +269,7 @@ def test_inbound_unknown_agent_hangs_up_politely(client, sandbox, tmp_path):
 
     with (
         patch.object(va, "VOICE_AGENTS_DIR", tmp_path / "voice_agents"),
-        patch.object(sandbox, "TWILIO_AUTH_TOKEN", ""),
+        patch.object(sandbox, "_twilio_signature_ok", return_value=True),
     ):
         r = client.post(
             "/api/assistant/twilio/inbound/ghost",

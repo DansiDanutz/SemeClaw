@@ -437,7 +437,7 @@ async def start_call(tenant: str, number: str, subject: str | None, lang: str) -
 def _twilio_signature_ok(request: Request, form: dict) -> bool:
     """Validate X-Twilio-Signature (HMAC-SHA1 of url + sorted form params)."""
     if not TWILIO_AUTH_TOKEN:
-        return True  # nothing to validate against — dev mode
+        return False
     sig = request.headers.get("x-twilio-signature", "")
     url = str(request.url)
     payload = url + "".join(k + form[k] for k in sorted(form))

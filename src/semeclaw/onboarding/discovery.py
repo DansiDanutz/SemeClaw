@@ -364,6 +364,10 @@ def discover_generic_agents() -> list[DiscoveredAgent]:
                         continue
 
                     data = _read_json(p) if p.suffix == ".json" else None
+                    if p.suffix == ".json" and not isinstance(data, dict):
+                        # Generic package manifests may be arrays or scalars;
+                        # they are not agent descriptors and must not crash discovery.
+                        continue
                     if data is None:
                         # Minimal YAML-like parsing for agent.yaml
                         text = p.read_text(encoding="utf-8")
