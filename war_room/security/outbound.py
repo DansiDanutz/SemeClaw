@@ -20,18 +20,25 @@ def _is_public_address(address: str) -> bool:
 @dataclass(frozen=True)
 class PinnedHttpsTarget:
     url: str
-    address: str
+    addresses: tuple[str, ...]
 
 
 class _PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
-    def __init__(self, address: str):
-        self._address = address
+    def __init__(self, addresses: tuple[str, ...]):
+        self._addresses = addresses
         self._delegate = httpcore.AnyIOBackend()
 
     async def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-        return await self._delegate.connect_tcp(
-            self._address, port, timeout, local_address, socket_options
-        )
+        last_error: Exception | None = None
+        for address in self._addresses:
+            try:
+                return await self._delegate.connect_tcp(
+                    address, port, timeout, local_address, socket_options
+                )
+            except Exception as exc:  # noqa: BLE001 - try the next validated address
+                last_error = exc
+        assert last_error is not None
+        raise last_error
 
     async def connect_unix_socket(self, path, timeout=None, socket_options=None):
         return await self._delegate.connect_unix_socket(path, timeout, socket_options)
@@ -67,10 +74,10 @@ async def resolve_public_https_url(url: str) -> PinnedHttpsTarget:
         )
     except socket.gaierror as exc:
         raise ValueError("webhook hostname could not be resolved") from exc
-    addresses = {item[4][0].split("%", 1)[0] for item in results}
+    addresses = tuple(dict.fromkeys(item[4][0].split("%", 1)[0] for item in results))
     if not addresses or any(not _is_public_address(address) for address in addresses):
         raise ValueError("webhook hostname must resolve only to public addresses")
-    return PinnedHttpsTarget(value, sorted(addresses)[0])
+    return PinnedHttpsTarget(value, addresses)
 
 
 async def validate_public_https_url(url: str) -> str:
@@ -81,5 +88,5 @@ def pinned_httpx_transport(target: PinnedHttpsTarget) -> httpx.AsyncHTTPTranspor
     """Create a transport that connects to the validated address but keeps
     the original hostname for the HTTP Host header and TLS SNI verification."""
     transport = httpx.AsyncHTTPTransport(retries=0, trust_env=False)
-    transport._pool._network_backend = _PinnedNetworkBackend(target.address)  # noqa: SLF001
+    transport._pool._network_backend = _PinnedNetworkBackend(target.addresses)  # noqa: SLF001
     return transport

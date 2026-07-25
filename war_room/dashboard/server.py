@@ -545,6 +545,7 @@ _INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS = {
     "/api/v1/billing/webhook",
 }
 _INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES = (
+    "/api/advertiser/",
     "/api/assistant/twilio/",
 )
 

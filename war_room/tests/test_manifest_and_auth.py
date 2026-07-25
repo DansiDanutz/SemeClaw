@@ -79,11 +79,6 @@ def test_unlisted_write_endpoint_still_requires_bearer(client):
         assert client.post("/api/run", json={}).status_code == 401
 
 
-def test_advertiser_writes_require_global_bearer(client):
-    with patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"):
-        assert client.post("/api/advertiser/demo/projects", json={}).status_code == 401
-
-
 def test_write_endpoints_require_bearer_when_key_set(client):
     with (
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"),
