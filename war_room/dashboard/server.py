@@ -280,8 +280,8 @@ def _startup_config_checks() -> None:
         )
     if not SEMECLAW_API_KEY:
         logger.warning(
-            "[config] SEMECLAW_API_KEY is unset. Write endpoints are unauthenticated. "
-            "Set it for any non-demo deployment."
+            "[config] SEMECLAW_API_KEY is unset. Non-loopback API writes will fail closed. "
+            "Set it before exposing this service on a network."
         )
     supa_url = os.environ.get("DLS_TEAM_SUPABASE_URL", "").strip()
     supa_key = os.environ.get("DLS_TEAM_SUPABASE_SERVICE_KEY", "").strip()
@@ -536,26 +536,30 @@ async def _register_with_adclaw() -> None:
         logger.warning("AdClaw: instance registration failed (non-fatal): %s", _e)
 
 
-# Write endpoints protected by bearer when SEMECLAW_API_KEY is set
-_PROTECTED_WRITE_PATHS = (
-    "/api/meeting/pin",
-    "/api/meeting/unpin",
-    "/api/meeting/finalize",
-    "/api/meeting/replan",
-    "/api/meeting/redirect",
-    "/api/spotlight/impression",
-    "/api/reports/delete",
-    "/api/webhooks",
-    "/api/reports",
-    "/api/tasks",  # POST create/sync/gc, POST {id}/intervene/finalize/dialog
-    "/api/admin",  # DLQ inspect/replay — fully bearer-gated (incl. GET)
-    "/api/voice-agents",  # POST create/update, DELETE, POST {id}/respond
-    # Assistant writes — twilio webhooks excluded (Twilio can't send our bearer;
-    # they validate X-Twilio-Signature instead)
-    "/api/assistant/message",
-    "/api/assistant/end",
-    "/api/assistant/call",
+# These callbacks enforce their own provider signature or user JWT inside the
+# route. Every other modifying /api request uses the SemeClaw bearer boundary.
+_INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS = {
+    "/api/advertiser/stripe/webhook",
+    "/api/advertiser/webhook/stripe",
+    "/api/telegram/webhook",
+    "/api/v1/billing/webhook",
+    "/api/spotlight/click",
+}
+_INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES = (
+    "/api/advertiser/",
+    "/api/assistant/twilio/",
 )
+
+
+def _is_loopback_request(request: Request) -> bool:
+    """Allow keyless writes only over a direct loopback connection."""
+    import ipaddress
+
+    host = request.client.host if request.client else ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 @app.middleware("http")
@@ -589,16 +593,25 @@ async def _semeclaw_admin_gate(request, call_next):
 
 @app.middleware("http")
 async def _semeclaw_auth_and_csp(request, call_next):
-    # Bearer auth on protected write endpoints (POST/PUT/PATCH/DELETE only)
     _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-    if SEMECLAW_API_KEY and request.method in _WRITE_METHODS:
+    if request.method in _WRITE_METHODS and request.url.path.startswith("/api/"):
         path = request.url.path
-        if any(path.startswith(p) for p in _PROTECTED_WRITE_PATHS):
+        independently_authenticated = path in _INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS or any(
+            path.startswith(prefix) for prefix in _INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES
+        )
+        if not independently_authenticated and SEMECLAW_API_KEY:
             auth = request.headers.get("authorization", "")
-            if auth != f"Bearer {SEMECLAW_API_KEY}":
+            if not _hmac.compare_digest(auth, f"Bearer {SEMECLAW_API_KEY}"):
                 from fastapi.responses import JSONResponse as _J
 
                 return _J({"error": "unauthorized"}, status_code=401)
+        elif not independently_authenticated and not _is_loopback_request(request):
+            from fastapi.responses import JSONResponse as _J
+
+            return _J(
+                {"error": "SEMECLAW_API_KEY is required for non-loopback writes"},
+                status_code=503,
+            )
     response = await call_next(request)
     # Iframe-embed-friendly CSP
     if SEMECLAW_FRAME_ANCESTORS:
@@ -648,6 +661,7 @@ _RATE_LIMIT_WINDOW = 60  # seconds
 
 # Max requests per IP per window for each path prefix
 _RATE_LIMIT_BY_PREFIX: dict[str, int] = {
+    "/api/spotlight/click": 60,  # public analytics write — bound RPC and click inflation
     "/api/tts": 60,  # ElevenLabs (paid) + Kokoro (free) — generous
     "/api/stt": 30,  # Whisper — CPU heavy
     "/api/meeting/audio": 10,  # ffmpeg + TTS — heavy
@@ -1099,7 +1113,12 @@ def _load_webhooks() -> list[dict]:
 
 
 def _save_webhooks(hooks: list[dict]) -> None:
-    WEBHOOKS_FILE.write_text(json.dumps(hooks, indent=2))
+    WEBHOOKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = WEBHOOKS_FILE.with_name(f".{WEBHOOKS_FILE.name}.{_uuid_ing.uuid4().hex}.tmp")
+    temporary.write_text(json.dumps(hooks, indent=2), encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(WEBHOOKS_FILE)
+    WEBHOOKS_FILE.chmod(0o600)
 
 
 # In-process event bus — SSE subscribers receive every lifecycle event
@@ -1133,11 +1152,18 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     raw = json.dumps(body).encode("utf-8")
     for h in matches:
         try:
+            from war_room.security.outbound import pinned_httpx_transport, resolve_public_https_url
+
+            target = await resolve_public_https_url(h["url"])
             secret = (h.get("secret") or "").encode("utf-8")
             sig = _hmac_ing.new(secret, raw, _hash_ing.sha256).hexdigest() if secret else ""
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(
+                timeout=8.0,
+                transport=pinned_httpx_transport(target),
+                follow_redirects=False,
+            ) as client:
                 await client.post(
-                    h["url"],
+                    target.url,
                     content=raw,
                     headers={
                         "content-type": "application/json",
@@ -1229,8 +1255,12 @@ async def api_webhooks_register(request: Request):
     Body: {url, events: ["meeting.finalized", ...], secret?}"""
     data = await request.json()
     url = (data.get("url") or "").strip()
-    if not url or not url.startswith("http"):
-        return JSONResponse({"error": "valid url required"}, status_code=400)
+    try:
+        from war_room.security.outbound import validate_public_https_url
+
+        url = await validate_public_https_url(url)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     events = data.get("events") or ["*"]
     secret = data.get("secret") or ""
     hooks = _load_webhooks()
@@ -2839,7 +2869,7 @@ async def api_agent_manifest():
                 "required_for_writes": auth_required,
                 "scheme": "bearer" if auth_required else "none",
                 "header": "Authorization: Bearer <SEMECLAW_API_KEY>" if auth_required else None,
-                "protected_paths": list(_PROTECTED_WRITE_PATHS) if auth_required else [],
+                "protected_paths": ["/api/* modifying methods"] if auth_required else ["loopback writes only"],
             },
             "tts": {
                 "engines": ["elevenlabs-flash-v2.5", "kokoro-82M"],
@@ -3766,6 +3796,13 @@ async def paperclip_trigger(request: Request):
 
     if not markdown:
         return JSONResponse({"error": "task_markdown required"}, status_code=400)
+    if webhook_url:
+        try:
+            from war_room.security.outbound import validate_public_https_url
+
+            webhook_url = await validate_public_https_url(webhook_url)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     # Build a stable report filename from task_id
     stem = _re_ing.sub(r"[^a-zA-Z0-9_-]+", "-", task_id).strip("-").lower()[:60] or "task"
@@ -3800,7 +3837,7 @@ async def paperclip_trigger(request: Request):
 
     # Optional: register one-off webhook for this finalize event
     hook_id = None
-    if webhook_url and webhook_url.startswith("http"):
+    if webhook_url:
         hooks = _load_webhooks()
         hook_id = _uuid_ing.uuid4().hex[:8]
         hooks.append(

@@ -155,10 +155,19 @@ async def api_agent_manifest():
                 "voice_agent_inbound": "POST /api/assistant/twilio/inbound/{agent_id}",
             },
             "auth": {
-                "required_for_writes": auth_required,
-                "scheme": "bearer" if auth_required else "none",
+                "required_for_writes": True,
+                "required_for_remote_writes": True,
+                "loopback_write_exception": True,
+                "scheme": "bearer" if auth_required else "unavailable_until_configured",
                 "header": "Authorization: Bearer <SEMECLAW_API_KEY>" if auth_required else None,
-                "protected_paths": list(_PROTECTED_WRITE_PATHS) if auth_required else [],
+                "protected_paths": list(_PROTECTED_WRITE_PATHS),
+                "independently_authenticated": [
+                    "/api/advertiser/* (Supabase JWT or Stripe signature)",
+                    "/api/assistant/twilio/* (Twilio signature)",
+                    "/api/telegram/webhook (Telegram secret)",
+                    "/api/v1/billing/webhook (provider signature)",
+                ],
+                "public_write_exceptions": ["/api/spotlight/click (rate-limited analytics)"],
             },
             "tts": {
                 "engine": "elevenlabs-flash-v2.5 + edge-tts fallback",

@@ -87,8 +87,9 @@ def _row_to_sub(row: dict) -> WebhookSubscription:
 
 
 async def subscribe(*, tenant_id: str, url: str, events: list[str]) -> WebhookSubscription:
-    if not url.startswith(("http://", "https://")):
-        raise ValueError("url must be http(s)")
+    from war_room.security.outbound import validate_public_https_url
+
+    url = await validate_public_https_url(url)
     if not events:
         raise ValueError("events cannot be empty (use ['*'] for all)")
     sub = WebhookSubscription(
@@ -156,8 +157,15 @@ async def _post_one(sub: WebhookSubscription, event: str, payload: dict) -> None
     try:
         import httpx
 
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.post(sub.url, content=body, headers=headers)
+        from war_room.security.outbound import pinned_httpx_transport, resolve_public_https_url
+
+        target = await resolve_public_https_url(sub.url)
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            transport=pinned_httpx_transport(target),
+            follow_redirects=False,
+        ) as c:
+            r = await c.post(target.url, content=body, headers=headers)
             await _record_outcome(sub.id, status=r.status_code)
             if r.status_code >= 400:
                 _enqueue_dlq(sub, event, body, headers, reason=f"http_{r.status_code}")

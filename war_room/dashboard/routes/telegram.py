@@ -5,7 +5,7 @@ Lets users drive the 3-strike intervention loop straight from a Telegram chat.
 POST /api/telegram/webhook
     Telegram Bot API → set this URL via:
        curl https://api.telegram.org/bot<TOKEN>/setWebhook?url=<PUBLIC>/api/telegram/webhook
-    Optional: set TELEGRAM_WEBHOOK_SECRET; we verify the
+    Required: set TELEGRAM_WEBHOOK_SECRET; we verify the
     `X-Telegram-Bot-Api-Secret-Token` header.
 
 Message grammar (everything case-insensitive on the command):
@@ -20,6 +20,7 @@ the orchestrator decision + new dialog version are included.
 
 from __future__ import annotations
 
+import hmac
 import html
 import logging
 import os
@@ -220,7 +221,9 @@ async def telegram_webhook(
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ):
     expected = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
-    if expected and x_telegram_bot_api_secret_token != expected:
+    if not expected:
+        return JSONResponse({"ok": False, "error": "webhook secret is not configured"}, status_code=503)
+    if not hmac.compare_digest(x_telegram_bot_api_secret_token or "", expected):
         return JSONResponse({"ok": False, "error": "bad secret"}, status_code=401)
 
     try:

@@ -59,10 +59,11 @@ def _client():
 
 
 @pytest.fixture()
-def open_client(_client):
-    """TestClient with no API key (open mode)."""
+def open_client(_client, monkeypatch):
+    """TestClient exercising the explicitly loopback-only open mode."""
     original = srv.SEMECLAW_API_KEY
     srv.SEMECLAW_API_KEY = ""
+    monkeypatch.setattr(srv, "_is_loopback_request", lambda _request: True)
     try:
         yield _client
     finally:

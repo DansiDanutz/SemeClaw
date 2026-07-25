@@ -79,7 +79,7 @@ AGENT_MODELS: dict[str, dict] = {
         "model": "openrouter/qwen/qwen3.6-plus:free",
         "api_base": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
-        "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",  # from openclaw.json
+        "api_key_fallback": "",
         "max_tokens": 8192,
         "temperature": 0.2,
     },
@@ -88,7 +88,7 @@ AGENT_MODELS: dict[str, dict] = {
         "model": "kimi-k2.5",
         "api_base": "https://api.moonshot.ai/v1",
         "api_key_env": "MOONSHOT_API_KEY",
-        "api_key_fallback": "sk-kimi-TWpgpQOsPq1Qfbhre1wblye1FoRnhhGLfdSgVJaHdPDq0b6T6j4qDYnzfNOflmnx",
+        "api_key_fallback": "",
         "max_tokens": 8192,
         "temperature": 0.3,
     },
@@ -97,7 +97,7 @@ AGENT_MODELS: dict[str, dict] = {
         "model": "glm-5",
         "api_base": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY",
-        "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",  # from openclaw.json
+        "api_key_fallback": "",
         "max_tokens": 8192,
         "temperature": 0.25,
     },
@@ -106,7 +106,7 @@ AGENT_MODELS: dict[str, dict] = {
         "model": "glm-5",
         "api_base": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY",
-        "api_key_fallback": "fbf824b80eda40b09cc658f7ddbf72",
+        "api_key_fallback": "",
         "max_tokens": 8192,
         "temperature": 0.2,
     },
@@ -144,7 +144,7 @@ _FALLBACK_MODEL_CFG = {
     "model": "openrouter/qwen/qwen3.6-plus:free",
     "api_base": "https://openrouter.ai/api/v1",
     "api_key_env": "OPENROUTER_API_KEY",
-    "api_key_fallback": "sk-or-v1-fa790746dcf6b850af34c",
+    "api_key_fallback": "",
     "max_tokens": 4096,
     "temperature": 0.3,
 }
@@ -449,7 +449,16 @@ async def call_agent(
         # Fallback: Qwen 3.6 Plus FREE via OpenRouter
         use_model = "openrouter/qwen/qwen3.6-plus:free"
         api_base = "https://openrouter.ai/api/v1"
-        api_key = os.environ.get("OPENROUTER_API_KEY", "sk-or-v1-fa790746dcf6b850af34c")
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            logger.warning("⚠️  [%s] no remote fallback key — using deterministic offline response", agent_id)
+            return (
+                f"## Offline {agent.get('name', agent_id)} analysis\n\n"
+                f"Task received: {task}\n\n"
+                "The configured model and remote fallback are unavailable. "
+                "This deterministic result preserves the pipeline artifact without fabricating model output.\n\n"
+                "Recommendation: configure a provider key or a reachable local Ollama model, then rerun for full analysis."
+            )
         response = await litellm.acompletion(
             model=use_model,
             messages=messages,

@@ -30,27 +30,33 @@ async def test_subscribe_validates_url(v1_data_dir):
 async def test_subscribe_and_list(v1_data_dir):
     from war_room.v1 import webhooks
 
-    sub = await webhooks.subscribe(tenant_id="acme", url="https://acme.test/hook", events=["meeting.finalized"])
+    sub = await webhooks.subscribe(tenant_id="acme", url="https://8.8.8.8/hook", events=["meeting.finalized"])
     assert sub.id.startswith("wsub_")
     assert sub.secret.startswith("whsec_")
 
     rows = await webhooks.list_subscriptions(tenant_id="acme")
     assert len(rows) == 1
-    assert rows[0].url == "https://acme.test/hook"
+    assert rows[0].url == "https://8.8.8.8/hook"
 
 
 @pytest.mark.asyncio
 async def test_dispatch_skips_non_matching_events(v1_data_dir):
     from war_room.v1 import webhooks
 
-    await webhooks.subscribe(tenant_id="acme", url="https://acme.test/hook", events=["meeting.finalized"])
+    await webhooks.subscribe(tenant_id="acme", url="https://8.8.8.8/hook", events=["meeting.finalized"])
     n = await webhooks.dispatch("intervention.recorded", {"x": 1}, tenant_id="acme")
     assert n == 0
 
 
 @pytest.mark.asyncio
-async def test_dispatch_falls_back_to_dlq_on_unreachable_url(v1_data_dir, tmp_path):
+async def test_dispatch_falls_back_to_dlq_on_unreachable_url(v1_data_dir, tmp_path, monkeypatch):
+    from war_room.security import outbound
     from war_room.v1 import webhooks
+
+    async def allow_transport_test(url: str) -> str:
+        return url
+
+    monkeypatch.setattr(outbound, "validate_public_https_url", allow_transport_test)
 
     await webhooks.subscribe(
         tenant_id="acme",

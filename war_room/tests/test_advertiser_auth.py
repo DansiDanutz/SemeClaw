@@ -80,24 +80,26 @@ async def test_demo_id_bypasses_auth(deps) -> None:
 
 
 @pytest.mark.asyncio
-async def test_audit_mode_never_raises(monkeypatch) -> None:
+async def test_legacy_audit_mode_setting_still_fails_closed(monkeypatch) -> None:
     monkeypatch.setenv("SUPABASE_JWT_SECRET", SECRET)
     monkeypatch.setenv("SEMECLAW_ADVERTISER_AUTH_STRICT", "0")
     from war_room.dashboard.routes import deps as mod
 
     importlib.reload(mod)
     req = _Req(authorization=f"Bearer {_make_token('other-user')}")
-    # Mismatch must NOT raise in audit mode.
-    await mod.require_advertiser_owner(req, "adv-123")
+    with pytest.raises(HTTPException) as exc:
+        await mod.require_advertiser_owner(req, "adv-123")
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_strict_without_secret_degrades_to_audit(monkeypatch) -> None:
+async def test_without_secret_fails_closed(monkeypatch) -> None:
     monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
     monkeypatch.setenv("SEMECLAW_ADVERTISER_AUTH_STRICT", "1")
     from war_room.dashboard.routes import deps as mod
 
     importlib.reload(mod)
     req = _Req()  # no bearer
-    # Should NOT raise: module auto-degrades to audit when secret missing.
-    await mod.require_advertiser_owner(req, "adv-123")
+    with pytest.raises(HTTPException) as exc:
+        await mod.require_advertiser_owner(req, "adv-123")
+    assert exc.value.status_code == 401

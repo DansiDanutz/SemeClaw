@@ -25,9 +25,10 @@ def client(tmp_path):
     with patch("war_room.dashboard.server.RESEARCH_DIR", tmp_path / "research"):
         with patch("war_room.dashboard.server.STATE_FILE", tmp_path / "state.json"):
             with patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""):
-                (tmp_path / "research").mkdir(exist_ok=True)
-                with TestClient(app) as c:
-                    yield c
+                with patch("war_room.dashboard.server._is_loopback_request", return_value=True):
+                    (tmp_path / "research").mkdir(exist_ok=True)
+                    with TestClient(app) as c:
+                        yield c
 
 
 def test_tts_health_returns_neural_when_edge_ready(client):
@@ -35,6 +36,14 @@ def test_tts_health_returns_neural_when_edge_ready(client):
     assert r.status_code == 200
     data = r.json()
     assert "agents" in data or "system_health" in data
+
+
+def test_dashboard_prompts_for_session_only_operator_key(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "semeclaw_api_key" in response.text
+    assert "sessionStorage" in response.text
+    assert "Authorization" in response.text
 
 
 def test_tts_missing_text(client):

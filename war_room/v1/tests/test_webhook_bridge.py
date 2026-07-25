@@ -28,7 +28,7 @@ async def test_legacy_dispatch_bridges_to_v1_webhooks(v1_data_dir, monkeypatch):
 
     await v1_hooks.subscribe(
         tenant_id="default",
-        url="https://example.test/listener",
+        url="https://8.8.8.8/listener",
         events=["meeting.finalized", "intervention.recorded"],
     )
 

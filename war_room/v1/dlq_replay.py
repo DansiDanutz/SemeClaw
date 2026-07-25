@@ -96,8 +96,15 @@ async def _replay_webhook(entry: dict) -> bool:
     if not url or body is None:
         return False
     try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.post(url, content=body, headers=headers)
+        from war_room.security.outbound import pinned_httpx_transport, resolve_public_https_url
+
+        target = await resolve_public_https_url(url)
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            transport=pinned_httpx_transport(target),
+            follow_redirects=False,
+        ) as c:
+            r = await c.post(target.url, content=body, headers=headers)
             return r.status_code < 400
     except Exception as exc:  # noqa: BLE001
         logger.info("webhook replay failed: %s", exc)
