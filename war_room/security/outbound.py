@@ -32,9 +32,7 @@ class _PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
         last_error: Exception | None = None
         for address in self._addresses:
             try:
-                return await self._delegate.connect_tcp(
-                    address, port, timeout, local_address, socket_options
-                )
+                return await self._delegate.connect_tcp(address, port, timeout, local_address, socket_options)
             except Exception as exc:  # noqa: BLE001 - try the next validated address
                 last_error = exc
         assert last_error is not None

@@ -250,9 +250,7 @@ SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
 _ADVERTISER_DEMO_ID = os.environ.get("SEMECLAW_ADVERTISER_DEMO_ID", "").strip()
 
 if not SUPABASE_JWT_SECRET:
-    logger.warning(
-        "SUPABASE_JWT_SECRET is unset. Advertiser ownership checks will fail closed."
-    )
+    logger.warning("SUPABASE_JWT_SECRET is unset. Advertiser ownership checks will fail closed.")
 
 
 def _extract_bearer(request: _Any) -> str | None:
