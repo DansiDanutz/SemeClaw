@@ -31,6 +31,8 @@ def test_manifest_returns_contract(client):
     assert data["name"] == "SemeClaw War Room"
     assert "capabilities" in data
     assert "endpoints" in data
+    assert data["auth"]["required_for_remote_writes"] is True
+    assert data["auth"]["protected_paths"] == ["/api/* (POST, PUT, PATCH, DELETE)"]
     assert "capabilities" in data
     assert "endpoints" in data
 

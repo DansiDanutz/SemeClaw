@@ -155,34 +155,7 @@ except Exception:
 # ---------------------------------------------------------------------------
 # Auth / retention
 # ---------------------------------------------------------------------------
-_PROTECTED_WRITE_PATHS = (
-    "/api/reports",
-    "/api/reports/upload",
-    "/api/reports/delete",
-    "/api/meeting/pin",
-    "/api/meeting/unpin",
-    "/api/meeting/execute",
-    "/api/meeting/task",
-    "/api/meeting/say",
-    "/api/meeting/ai-respond",
-    "/api/meeting/inject",
-    "/api/meeting/replan",
-    "/api/meeting/finalize",
-    "/api/meeting/redirect",
-    "/api/webhooks",
-    "/api/webhooks/delete",
-    "/api/run",
-    "/api/agent/run-start",
-    "/api/agent/run-complete",
-    "/api/voices/clone",
-    "/api/voices/map",
-    "/api/voice-agents",
-    "/api/assistant/message",
-    "/api/assistant/end",
-    "/api/assistant/call",
-    "/api/billing/report-usage",
-    "/api/alert-dan",
-)
+_PROTECTED_WRITE_PATHS = ("/api/* (POST, PUT, PATCH, DELETE)",)
 
 MEETING_RETENTION_HOURS = 48
 REPORT_RETENTION_HOURS = 48
