@@ -38,6 +38,14 @@ def test_tts_health_returns_neural_when_edge_ready(client):
     assert "agents" in data or "system_health" in data
 
 
+def test_dashboard_prompts_for_session_only_operator_key(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "semeclaw_api_key" in response.text
+    assert "sessionStorage" in response.text
+    assert "Authorization" in response.text
+
+
 def test_tts_missing_text(client):
     r = client.get("/api/tts?text=")
     assert r.status_code in (204, 400)

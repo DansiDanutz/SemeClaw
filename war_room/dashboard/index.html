@@ -2058,6 +2058,38 @@ header::before{height:2px!important;background:linear-gradient(90deg,transparent
 <div id="toast"></div>
 
 <script>
+/* Same-origin modifying requests use a session-only operator key. The key is
+   requested only after a 401, never persisted to disk, and never attached to
+   advertiser JWT routes that have their own bearer contract. */
+const _scNativeFetch = window.fetch.bind(window);
+const _SC_API_SESSION_KEY = 'semeclaw_api_key';
+window.fetch = async function(input, init = {}) {
+  const requestUrl = new URL(typeof input === 'string' ? input : input.url, window.location.href);
+  const method = String(init.method || (typeof input !== 'string' && input.method) || 'GET').toUpperCase();
+  const isProtectedWrite = requestUrl.origin === window.location.origin
+    && requestUrl.pathname.startsWith('/api/')
+    && !requestUrl.pathname.startsWith('/api/advertiser/')
+    && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  if (!isProtectedWrite) return _scNativeFetch(input, init);
+
+  const send = key => {
+    const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined));
+    if (key) headers.set('Authorization', `Bearer ${key}`);
+    return _scNativeFetch(input, {...init, headers});
+  };
+  let key = sessionStorage.getItem(_SC_API_SESSION_KEY) || '';
+  let response = await send(key);
+  if (response.status === 401) {
+    key = (window.prompt('SemeClaw operator API key') || '').trim();
+    if (key) {
+      sessionStorage.setItem(_SC_API_SESSION_KEY, key);
+      response = await send(key);
+      if (response.status === 401) sessionStorage.removeItem(_SC_API_SESSION_KEY);
+    }
+  }
+  return response;
+};
+
 /* ══════ CONSTANTS ══════ */
 const AVATAR = {
   'David':'🏛','Dexter':'🔬','Memo':'🎯','Sienna':'💎','Nano':'⚡',
