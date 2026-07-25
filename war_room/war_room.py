@@ -451,7 +451,14 @@ async def call_agent(
         api_base = "https://openrouter.ai/api/v1"
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if not api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is required for the remote fallback") from e
+            logger.warning("⚠️  [%s] no remote fallback key — using deterministic offline response", agent_id)
+            return (
+                f"## Offline {agent.get('name', agent_id)} analysis\n\n"
+                f"Task received: {task}\n\n"
+                "The configured model and remote fallback are unavailable. "
+                "This deterministic result preserves the pipeline artifact without fabricating model output.\n\n"
+                "Recommendation: configure a provider key or a reachable local Ollama model, then rerun for full analysis."
+            )
         response = await litellm.acompletion(
             model=use_model,
             messages=messages,

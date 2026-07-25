@@ -543,6 +543,7 @@ _INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS = {
     "/api/advertiser/webhook/stripe",
     "/api/telegram/webhook",
     "/api/v1/billing/webhook",
+    "/api/spotlight/click",
 }
 _INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES = (
     "/api/advertiser/",

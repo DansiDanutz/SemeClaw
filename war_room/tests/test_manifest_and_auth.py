@@ -81,6 +81,14 @@ def test_unlisted_write_endpoint_still_requires_bearer(client):
         assert client.post("/api/run", json={}).status_code == 401
 
 
+def test_public_spotlight_click_reaches_validation_without_global_key(client):
+    with (
+        patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=False),
+    ):
+        assert client.post("/api/spotlight/click", json={}).status_code == 400
+
+
 def test_write_endpoints_require_bearer_when_key_set(client):
     with (
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"),

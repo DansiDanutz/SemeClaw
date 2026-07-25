@@ -167,6 +167,7 @@ async def api_agent_manifest():
                     "/api/telegram/webhook (Telegram secret)",
                     "/api/v1/billing/webhook (provider signature)",
                 ],
+                "public_write_exceptions": ["/api/spotlight/click (rate-limited analytics)"],
             },
             "tts": {
                 "engine": "elevenlabs-flash-v2.5 + edge-tts fallback",

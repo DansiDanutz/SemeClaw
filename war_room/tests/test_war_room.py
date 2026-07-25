@@ -308,6 +308,20 @@ class TestAgentDefs:
 class TestPipelineHelpers:
     """Tests for WarRoomPipeline helper methods."""
 
+    @pytest.mark.asyncio
+    async def test_call_agent_returns_explicit_offline_artifact_without_provider_key(self, monkeypatch):
+        from war_room import war_room
+
+        async def unavailable(**_kwargs):
+            raise RuntimeError("provider unavailable")
+
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setattr(war_room.litellm, "acompletion", unavailable)
+        result = await war_room.call_agent("writer", "Draft the release note")
+        assert "Offline" in result
+        assert "without fabricating model output" in result
+        assert "Draft the release note" in result
+
     def test_parse_writer_output_with_title(self):
         """Parse writer output with explicit title."""
         from war_room.war_room import WarRoomPipeline
