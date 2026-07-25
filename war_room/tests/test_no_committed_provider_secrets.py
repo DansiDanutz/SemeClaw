@@ -33,3 +33,16 @@ def test_repository_has_no_provider_credentials() -> None:
         if any(pattern.search(text) for pattern in SECRET_PATTERNS):
             findings.append(str(path.relative_to(ROOT)))
     assert not findings, f"provider credential patterns found in: {findings}"
+
+
+def test_supported_install_paths_do_not_enable_quarantined_extras() -> None:
+    install_surfaces = (
+        ROOT / "install.sh",
+        ROOT / ".github" / "workflows" / "release.yml",
+        ROOT / "AGENTS.md",
+        ROOT / "README.md",
+    )
+    offenders = [
+        str(path.relative_to(ROOT)) for path in install_surfaces if "--all-extras" in path.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"quarantined extras enabled by default in: {offenders}"
