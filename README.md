@@ -4,7 +4,7 @@
 
 **Every task in your stack becomes a multi-agent meeting you can join, interrupt, and steer — until the orchestrator commits a final decision back to the source.**
 
-[![Version](https://img.shields.io/badge/version-0.10.14-10b981.svg)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.16-10b981.svg)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE.md)
@@ -70,11 +70,16 @@ Pick the one that fits how you work.
 ### A — Human, with the CLI (60 seconds)
 ```bash
 git clone https://github.com/DansiDanutz/SemeClaw.git && cd SemeClaw
-uv sync --all-extras
+uv sync
 semeclaw doctor          # tells you exactly what's missing (and what's optional)
 semeclaw war-room        # http://127.0.0.1:8765
 semeclaw tasks sync      # pull from every configured adapter
 ```
+
+The native engine is the production-safe default. The optional CrewAI adapter
+is not installed by default because its current ChromaDB dependency has an
+unfixed upstream security advisory. Do not enable `uv sync --extra crewai` on a
+network-exposed deployment until CrewAI accepts a patched ChromaDB release.
 
 ### B — Autonomous, with an AI coding agent
 ```bash

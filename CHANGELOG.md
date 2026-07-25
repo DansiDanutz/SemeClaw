@@ -2,6 +2,16 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.16] - 2026-07-25
+
+### Security
+
+- Refreshed the locked production dependency graph to patched releases and
+  verified the frozen default set has no known vulnerabilities.
+- Quarantined the optional CrewAI integration from the default production
+  install while its required ChromaDB release remains affected by an unfixed
+  pre-authentication code-injection advisory.
+
 ## [0.10.0] - 2026-07-11
 
 ### Added

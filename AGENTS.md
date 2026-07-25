@@ -31,8 +31,12 @@ parse it and act on it without scraping prose.
 ```bash
 python --version            # need >= 3.10
 which uv || curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync --all-extras --dev
+uv sync --dev
 ```
+
+Do not install the optional `crewai` extra on a network-exposed deployment
+until its pinned ChromaDB dependency has a patched release. The native engine
+is the supported production default.
 
 ### 1b. Local env
 ```bash

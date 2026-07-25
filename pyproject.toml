@@ -1,6 +1,6 @@
 [project]
 name = "semeclaw"
-version = "0.10.15"
+version = "0.10.16"
 description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
@@ -40,6 +40,14 @@ dependencies = [
     "soundfile>=0.12.0",
     "onnxruntime>=1.17.0",
     "prometheus-client>=0.20.0",
+]
+
+[project.optional-dependencies]
+# CrewAI currently pins ChromaDB 1.1.x, whose server package has an
+# unfixed pre-authentication code-injection advisory. Keep that integration
+# out of the production/default dependency set until upstream ships a fixed
+# compatible ChromaDB release. SemeClaw's native engine remains the default.
+crewai = [
     "crewai>=0.100.0",
 ]
 
