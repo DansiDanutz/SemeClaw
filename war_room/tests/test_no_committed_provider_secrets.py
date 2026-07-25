@@ -36,13 +36,13 @@ def test_repository_has_no_provider_credentials() -> None:
 
 
 def test_supported_install_paths_do_not_enable_quarantined_extras() -> None:
-    install_surfaces = (
-        ROOT / "install.sh",
-        ROOT / ".github" / "workflows" / "release.yml",
-        ROOT / "AGENTS.md",
-        ROOT / "README.md",
+    result = subprocess.run(
+        ["git", "grep", "-l", "--", "--all-extras"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
     )
-    offenders = [
-        str(path.relative_to(ROOT)) for path in install_surfaces if "--all-extras" in path.read_text(encoding="utf-8")
-    ]
+    this_test = str(Path(__file__).resolve().relative_to(ROOT))
+    offenders = [path for path in result.stdout.splitlines() if path != this_test]
     assert not offenders, f"quarantined extras enabled by default in: {offenders}"

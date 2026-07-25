@@ -15,7 +15,7 @@ help:
 	@echo "  make clean        Remove generated state and caches"
 
 install:
-	uv sync --all-extras --dev
+	uv sync --dev
 
 dev: install
 	@echo "🚀 Starting War Room dashboard on http://127.0.0.1:8765"
