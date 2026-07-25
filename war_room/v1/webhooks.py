@@ -157,11 +157,15 @@ async def _post_one(sub: WebhookSubscription, event: str, payload: dict) -> None
     try:
         import httpx
 
-        from war_room.security.outbound import validate_public_https_url
+        from war_room.security.outbound import pinned_httpx_transport, resolve_public_https_url
 
-        target_url = await validate_public_https_url(sub.url)
-        async with httpx.AsyncClient(timeout=10.0, trust_env=False, follow_redirects=False) as c:
-            r = await c.post(target_url, content=body, headers=headers)
+        target = await resolve_public_https_url(sub.url)
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            transport=pinned_httpx_transport(target),
+            follow_redirects=False,
+        ) as c:
+            r = await c.post(target.url, content=body, headers=headers)
             await _record_outcome(sub.id, status=r.status_code)
             if r.status_code >= 400:
                 _enqueue_dlq(sub, event, body, headers, reason=f"http_{r.status_code}")

@@ -538,11 +538,14 @@ async def _register_with_adclaw() -> None:
 
 # These callbacks enforce their own provider signature or user JWT inside the
 # route. Every other modifying /api request uses the SemeClaw bearer boundary.
-_INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS = (
-    "/api/advertiser/",
-    "/api/assistant/twilio/",
+_INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS = {
+    "/api/advertiser/stripe/webhook",
+    "/api/advertiser/webhook/stripe",
     "/api/telegram/webhook",
     "/api/v1/billing/webhook",
+}
+_INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES = (
+    "/api/assistant/twilio/",
 )
 
 
@@ -591,7 +594,9 @@ async def _semeclaw_auth_and_csp(request, call_next):
     _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
     if request.method in _WRITE_METHODS and request.url.path.startswith("/api/"):
         path = request.url.path
-        independently_authenticated = any(path.startswith(p) for p in _INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS)
+        independently_authenticated = path in _INDEPENDENTLY_AUTHENTICATED_WRITE_PATHS or any(
+            path.startswith(prefix) for prefix in _INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES
+        )
         if not independently_authenticated and SEMECLAW_API_KEY:
             auth = request.headers.get("authorization", "")
             if not _hmac.compare_digest(auth, f"Bearer {SEMECLAW_API_KEY}"):
@@ -1144,14 +1149,18 @@ async def _dispatch_webhook(event: str, payload: dict) -> None:
     raw = json.dumps(body).encode("utf-8")
     for h in matches:
         try:
-            from war_room.security.outbound import validate_public_https_url
+            from war_room.security.outbound import pinned_httpx_transport, resolve_public_https_url
 
-            target_url = await validate_public_https_url(h["url"])
+            target = await resolve_public_https_url(h["url"])
             secret = (h.get("secret") or "").encode("utf-8")
             sig = _hmac_ing.new(secret, raw, _hash_ing.sha256).hexdigest() if secret else ""
-            async with httpx.AsyncClient(timeout=8.0, trust_env=False, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                timeout=8.0,
+                transport=pinned_httpx_transport(target),
+                follow_redirects=False,
+            ) as client:
                 await client.post(
-                    target_url,
+                    target.url,
                     content=raw,
                     headers={
                         "content-type": "application/json",
