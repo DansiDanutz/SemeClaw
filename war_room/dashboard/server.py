@@ -661,6 +661,7 @@ _RATE_LIMIT_WINDOW = 60  # seconds
 
 # Max requests per IP per window for each path prefix
 _RATE_LIMIT_BY_PREFIX: dict[str, int] = {
+    "/api/spotlight/click": 60,  # public analytics write — bound RPC and click inflation
     "/api/tts": 60,  # ElevenLabs (paid) + Kokoro (free) — generous
     "/api/stt": 30,  # Whisper — CPU heavy
     "/api/meeting/audio": 10,  # ffmpeg + TTS — heavy

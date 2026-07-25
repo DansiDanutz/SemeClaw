@@ -13,7 +13,9 @@ sys.path.insert(0, str(ROOT / "war_room" / "dashboard"))
 
 os.chdir(str(ROOT))
 
-from war_room.dashboard.server import app
+from war_room.dashboard import server
+
+app = server.app
 
 
 @pytest.fixture
@@ -87,6 +89,26 @@ def test_public_spotlight_click_reaches_validation_without_global_key(client):
         patch("war_room.dashboard.server._is_loopback_request", return_value=False),
     ):
         assert client.post("/api/spotlight/click", json={}).status_code == 400
+
+
+def test_public_spotlight_click_is_rate_limited(client):
+    limit = server._RATE_LIMIT_BY_PREFIX["/api/spotlight/click"]
+    server._RATE_WINDOWS.clear()
+    try:
+        with (
+            patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+            patch("war_room.dashboard.server._is_loopback_request", return_value=False),
+        ):
+            for _ in range(limit):
+                assert client.post("/api/spotlight/click", json={}).status_code == 400
+
+            response = client.post("/api/spotlight/click", json={})
+
+        assert response.status_code == 429
+        assert response.json()["error"] == "rate_limit_exceeded"
+        assert response.headers["retry-after"] == str(server._RATE_LIMIT_WINDOW)
+    finally:
+        server._RATE_WINDOWS.clear()
 
 
 def test_write_endpoints_require_bearer_when_key_set(client):
