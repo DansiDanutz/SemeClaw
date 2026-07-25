@@ -253,9 +253,10 @@ All of these are **optional**. The system works without any of them.
 | `OPENROUTER_API_KEY` | LLM for agents + orchestrator decisions. Without it, deterministic templates fire. | unset |
 | `ELEVENLABS_API_KEY` | Premium TTS. Falls back to `edge-tts`. | unset |
 | `DLS_TEAM_SUPABASE_URL` + `DLS_TEAM_SUPABASE_SERVICE_ROLE_KEY` | Persistent task storage. Without it, in-memory only. | unset |
-| `SEMECLAW_API_KEY` | Bearer token for write endpoints. Unset = open mode. | unset |
+| `SEMECLAW_API_KEY` | Bearer token for write endpoints. Unset permits writes only for direct loopback requests on a loopback-only deployment. | unset |
 | `SEMECLAW_TENANT_ID` | Tenant identifier in manifest + logs. | `default` |
 | `SEMECLAW_PUBLIC_URL` | External URL baked into embeds + manifest. | `http://127.0.0.1:8765` |
+| `SEMECLAW_TRUSTED_PROXY_CIDRS` | Comma-separated proxy CIDRs allowed to supply `X-Forwarded-For` for per-client rate limiting. | unset |
 | `TELEGRAM_BOT_TOKEN` | Enables the Telegram bot. | unset |
 | `TELEGRAM_WEBHOOK_SECRET` | Verifies `X-Telegram-Bot-Api-Secret-Token` header. | unset |
 | `<ADAPTER>_BASE_URL` / `_API_KEY` / `_WORKSPACE_ID` | Per-adapter creds. Probed by `semeclaw doctor`. | unset |

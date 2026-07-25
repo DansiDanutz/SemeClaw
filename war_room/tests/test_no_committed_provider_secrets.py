@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,8 +17,17 @@ SECRET_PATTERNS = (
 
 def test_repository_has_no_provider_credentials() -> None:
     findings: list[str] = []
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or path.suffix not in SCANNED_SUFFIXES:
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    for relative_path in tracked:
+        if not relative_path:
+            continue
+        path = ROOT / relative_path.decode("utf-8", errors="surrogateescape")
+        if path.suffix not in SCANNED_SUFFIXES:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         if any(pattern.search(text) for pattern in SECRET_PATTERNS):
