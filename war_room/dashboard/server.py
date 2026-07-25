@@ -23,6 +23,7 @@ API endpoints:
 """
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -32,6 +33,7 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Ensure repo root is on path so war_room imports work when run directly
 _REPO_ROOT = Path(__file__).parent.parent.parent
@@ -77,6 +79,25 @@ SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*")
 SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*")
 SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default")
 SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765")
+
+
+def _parse_trusted_proxy_networks(value: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """Parse operator-approved proxy CIDRs; invalid entries fail closed."""
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            logging.getLogger("war_room.dashboard").warning(
+                "Ignoring invalid SEMECLAW_TRUSTED_PROXY_CIDRS entry: %s", item
+            )
+    return tuple(networks)
+
+
+_TRUSTED_PROXY_NETWORKS = _parse_trusted_proxy_networks(os.environ.get("SEMECLAW_TRUSTED_PROXY_CIDRS", ""))
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -552,14 +573,55 @@ _INDEPENDENTLY_AUTHENTICATED_WRITE_PREFIXES = (
 
 
 def _is_loopback_request(request: Request) -> bool:
-    """Allow keyless writes only over a direct loopback connection."""
-    import ipaddress
+    """Allow keyless writes only for an explicitly local, unproxied deployment."""
+    proxy_headers = (
+        "forwarded",
+        "x-forwarded-for",
+        "x-forwarded-host",
+        "x-forwarded-proto",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "fly-client-ip",
+        "true-client-ip",
+    )
+    if any(request.headers.get(header) for header in proxy_headers):
+        return False
 
-    host = request.client.host if request.client else ""
+    peer_host = request.client.host if request.client else ""
+    request_host = request.url.hostname or ""
+    public_host = urlparse(SEMECLAW_PUBLIC_URL).hostname or ""
     try:
-        return ipaddress.ip_address(host).is_loopback
+        peer_is_loopback = ipaddress.ip_address(peer_host).is_loopback
+        request_is_loopback = request_host == "localhost" or ipaddress.ip_address(request_host).is_loopback
+        public_is_loopback = public_host == "localhost" or ipaddress.ip_address(public_host).is_loopback
+        return peer_is_loopback and request_is_loopback and public_is_loopback
     except ValueError:
         return False
+
+
+def _rate_limit_client_ip(request: Request) -> str:
+    """Resolve a client IP only through an explicitly trusted proxy chain."""
+    peer = request.client.host if request.client else "unknown"
+    try:
+        peer_address = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+
+    if not any(peer_address in network for network in _TRUSTED_PROXY_NETWORKS):
+        return str(peer_address)
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    chain: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for item in forwarded.split(","):
+        try:
+            chain.append(ipaddress.ip_address(item.strip()))
+        except ValueError:
+            return str(peer_address)
+
+    for address in reversed(chain):
+        if not any(address in network for network in _TRUSTED_PROXY_NETWORKS):
+            return str(address)
+    return str(peer_address)
 
 
 @app.middleware("http")
@@ -684,7 +746,7 @@ async def _rate_limiter(request: Request, call_next):
             break
 
     if limit is not None:
-        ip = request.client.host if request.client else "unknown"
+        ip = _rate_limit_client_ip(request)
         key = f"{ip}|{matched_prefix}"
         now = _time.monotonic()
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from starlette.requests import Request
 
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -16,6 +17,30 @@ os.chdir(str(ROOT))
 from war_room.dashboard import server
 
 app = server.app
+
+
+def _request(
+    *,
+    client_host: str = "127.0.0.1",
+    host: str = "127.0.0.1:8765",
+    forwarded_for: str | None = None,
+) -> Request:
+    headers = [(b"host", host.encode())]
+    if forwarded_for is not None:
+        headers.append((b"x-forwarded-for", forwarded_for.encode()))
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/run",
+            "raw_path": b"/api/run",
+            "query_string": b"",
+            "headers": headers,
+            "client": (client_host, 12345),
+            "server": ("127.0.0.1", 8765),
+        }
+    )
 
 
 @pytest.fixture
@@ -66,6 +91,30 @@ def test_write_endpoints_open_on_loopback_when_no_api_key(client):
         r = client.post("/api/meeting/pin", params={"name": "x.md"})
         # _build_meeting_mp3 returns None for missing report → 500
         assert r.status_code in (200, 500)
+
+
+def test_loopback_exception_requires_local_deployment_and_direct_request():
+    with patch("war_room.dashboard.server.SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765"):
+        assert server._is_loopback_request(_request()) is True
+        assert server._is_loopback_request(_request(host="semeclaw.example")) is False
+        assert server._is_loopback_request(_request(forwarded_for="198.51.100.8")) is False
+
+    with patch("war_room.dashboard.server.SEMECLAW_PUBLIC_URL", "https://semeclaw.example"):
+        assert server._is_loopback_request(_request()) is False
+
+
+def test_rate_limit_client_ip_uses_only_explicitly_trusted_proxy_chain():
+    request = _request(client_host="127.0.0.1", forwarded_for="198.51.100.8")
+    with patch("war_room.dashboard.server._TRUSTED_PROXY_NETWORKS", ()):
+        assert server._rate_limit_client_ip(request) == "127.0.0.1"
+
+    trusted = server._parse_trusted_proxy_networks("127.0.0.0/8,10.0.0.0/8")
+    request = _request(
+        client_host="127.0.0.1",
+        forwarded_for="192.0.2.44, 198.51.100.8, 10.1.2.3",
+    )
+    with patch("war_room.dashboard.server._TRUSTED_PROXY_NETWORKS", trusted):
+        assert server._rate_limit_client_ip(request) == "198.51.100.8"
 
 
 def test_write_endpoints_fail_closed_off_loopback_without_api_key(client):

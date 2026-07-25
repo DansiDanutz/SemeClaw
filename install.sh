@@ -92,7 +92,7 @@ clone_repo() {
 
 install_deps() {
     info "Installing dependencies with uv..."
-    uv sync --all-extras --dev
+    uv sync --dev
     ok "Dependencies installed"
 }
 
