@@ -57,13 +57,22 @@ def _subscription_price_id(tier: str) -> tuple[str, str]:
     return price_env, price_id
 
 
-def _subscription_tier_from_price(price_id: str) -> str:
-    gold_prices = {
-        os.environ.get("ADCLAW_PRICE_USD_25", "").strip(),
-        os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+def _subscription_tier_from_price(price_id: str) -> str | None:
+    configured_prices = {
+        "gold": {
+            os.environ.get("ADCLAW_PRICE_USD_25", "").strip(),
+            os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+        },
+        "diamond": {
+            os.environ.get("ADCLAW_PRICE_USD_50", "").strip(),
+            os.environ.get("ADCLAW_PRICE_USD_500", "").strip(),
+        },
     }
-    gold_prices.discard("")
-    return "gold" if price_id in gold_prices else "diamond"
+    for tier, price_ids in configured_prices.items():
+        price_ids.discard("")
+        if price_id in price_ids:
+            return tier
+    return None
 
 
 def _subscription_benefit_months_from_price(price_id: str) -> int:
@@ -727,10 +736,15 @@ async def api_advertiser_stripe_webhook(request: Request):
                 line = (obj.get("lines", {}).get("data") or [{}])[0]
                 price_id = (line.get("price") or {}).get("id", "")
                 if price_id:
-                    tier = _subscription_tier_from_price(price_id)
+                    configured_tier = _subscription_tier_from_price(price_id)
+                    if configured_tier is None:
+                        raise ValueError("invoice price is not an enabled AdClaw subscription price")
+                    tier = configured_tier
                     benefit_months = _subscription_benefit_months_from_price(price_id)
-            except Exception:
-                pass
+            except ValueError:
+                raise
+            except Exception as error:
+                raise ValueError("invoice subscription price could not be validated") from error
             # Period end (unix seconds) → ISO
             period_end = obj.get("lines", {}).get("data", [{}])[0].get("period", {}).get("end")
             expires_iso = datetime.fromtimestamp(period_end, tz=timezone.utc).isoformat() if period_end else None
