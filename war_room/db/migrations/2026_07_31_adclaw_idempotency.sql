@@ -178,6 +178,15 @@ begin
 end;
 $$;
 
+-- Remove default PUBLIC execution from legacy credit-minting entry points.
+-- The backend service role is the only caller allowed to create paid credits.
+revoke all on function adclaw_topup_credits(uuid, int, text) from public, anon, authenticated;
+revoke all on function adclaw_grant_subscription_credits(uuid, text) from public, anon, authenticated;
+revoke all on function adclaw_record_topup(uuid, int, text) from public, anon, authenticated;
+grant execute on function adclaw_topup_credits(uuid, int, text) to service_role;
+grant execute on function adclaw_grant_subscription_credits(uuid, text) to service_role;
+grant execute on function adclaw_record_topup(uuid, int, text) to service_role;
+
 revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
 revoke all on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) from public;
 grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) to service_role;
