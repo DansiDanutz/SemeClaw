@@ -79,6 +79,7 @@ def test_paid_operations_use_database_idempotency_contracts():
     assert "rpc/adclaw_generate_card_once" in route
     assert "rpc/adclaw_grant_subscription_invoice_credits" in route
     assert '"p_invoice_id": invoice_id' in route
+    assert '"p_expires_at": expires_iso' in route
     assert '"p_request_id": request_id' in route
     assert 'for _ in range(benefit_months)' not in route
     assert "pg_advisory_xact_lock" in migration
@@ -130,3 +131,53 @@ def test_deployments_fail_closed_until_idempotency_migration_is_acknowledged():
     assert "invoice_grant_ready" in agent_setup
     assert "paid_generation_ready" in agent_setup
     assert "Both values must be `true`" in agent_setup
+
+def test_subscription_prices_fail_before_customer_or_wallet_mutation():
+    repo_root = Path(__file__).resolve().parents[1]
+    route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
+    checkout = route[
+        route.index('async def api_advertiser_checkout') :
+        route.index('async def api_advertiser_stripe_webhook')
+    ]
+
+    assert checkout.index("_subscription_price_id(tier)") < checkout.index("_ensure_advertiser(advertiser_id)")
+    assert checkout.index("_subscription_price_id(tier)") < checkout.index("stripe.Customer.create(")
+
+
+def test_invoice_fulfillment_validates_identity_and_is_one_database_transaction():
+    repo_root = Path(__file__).resolve().parents[1]
+    route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
+    webhook = route[
+        route.index('if etype == "invoice.paid":') :
+        route.index('elif etype == "checkout.session.completed":')
+    ]
+    migration = (
+        repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "missing its subscription price" in webhook
+    assert webhook.index("if not price_id:") < webhook.index("rpc/adclaw_grant_subscription_invoice_credits")
+    assert '"p_expires_at": expires_iso' in webhook
+    assert '_supa("patch"' not in webhook
+    assert "tier = p_tier" in migration
+    assert "is_subscribed = true" in migration
+    assert "sub_expires_at = coalesce(p_expires_at, sub_expires_at)" in migration
+
+
+def test_fresh_database_runbook_orders_every_schema_prerequisite():
+    repo_root = Path(__file__).resolve().parents[1]
+    runbook = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
+    bridge = "2026_04_23_adclaw_01_subscription_columns.sql"
+    projects = "2026_04_24_adclaw_projects_and_spotlight.sql"
+    tier = "2026_04_23_adclaw_tier.sql"
+    credits = "2026_04_23_adclaw_credits.sql"
+    idempotency = "2026_07_31_adclaw_idempotency.sql"
+
+    assert runbook.index(projects) < runbook.index(tier)
+    assert runbook.index(bridge) < runbook.index(tier) < runbook.index(credits)
+    assert runbook.index(credits) < runbook.index(idempotency)
+
+    bridge_sql = (repo_root / "war_room/db/migrations" / bridge).read_text(encoding="utf-8")
+    for column in ("stripe_customer_id", "is_subscribed", "sub_expires_at"):
+        assert f"add column if not exists {column}" in bridge_sql
+
