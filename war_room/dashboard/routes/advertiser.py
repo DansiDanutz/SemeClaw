@@ -8,6 +8,7 @@ import os
 import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Request
@@ -26,6 +27,59 @@ from war_room.dashboard.routes.deps import (
 logger = logging.getLogger("war_room.dashboard.advertiser")
 
 router = APIRouter(tags=["advertiser"])
+
+_SUBSCRIPTION_TIER_PRICE_ENV = {
+    "gold": "ADCLAW_PRICE_USD_25",
+    "25": "ADCLAW_PRICE_USD_25",
+    "diamond": "ADCLAW_PRICE_USD_50",
+    "50": "ADCLAW_PRICE_USD_50",
+    "subscription": "ADCLAW_PRICE_USD_50",
+    "gold_annual": "ADCLAW_PRICE_USD_250",
+    "diamond_annual": "ADCLAW_PRICE_USD_500",
+}
+_SUBSCRIPTION_TIER_CANONICAL = {
+    "gold": "gold",
+    "25": "gold",
+    "gold_annual": "gold",
+    "diamond": "diamond",
+    "50": "diamond",
+    "subscription": "diamond",
+    "diamond_annual": "diamond",
+}
+_ANNUAL_TIERS = {"gold_annual", "diamond_annual"}
+
+
+def _subscription_price_id(tier: str) -> tuple[str, str]:
+    price_env = _SUBSCRIPTION_TIER_PRICE_ENV[tier]
+    price_id = os.environ.get(price_env, "").strip()
+    return price_env, price_id
+
+
+def _subscription_tier_from_price(price_id: str) -> str | None:
+    configured_prices = {
+        "gold": {
+            os.environ.get("ADCLAW_PRICE_USD_25", "").strip(),
+            os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+        },
+        "diamond": {
+            os.environ.get("ADCLAW_PRICE_USD_50", "").strip(),
+            os.environ.get("ADCLAW_PRICE_USD_500", "").strip(),
+        },
+    }
+    for tier, price_ids in configured_prices.items():
+        price_ids.discard("")
+        if price_id in price_ids:
+            return tier
+    return None
+
+
+def _subscription_benefit_months_from_price(price_id: str) -> int:
+    annual_prices = {
+        os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+        os.environ.get("ADCLAW_PRICE_USD_500", "").strip(),
+    }
+    annual_prices.discard("")
+    return 12 if price_id in annual_prices else 1
 
 
 # ---------------------------------------------------------------------------
@@ -300,40 +354,59 @@ GENERATE_CARD_COST = 10  # credits to generate one ad card
 @router.post("/api/advertiser/{advertiser_id}/projects/{project_id}/generate-card")
 async def api_advertiser_generate_card(advertiser_id: str, project_id: str, request: Request):
     await require_advertiser_owner(request, advertiser_id)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    raw_request_id = str(body.get("idempotency_key") or "").strip()
+    try:
+        request_id = str(UUID(raw_request_id))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "valid idempotency_key required"}, status_code=400)
+
     try:
         rows = await _supa("get", f"adclaw_projects?id=eq.{project_id}&advertiser_id=eq.{advertiser_id}&select=*")
         if not rows:
             return JSONResponse({"error": "project not found"}, status_code=404)
 
-        # Deduct credits atomically (RPC checks balance and rejects if insufficient)
-        try:
-            result = await _supa(
-                "post",
-                "rpc/adclaw_deduct_credits",
-                json={
-                    "p_advertiser_id": advertiser_id,
-                    "p_credits": GENERATE_CARD_COST,
-                    "p_description": f"Generated ad card for project {project_id[:8]}",
-                },
-            )
-            rd = result if isinstance(result, dict) else (result[0] if result else {})
-            if rd.get("ok") is False:
-                return JSONResponse(
-                    {
-                        "error": rd.get("error", "insufficient credits"),
-                        "cost": GENERATE_CARD_COST,
-                        "wallet_credits": rd.get("wallet_credits", 0),
-                    },
-                    status_code=402,
-                )
-        except Exception as e:
-            logger.warning("deduct_credits failed, continuing: %s", e)
-
+        # Compose before charging, then persist the draft and debit atomically.
         draft = _compose_draft(rows[0])
-        return JSONResponse({"draft": draft, "cost": GENERATE_CARD_COST})
+        result = await _supa(
+            "post",
+            "rpc/adclaw_generate_card_once",
+            json={
+                "p_request_id": request_id,
+                "p_advertiser_id": advertiser_id,
+                "p_project_id": project_id,
+                "p_cost": GENERATE_CARD_COST,
+                "p_draft": draft,
+            },
+        )
+        rd = result if isinstance(result, dict) else (result[0] if result else {})
+        if rd.get("ok") is not True:
+            status = 402 if rd.get("error") == "insufficient credits" else 409
+            return JSONResponse(
+                {
+                    "error": rd.get("error", "generation could not be committed"),
+                    "cost": GENERATE_CARD_COST,
+                    "wallet_credits": rd.get("wallet_credits"),
+                },
+                status_code=status,
+            )
+        return JSONResponse(
+            {
+                "draft": rd.get("draft", draft),
+                "cost": rd.get("cost", GENERATE_CARD_COST),
+                "already_processed": bool(rd.get("already_processed")),
+            }
+        )
     except Exception as e:
         logger.warning("generate-card error: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse(
+            {"error": "paid generation unavailable; retry with the same idempotency key"},
+            status_code=503,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -564,25 +637,11 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
             customer_id = customer.id
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json={"stripe_customer_id": customer_id})
 
-        # Map tier label → Stripe Price ID.
-        # Accepts: "gold", "diamond", "25", "50" (legacy), "subscription" (legacy → diamond).
-        _tier_price_env = {
-            "gold": "ADCLAW_PRICE_USD_25",
-            "25": "ADCLAW_PRICE_USD_25",
-            "diamond": "ADCLAW_PRICE_USD_50",
-            "50": "ADCLAW_PRICE_USD_50",
-            "subscription": "ADCLAW_PRICE_USD_50",
-        }
-        _tier_canonical = {
-            "gold": "gold",
-            "25": "gold",
-            "diamond": "diamond",
-            "50": "diamond",
-            "subscription": "diamond",
-        }
-        if tier in _tier_price_env:
-            price_env = _tier_price_env[tier]
-            price_id = os.environ.get(price_env, "").strip() or os.environ.get("STRIPE_PRICE_SUBSCRIPTION", "").strip()
+        # Map subscription tiers to distinct Stripe prices. Annual plans must
+        # never fall back to a monthly price because that would mischarge the
+        # advertised $250/$500 checkout.
+        if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+            price_env, price_id = _subscription_price_id(tier)
             if not price_id:
                 return JSONResponse({"error": f"subscription price not configured ({price_env})"}, status_code=503)
             session = stripe.checkout.Session.create(
@@ -593,7 +652,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
                 metadata={
                     "advertiser_id": advertiser_id,
-                    "tier": _tier_canonical.get(tier, "diamond"),
+                    "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
                 },
             )
         else:
@@ -668,15 +727,22 @@ async def api_advertiser_stripe_webhook(request: Request):
             advertiser_id = await _adv_from_customer(customer_id)
             if not advertiser_id:
                 return JSONResponse({"ok": True, "note": "no matching advertiser"})
-            # Tier from price id on the line item
+            # Tier and benefit period from the invoiced Stripe price.
             tier = "diamond"
+            benefit_months = 1
             try:
                 line = (obj.get("lines", {}).get("data") or [{}])[0]
                 price_id = (line.get("price") or {}).get("id", "")
-                if price_id and price_id == os.environ.get("ADCLAW_PRICE_USD_25", "").strip():
-                    tier = "gold"
-            except Exception:
-                pass
+                if price_id:
+                    configured_tier = _subscription_tier_from_price(price_id)
+                    if configured_tier is None:
+                        raise ValueError("invoice price is not an enabled AdClaw subscription price")
+                    tier = configured_tier
+                    benefit_months = _subscription_benefit_months_from_price(price_id)
+            except ValueError:
+                raise
+            except Exception as error:
+                raise ValueError("invoice subscription price could not be validated") from error
             # Period end (unix seconds) → ISO
             period_end = obj.get("lines", {}).get("data", [{}])[0].get("period", {}).get("end")
             expires_iso = datetime.fromtimestamp(period_end, tz=timezone.utc).isoformat() if period_end else None
@@ -684,10 +750,23 @@ async def api_advertiser_stripe_webhook(request: Request):
             if expires_iso:
                 patch["sub_expires_at"] = expires_iso
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json=patch)
-            # Grant subscription credits: Gold 300 (250+50), Diamond 750 (500+250)
-            await _supa(
-                "post", "rpc/adclaw_grant_subscription_credits", json={"p_advertiser_id": advertiser_id, "p_tier": tier}
+            # Grant the complete invoice benefit atomically and exactly once.
+            invoice_id = str(obj.get("id") or "").strip()
+            if not invoice_id:
+                raise ValueError("signed Stripe invoice is missing its immutable id")
+            result = await _supa(
+                "post",
+                "rpc/adclaw_grant_subscription_invoice_credits",
+                json={
+                    "p_invoice_id": invoice_id,
+                    "p_advertiser_id": advertiser_id,
+                    "p_tier": tier,
+                    "p_months": benefit_months,
+                },
             )
+            grant = result if isinstance(result, dict) else (result[0] if result else {})
+            if grant.get("ok") is not True:
+                raise RuntimeError(grant.get("error", "subscription credit grant failed"))
 
         elif etype == "checkout.session.completed":
             # One-time credit top-up: $1 = 10 credits. Amount comes from metadata.credits
