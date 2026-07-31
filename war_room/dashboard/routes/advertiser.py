@@ -647,18 +647,19 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 {"error": f"subscription price not configured ({subscription_price_env})"},
                 status_code=503,
             )
+
     try:
         await _ensure_advertiser(advertiser_id)
         import stripe
 
         stripe.api_key = STRIPE_SECRET_KEY
 
-        # Lookup or create Stripe customer
         adv_rows = await _supa(
             "get",
             f"adclaw_advertisers?id=eq.{advertiser_id}&select=email,stripe_customer_id",
         )
         adv = adv_rows[0] if adv_rows else {}
+        reservation_data: dict = {}
         if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
             reservation = await _supa(
                 "post",
@@ -669,60 +670,8 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 },
             )
             reservation_data = reservation if isinstance(reservation, dict) else (reservation[0] if reservation else {})
-            if (
-                reservation_data.get("ok") is not True
-                and reservation_data.get("error") == "a checkout for a different subscription plan is already active"
-                and reservation_data.get("session_id")
-                and reservation_data.get("reservation_token")
-            ):
-                # Invalidate the abandoned Stripe session before clearing its
-                # matching database reservation, then reserve the new plan.
-                stripe.checkout.Session.expire(reservation_data["session_id"])
-                cleared = await _supa(
-                    "post",
-                    "rpc/adclaw_clear_subscription_checkout",
-                    json={
-                        "p_advertiser_id": advertiser_id,
-                        "p_reservation_token": reservation_data["reservation_token"],
-                        "p_session_id": reservation_data["session_id"],
-                    },
-                )
-                cleared_data = cleared if isinstance(cleared, dict) else (cleared[0] if cleared else {})
-                if cleared_data.get("ok") is not True:
-                    raise RuntimeError(cleared_data.get("error", "failed to clear abandoned checkout"))
-                reservation = await _supa(
-                    "post",
-                    "rpc/adclaw_reserve_subscription_checkout",
-                    json={
-                        "p_advertiser_id": advertiser_id,
-                        "p_price_id": subscription_price_id,
-                    },
-                )
-                reservation_data = (
-                    reservation if isinstance(reservation, dict) else (reservation[0] if reservation else {})
-                )
-            if reservation_data.get("ok") is not True:
-                return JSONResponse(
-                    {
-                        "error": reservation_data.get(
-                            "error",
-                            "a subscription checkout is already active",
-                        )
-                    },
-                    status_code=409,
-                )
-            if reservation_data.get("checkout_url"):
-                return JSONResponse(
-                    {
-                        "url": reservation_data["checkout_url"],
-                        "session_id": reservation_data.get("session_id"),
-                    }
-                )
-            reservation_token = reservation_data.get("reservation_token")
-            if not reservation_token:
-                raise RuntimeError("subscription checkout reservation token missing")
-        customer_id = adv.get("stripe_customer_id")
 
+        customer_id = adv.get("stripe_customer_id")
         if not customer_id:
             customer_kwargs = {
                 "email": adv.get("email", ""),
@@ -732,41 +681,154 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 customer_kwargs["idempotency_key"] = f"adclaw-subscription-customer:{advertiser_id}"
             customer = stripe.Customer.create(**customer_kwargs)
             customer_id = customer.id
-            await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json={"stripe_customer_id": customer_id})
+            await _supa(
+                "patch",
+                f"adclaw_advertisers?id=eq.{advertiser_id}",
+                json={"stripe_customer_id": customer_id},
+            )
 
-        # Map subscription tiers to distinct Stripe prices. Annual plans must
-        # never fall back to a monthly price because that would mischarge the
-        # advertised $250/$500 checkout.
-        if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+        def _stripe_value(stripe_object, key: str):
+            if isinstance(stripe_object, dict):
+                return stripe_object.get(key)
+            return getattr(stripe_object, key, None)
+
+        async def _create_and_store_subscription_session(data: dict, price_id: str):
+            reservation_token = data.get("reservation_token")
+            reserved_until = data.get("reserved_until")
+            canonical_tier = _subscription_tier_from_price(price_id)
+            if not reservation_token or not reserved_until or canonical_tier is None:
+                raise RuntimeError("subscription checkout reservation identity missing")
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 mode="subscription",
-                line_items=[{"price": subscription_price_id, "quantity": 1}],
+                line_items=[{"price": price_id, "quantity": 1}],
                 success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
-                expires_at=int(datetime.fromisoformat(reservation_data["reserved_until"]).timestamp()),
+                expires_at=int(datetime.fromisoformat(reserved_until).timestamp()),
                 metadata={
                     "advertiser_id": advertiser_id,
-                    "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
+                    "tier": canonical_tier,
                     "reservation_token": str(reservation_token),
                 },
-                idempotency_key=(f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}"),
+                idempotency_key=f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}",
             )
+            session_id = _stripe_value(session, "id")
+            checkout_url = _stripe_value(session, "url")
             stored = await _supa(
                 "post",
                 "rpc/adclaw_store_subscription_checkout",
                 json={
                     "p_advertiser_id": advertiser_id,
                     "p_reservation_token": reservation_token,
-                    "p_session_id": session.id,
-                    "p_checkout_url": session.url,
+                    "p_session_id": session_id,
+                    "p_checkout_url": checkout_url,
                 },
             )
             stored_data = stored if isinstance(stored, dict) else (stored[0] if stored else {})
             if stored_data.get("ok") is not True:
                 raise RuntimeError(stored_data.get("error", "failed to persist subscription checkout"))
+            return session
+
+        async def _clear_subscription_reservation(data: dict, session_id: str):
+            cleared = await _supa(
+                "post",
+                "rpc/adclaw_clear_subscription_checkout",
+                json={
+                    "p_advertiser_id": advertiser_id,
+                    "p_reservation_token": data.get("reservation_token"),
+                    "p_session_id": session_id,
+                },
+            )
+            cleared_data = cleared if isinstance(cleared, dict) else (cleared[0] if cleared else {})
+            if cleared_data.get("ok") is not True or cleared_data.get("cleared") is not True:
+                raise RuntimeError(cleared_data.get("error", "checkout reservation changed during recovery"))
+
+        async def _reserve_requested_subscription():
+            reserved = await _supa(
+                "post",
+                "rpc/adclaw_reserve_subscription_checkout",
+                json={
+                    "p_advertiser_id": advertiser_id,
+                    "p_price_id": subscription_price_id,
+                },
+            )
+            data = reserved if isinstance(reserved, dict) else (reserved[0] if reserved else {})
+            if data.get("ok") is not True:
+                raise RuntimeError(data.get("error", "subscription checkout reservation failed"))
+            return data
+
+        if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+            is_different_plan = (
+                reservation_data.get("ok") is not True
+                and reservation_data.get("error") == "a checkout for a different subscription plan is already active"
+            )
+            if reservation_data.get("ok") is not True and not is_different_plan:
+                return JSONResponse(
+                    {"error": reservation_data.get("error", "a subscription checkout is already active")},
+                    status_code=409,
+                )
+
+            session_id = reservation_data.get("session_id")
+            session = None
+            if session_id:
+                session = stripe.checkout.Session.retrieve(session_id)
+            elif is_different_plan:
+                # Replay the original idempotency request to recover a Stripe
+                # session whose response was lost before it could be stored.
+                session = await _create_and_store_subscription_session(
+                    reservation_data,
+                    reservation_data.get("reserved_price_id", ""),
+                )
+                session_id = _stripe_value(session, "id")
+
+            if session is not None:
+                session_status = _stripe_value(session, "status")
+                if not is_different_plan and session_status == "open":
+                    return JSONResponse(
+                        {
+                            "url": _stripe_value(session, "url"),
+                            "session_id": session_id,
+                        }
+                    )
+                if session_status == "open":
+                    stripe.checkout.Session.expire(session_id)
+                elif session_status == "complete":
+                    return JSONResponse(
+                        {"error": "subscription checkout completed; awaiting invoice fulfillment"},
+                        status_code=409,
+                    )
+                elif session_status != "expired":
+                    return JSONResponse(
+                        {"error": "subscription checkout state could not be verified"},
+                        status_code=409,
+                    )
+                await _clear_subscription_reservation(reservation_data, session_id)
+                reservation_data = await _reserve_requested_subscription()
+
+            if is_different_plan and session is None:
+                return JSONResponse(
+                    {"error": "existing subscription checkout could not be recovered"},
+                    status_code=409,
+                )
+
+            if reservation_data.get("checkout_url") and reservation_data.get("session_id"):
+                # A stored URL is returned only after Stripe confirms the
+                # corresponding session is still open.
+                stored_session = stripe.checkout.Session.retrieve(reservation_data["session_id"])
+                if _stripe_value(stored_session, "status") == "open":
+                    return JSONResponse(
+                        {
+                            "url": _stripe_value(stored_session, "url"),
+                            "session_id": _stripe_value(stored_session, "id"),
+                        }
+                    )
+                return JSONResponse(
+                    {"error": "subscription checkout is no longer open; retry"},
+                    status_code=409,
+                )
+
+            session = await _create_and_store_subscription_session(reservation_data, subscription_price_id)
         else:
-            # One-time credit top-up
             credits = int(body.get("credits", 100))
             unit_amount = max(100, credits * 10)  # $1 = 10 credits, in cents
             session = stripe.checkout.Session.create(
@@ -787,7 +849,12 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 metadata={"advertiser_id": advertiser_id, "credits": str(credits)},
             )
 
-        return JSONResponse({"url": session.url, "session_id": session.id})
+        return JSONResponse(
+            {
+                "url": _stripe_value(session, "url"),
+                "session_id": _stripe_value(session, "id"),
+            }
+        )
     except Exception as e:
         logger.warning("checkout error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
