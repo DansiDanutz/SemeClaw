@@ -3,6 +3,14 @@
 All notable changes to SemeClaw will be documented in this file.
 
 
+## [0.10.23] - 2026-07-31
+
+### Security
+
+- Require explicit tier-specific Stripe prices so checkout and invoice fulfillment share one unambiguous allowlist.
+- Document the complete supervised Supabase migration dependency order before enabling idempotent paid fulfillment.
+
+
 ## [0.10.22] - 2026-07-31
 
 ### Security
