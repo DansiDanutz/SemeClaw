@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.23] - 2026-07-31
+
+### Security
+
+- Route advertiser API calls through live Supabase session bearers and fail expired or revoked sessions back to login.
+- Require explicit tier-specific Stripe prices so checkout and invoice fulfillment share one unambiguous allowlist.
+- Make monthly and annual invoice fulfillment atomic and idempotent by immutable invoice ID.
+- Make paid draft debit and result persistence atomic and recoverable by client request UUID.
+- Gate deployment on the supervised Supabase migration and document its complete prerequisite order.
+- Remove the obsolete Quick Tunnel default and retain authenticated backend generation as the authority boundary.
+
+
 ## [0.10.16] - 2026-07-25
 
 ### Security

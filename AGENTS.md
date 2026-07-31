@@ -63,16 +63,39 @@ Parse `/tmp/doctor.json`. The shape is:
 - If `hard_fail: true` → fix every `required: true, ok: false` check before continuing. The `hint` field tells you exactly what to do.
 - If `hard_fail: false` but some `ok: false` → those are optional. Tell the human what they unlock and ask whether to set them up.
 
-### 1d. Apply the database migration (only if Supabase is configured)
-If `DLS_TEAM_SUPABASE_URL` is set in `.env`:
-```bash
-# The migration is at war_room/db/migrations/2026_04_24_semeclaw_tasks.sql
-# Two ways to apply:
-#   1. Paste into Supabase SQL editor (safest, human-supervised)
-#   2. Use the Supabase MCP: apply_migration(file=...) — only with explicit human ok
+### 1d. Apply database migrations before deployment (only if Supabase is configured)
+If `DLS_TEAM_SUPABASE_URL` is set in `.env`, apply these migrations in order:
+
+1. `war_room/db/migrations/2026_04_23_adclaw_00_base.sql`
+2. `war_room/db/migrations/2026_04_24_adclaw_projects_and_spotlight.sql`
+3. `war_room/db/migrations/2026_04_23_adclaw_01_subscription_columns.sql`
+4. `war_room/db/migrations/2026_04_23_adclaw_tier.sql`
+5. `war_room/db/migrations/2026_04_23_adclaw_credits.sql`
+6. `war_room/db/migrations/2026_04_23_adclaw_deduct_backfill.sql`
+7. `war_room/db/migrations/2026_04_23_adclaw_special.sql`
+8. `war_room/db/migrations/2026_04_23_adclaw_weekly_bonus.sql`
+9. `war_room/db/migrations/2026_04_24_semeclaw_tasks.sql`
+10. `war_room/db/migrations/2026_07_31_adclaw_idempotency.sql`
+
+Apply them through the Supabase SQL editor (safest, human-supervised) or the
+Supabase migration tool with explicit human authorization. Before deploying,
+run this probe in the SQL editor:
+
+```sql
+select
+  to_regprocedure('public.adclaw_grant_subscription_invoice_credits(text,uuid,text,integer,timestamp with time zone)') is not null
+    as invoice_grant_ready,
+  to_regprocedure('public.adclaw_generate_card_once(uuid,uuid,uuid,integer,jsonb)') is not null
+    as paid_generation_ready;
 ```
-Probe success with: `curl -s ${SEMECLAW_API:-http://127.0.0.1:8765}/api/tasks/quota`.
-A 200 with `{"ok": true, ...}` means the tables exist.
+
+Both values must be `true`. Then set the GitHub repository variable
+`ADCLAW_IDEMPOTENCY_MIGRATION_APPLIED=2026_07_31`; tagged and daily Fly
+deployments intentionally fail closed without that acknowledgement.
+
+Probe task storage separately with:
+`curl -s ${SEMECLAW_API:-http://127.0.0.1:8765}/api/tasks/quota`.
+A 200 with `{"ok": true, ...}` means the task tables exist.
 
 ### 1e. Start the dashboard (if not already running)
 ```bash

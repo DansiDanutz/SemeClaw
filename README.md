@@ -4,7 +4,7 @@
 
 **Every task in your stack becomes a multi-agent meeting you can join, interrupt, and steer — until the orchestrator commits a final decision back to the source.**
 
-[![Version](https://img.shields.io/badge/version-0.10.16-10b981.svg)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.23-10b981.svg)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE.md)
@@ -246,13 +246,14 @@ Detailed diagrams + storage model: [**docs/ARCHITECTURE.md**](./docs/ARCHITECTUR
 
 ## 🔑 Environment variables
 
-All of these are **optional**. The system works without any of them.
+The core local system works without these values. Features that are explicitly enabled—such as the authenticated advertiser API—require their listed security configuration.
 
 | Var | Purpose | Default |
 |---|---|---|
 | `OPENROUTER_API_KEY` | LLM for agents + orchestrator decisions. Without it, deterministic templates fire. | unset |
 | `ELEVENLABS_API_KEY` | Premium TTS. Falls back to `edge-tts`. | unset |
 | `DLS_TEAM_SUPABASE_URL` + `DLS_TEAM_SUPABASE_SERVICE_ROLE_KEY` | Persistent task storage. Without it, in-memory only. | unset |
+| `SUPABASE_JWT_SECRET` | Required server-side to verify advertiser Supabase access tokens; advertiser ownership checks fail closed when unset. | unset |
 | `SEMECLAW_API_KEY` | Bearer token for write endpoints. Unset permits writes only for direct loopback requests on a loopback-only deployment. | unset |
 | `SEMECLAW_TENANT_ID` | Tenant identifier in manifest + logs. | `default` |
 | `SEMECLAW_PUBLIC_URL` | External URL baked into embeds + manifest. | `http://127.0.0.1:8765` |
