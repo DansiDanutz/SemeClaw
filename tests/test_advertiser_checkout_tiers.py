@@ -112,3 +112,20 @@ def test_advertiser_jwt_requirement_is_deployable_and_documented():
     assert "SUPABASE_JWT_SECRET=" in env_example
     assert "SUPABASE_JWT_SECRET" in readme
     assert "ownership checks fail closed" in readme
+
+
+def test_deployments_fail_closed_until_idempotency_migration_is_acknowledged():
+    repo_root = Path(__file__).resolve().parents[1]
+    for relative in (".github/workflows/ci.yml", ".github/workflows/daily-release.yml"):
+        workflow = (repo_root / relative).read_text(encoding="utf-8")
+        deploy = workflow[workflow.index("deploy-fly:") :]
+        assert "Require AdClaw idempotency migration" in deploy
+        assert "ADCLAW_IDEMPOTENCY_MIGRATION_APPLIED" in deploy
+        assert '!= "2026_07_31"' in deploy
+        assert deploy.index("Require AdClaw idempotency migration") < deploy.index("flyctl deploy")
+
+    agent_setup = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
+    assert "2026_07_31_adclaw_idempotency.sql" in agent_setup
+    assert "invoice_grant_ready" in agent_setup
+    assert "paid_generation_ready" in agent_setup
+    assert "Both values must be `true`" in agent_setup
