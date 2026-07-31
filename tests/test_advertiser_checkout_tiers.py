@@ -36,3 +36,12 @@ def test_annual_gold_webhook_classification(monkeypatch):
 
     assert advertiser._subscription_tier_from_price("price_gold_annual") == "gold"
     assert advertiser._subscription_tier_from_price("price_diamond_annual") == "diamond"
+    assert advertiser._subscription_benefit_months_from_price("price_gold_annual") == 12
+    assert advertiser._subscription_benefit_months_from_price("price_diamond_annual") == 1
+
+
+def test_monthly_subscription_grants_one_benefit_month(monkeypatch):
+    monkeypatch.setenv("ADCLAW_PRICE_USD_25", "price_gold_monthly")
+    monkeypatch.setenv("ADCLAW_PRICE_USD_250", "price_gold_annual")
+
+    assert advertiser._subscription_benefit_months_from_price("price_gold_monthly") == 1
