@@ -26,7 +26,10 @@ revoke all on adclaw_generated_drafts from anon, authenticated;
 
 
 alter table adclaw_advertisers
-  add column if not exists subscription_checkout_reserved_until timestamptz;
+  add column if not exists subscription_checkout_reserved_until timestamptz,
+  add column if not exists subscription_checkout_token uuid,
+  add column if not exists stripe_checkout_session_id text,
+  add column if not exists stripe_checkout_url text;
 
 create or replace function adclaw_reserve_subscription_checkout(
   p_advertiser_id uuid
@@ -34,17 +37,30 @@ create or replace function adclaw_reserve_subscription_checkout(
   language plpgsql
   security definer
   set search_path = public, pg_temp
-as $
+as $reserve$
 declare
   v_is_subscribed boolean;
   v_reserved_until timestamptz;
+  v_token uuid;
+  v_session_id text;
+  v_checkout_url text;
 begin
   perform pg_advisory_xact_lock(
     hashtextextended('adclaw-subscription-checkout:' || p_advertiser_id::text, 0)
   );
 
-  select is_subscribed, subscription_checkout_reserved_until
-    into v_is_subscribed, v_reserved_until
+  select
+      is_subscribed,
+      subscription_checkout_reserved_until,
+      subscription_checkout_token,
+      stripe_checkout_session_id,
+      stripe_checkout_url
+    into
+      v_is_subscribed,
+      v_reserved_until,
+      v_token,
+      v_session_id,
+      v_checkout_url
     from adclaw_advertisers
    where id = p_advertiser_id
    for update;
@@ -60,23 +76,71 @@ begin
   end if;
   if v_reserved_until is not null and v_reserved_until > now() then
     return jsonb_build_object(
-      'ok', false,
-      'error', 'a subscription checkout is already active',
-      'reserved_until', v_reserved_until
+      'ok', true,
+      'already_reserved', true,
+      'reserved_until', v_reserved_until,
+      'reservation_token', v_token,
+      'session_id', v_session_id,
+      'checkout_url', v_checkout_url
     );
   end if;
 
   v_reserved_until := now() + interval '24 hours';
+  v_token := gen_random_uuid();
   update adclaw_advertisers
-     set subscription_checkout_reserved_until = v_reserved_until
+     set subscription_checkout_reserved_until = v_reserved_until,
+         subscription_checkout_token = v_token,
+         stripe_checkout_session_id = null,
+         stripe_checkout_url = null
    where id = p_advertiser_id;
 
   return jsonb_build_object(
     'ok', true,
-    'reserved_until', v_reserved_until
+    'already_reserved', false,
+    'reserved_until', v_reserved_until,
+    'reservation_token', v_token
   );
 end;
-$;
+$reserve$;
+
+create or replace function adclaw_store_subscription_checkout(
+  p_advertiser_id uuid,
+  p_reservation_token uuid,
+  p_session_id text,
+  p_checkout_url text
+) returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public, pg_temp
+as $store$
+begin
+  if nullif(trim(p_session_id), '') is null
+     or nullif(trim(p_checkout_url), '') is null then
+    return jsonb_build_object('ok', false, 'error', 'checkout identity required');
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('adclaw-subscription-checkout:' || p_advertiser_id::text, 0)
+  );
+
+  update adclaw_advertisers
+     set stripe_checkout_session_id = p_session_id,
+         stripe_checkout_url = p_checkout_url
+   where id = p_advertiser_id
+     and subscription_checkout_token = p_reservation_token
+     and subscription_checkout_reserved_until > now();
+
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'checkout reservation expired');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'session_id', p_session_id,
+    'checkout_url', p_checkout_url
+  );
+end;
+$store$;
 
 create or replace function adclaw_grant_subscription_invoice_credits(
   p_invoice_id    text,
@@ -119,7 +183,10 @@ begin
          tier = p_tier,
          is_subscribed = true,
          sub_expires_at = coalesce(p_expires_at, sub_expires_at),
-         subscription_checkout_reserved_until = null
+         subscription_checkout_reserved_until = null,
+         subscription_checkout_token = null,
+         stripe_checkout_session_id = null,
+         stripe_checkout_url = null
    where id = p_advertiser_id;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'advertiser not found');
@@ -244,6 +311,8 @@ grant execute on function adclaw_record_topup(uuid, int, text) to service_role;
 
 revoke all on function adclaw_reserve_subscription_checkout(uuid) from public, anon, authenticated;
 grant execute on function adclaw_reserve_subscription_checkout(uuid) to service_role;
+revoke all on function adclaw_store_subscription_checkout(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function adclaw_store_subscription_checkout(uuid, uuid, text, text) to service_role;
 revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
 revoke all on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) from public;
 grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) to service_role;
