@@ -238,7 +238,9 @@ def test_subscription_checkout_uses_an_atomic_database_reservation():
 
     assert "rpc/adclaw_reserve_subscription_checkout" in checkout
     assert checkout.index("rpc/adclaw_reserve_subscription_checkout") < checkout.index("stripe.Customer.create(")
-    assert checkout.index("rpc/adclaw_reserve_subscription_checkout") < checkout.index("stripe.checkout.Session.create(")
+    assert checkout.index(
+        "rpc/adclaw_reserve_subscription_checkout"
+    ) < checkout.index("stripe.checkout.Session.create(")
 
     migration = (
         repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
