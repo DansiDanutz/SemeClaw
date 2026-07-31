@@ -51,6 +51,23 @@ def test_monthly_subscription_grants_one_benefit_month(monkeypatch):
     assert advertiser._subscription_benefit_months_from_price("price_gold_monthly") == 1
 
 
+def test_invoice_fulfillment_finds_configured_recurring_line_after_proration(monkeypatch):
+    monkeypatch.setenv("ADCLAW_PRICE_USD_25", "price_gold_monthly")
+    lines = [
+        {"price": {"id": "price_unconfigured_proration"}, "period": {"end": 1}},
+        {
+            "pricing": {"price_details": {"price": "price_gold_monthly"}},
+            "period": {"end": 2},
+        },
+    ]
+
+    line, price_id, tier = advertiser._configured_subscription_invoice_line(lines)
+
+    assert line is lines[1]
+    assert price_id == "price_gold_monthly"
+    assert tier == "gold"
+
+
 def test_paid_generation_never_renders_an_unconfirmed_fallback():
     repo_root = Path(__file__).resolve().parents[1]
     rendered_blocks = []
@@ -271,6 +288,12 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert "subscription_checkout_reserved_until = null" in migration
     assert "subscription_checkout_token = null" in migration
     assert "subscription_checkout_price_id = null" in migration
+    assert "stripe.checkout.Session.expire" in checkout
+    assert "rpc/adclaw_clear_subscription_checkout" in checkout
+    assert '"reservation_token": str(reservation_token)' in checkout
+    assert "checkout.session.expired" in route
+    assert "subscription_checkout_token = p_reservation_token" in migration
+    assert "stripe_checkout_session_id = p_session_id" in migration
     assert (
         "revoke all on function adclaw_reserve_subscription_checkout(uuid, text) "
         "from public, anon, authenticated;"
@@ -286,4 +309,12 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert (
         "grant execute on function adclaw_store_subscription_checkout"
         "(uuid, uuid, text, text) to service_role;"
+    ) in migration
+    assert (
+        "revoke all on function adclaw_clear_subscription_checkout"
+        "(uuid, uuid, text) from public, anon, authenticated;"
+    ) in migration
+    assert (
+        "grant execute on function adclaw_clear_subscription_checkout"
+        "(uuid, uuid, text) to service_role;"
     ) in migration
