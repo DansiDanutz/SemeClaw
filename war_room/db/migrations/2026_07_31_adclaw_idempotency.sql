@@ -28,7 +28,8 @@ create or replace function adclaw_grant_subscription_invoice_credits(
   p_invoice_id    text,
   p_advertiser_id uuid,
   p_tier          text,
-  p_months        int
+  p_months        int,
+  p_expires_at    timestamptz
 ) returns jsonb
   language plpgsql
   security definer
@@ -60,7 +61,10 @@ begin
 
   v_total := v_monthly * p_months;
   update adclaw_advertisers
-     set wallet_credits = wallet_credits + v_total
+     set wallet_credits = wallet_credits + v_total,
+         tier = p_tier,
+         is_subscribed = true,
+         sub_expires_at = coalesce(p_expires_at, sub_expires_at)
    where id = p_advertiser_id;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'advertiser not found');
@@ -174,7 +178,7 @@ begin
 end;
 $$;
 
-revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int) from public;
+revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
 revoke all on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) from public;
-grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int) to service_role;
+grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) to service_role;
 grant execute on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) to service_role;
