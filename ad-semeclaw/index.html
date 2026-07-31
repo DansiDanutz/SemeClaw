@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Ad NOW — SemeClaw Advertiser Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📣</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
@@ -2061,7 +2062,7 @@ const KOKORO_VOICES = {
 };
 // ── Generation config ──
 const GEN_CONFIG = {
-  ollamaUrl: 'https://sims-testimonials-rent-innocent.trycloudflare.com',
+  ollamaUrl: '',             // set at runtime via updateOllamaUrl() if a live Ollama exists
   ollamaModel: 'qwen2.5-coder:7b',
   ollamaTimeout: 30000,     // 30s before we bail on Ollama
   backendTimeout: 60000,    // 60s before we bail on backend API
@@ -2182,12 +2183,27 @@ document.addEventListener('DOMContentLoaded', () => armReveal());
 function advId(){ return session?.user?.id || 'demo'; }
 const fmt = n => new Intl.NumberFormat().format(n||0);
 
+// Every /api/advertiser/:id/* endpoint is bearer-gated on the backend
+// (require_advertiser_owner). Route all such calls through here so the
+// Supabase access_token from the live session is attached automatically.
+// The session object is kept fresh by the onAuthStateChange listener.
+async function authFetch(url, opts = {}){
+  const token = session?.access_token;
+  if(token){
+    opts.headers = { ...(opts.headers || {}), Authorization: 'Bearer ' + token };
+  }
+  const r = await fetch(url, opts);
+  // Token expired or revoked mid-session — bounce back to login.
+  if(r.status === 401 && session){ session = null; showLogin(); }
+  return r;
+}
+
 async function loadAll(){ await Promise.all([loadWallet(), loadProjects(), loadLibrary(), loadSpotlight(), loadHistory(), loadSpecial()]); autoApplyPendingRef(); }
 
 // ── SPECIAL tab ─────────────────────────────────────────────────────────
 async function loadSpecial(){
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/special`);
+    const r = await authFetch(`/api/advertiser/${advId()}/special`);
     if(!r.ok) return;
     const d = await r.json();
     state.special = d;
@@ -2266,7 +2282,7 @@ function renderAnalytics(slides, tier){
 
 async function toggleBoost(slideId, enabled, el){
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/slides/${slideId}/boost`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/slides/${slideId}/boost`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({enabled})
     });
@@ -2283,7 +2299,7 @@ async function editKeywords(slideId){
   const input = prompt('Target keywords (comma-separated, up to 10). Only meetings whose topic matches any of these keywords will see this card.\n\nLeave empty to show to everyone.', current.join(', '));
   if(input === null) return;
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/slides/${slideId}/targeting`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/slides/${slideId}/targeting`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({keywords: input})
     });
@@ -2328,7 +2344,7 @@ async function applyRefCode(){
   msg.textContent = '';
   if(!code){ msg.className='sp-apply-msg err'; msg.textContent='Enter a code'; return; }
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/apply-referral`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/apply-referral`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({code})
     });
@@ -2363,7 +2379,7 @@ function subscribeAnnual(plan, usd){
     return signIn('google');
   }
   // Reuse the checkout endpoint with a special tier string the backend maps.
-  fetch(`/api/advertiser/${advId()}/checkout`, {
+  authFetch(`/api/advertiser/${advId()}/checkout`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({tier: plan + '_annual'})
   }).then(r => r.json()).then(d => {
@@ -2652,7 +2668,7 @@ function autoDescription(it){
 async function loadWallet(){
   let credits = 0, subbed = false, tier = 'free', expiresAt = null;
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/wallet`);
+    const r = await authFetch(`/api/advertiser/${advId()}/wallet`);
     const d = await r.json();
     credits   = d.wallet_credits || 0;
     subbed    = !!d.is_subscribed;
@@ -2728,7 +2744,7 @@ function renewTier(){
 
 async function loadHistory(){
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/history`);
+    const r = await authFetch(`/api/advertiser/${advId()}/history`);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const d = await r.json();
     state.history = d.transactions || [];
@@ -2785,7 +2801,7 @@ function renderHistoryRow(t){
 async function loadProjects(){
   const list = document.getElementById('proj-list');
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/projects`);
+    const r = await authFetch(`/api/advertiser/${advId()}/projects`);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
     if(!Array.isArray(data)) throw new Error('expected array');
@@ -2844,7 +2860,7 @@ async function loadProjects(){
 async function loadLibrary(){
   const grid = document.getElementById('lib-grid');
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/library`);
+    const r = await authFetch(`/api/advertiser/${advId()}/library`);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
     if(!Array.isArray(data)) throw new Error('expected array');
@@ -2983,7 +2999,7 @@ async function submitProject(e){
   delete payload.project_id;
   try{
     const url = `/api/advertiser/${advId()}/projects${projectId ? '/' + projectId : ''}`;
-    const r = await fetch(url, {
+    const r = await authFetch(url, {
       method: projectId ? 'PATCH' : 'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
@@ -3175,17 +3191,35 @@ async function fetchOllamaDraft(project, analysis){
   }
 }
 
+function generationRequestStorageKey(projectId){
+  return `adclaw:generation:${advId()}:${projectId}`;
+}
+
+function retainedGenerationRequestId(projectId){
+  const storageKey = generationRequestStorageKey(projectId);
+  let requestId = localStorage.getItem(storageKey);
+  if(!requestId){
+    requestId = crypto.randomUUID();
+    localStorage.setItem(storageKey, requestId);
+  }
+  return { storageKey, requestId };
+}
+
 async function fetchBackendDraft(projectId){
+  const { storageKey, requestId } = retainedGenerationRequestId(projectId);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GEN_CONFIG.backendTimeout);
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/projects/${projectId}/generate-card`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/projects/${projectId}/generate-card`, {
       method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({idempotency_key:requestId}),
       signal: controller.signal
     });
-    if(!r.ok) throw new Error('Backend HTTP ' + r.status);
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(d.error || ('Backend HTTP ' + r.status));
     if(!d.draft) throw new Error(d.error || 'no draft in response');
+    localStorage.removeItem(storageKey);
     d.draft._source = 'backend';
     return d.draft;
   }finally{
@@ -3286,18 +3320,22 @@ async function generate(projectId){
     return analyzeSources(project, githubData, webpageData);
   });
 
-  // Stage 5: Generate draft
+  // Stage 5: Generate the paid draft. Once the backend request starts, a
+  // timeout has an unknown debit/result state, so never replace it with a
+  // local draft that could be mistaken for the paid result.
   let draft = null;
   try {
     draft = await stage(4, 'Composing hook + headline', async () => {
-      try { return await fetchOllamaDraft(project, analysis); }
-      catch(err) { console.warn('[gen] Ollama failed:', err.message); }
-      try { return await fetchBackendDraft(projectId); }
-      catch(err) { console.warn('[gen] Backend failed:', err.message); }
-      return composeDraftClientSide(project, analysis);
+      return await fetchBackendDraft(projectId);
     });
   } catch(e) {
-    draft = composeDraftClientSide(project, analysis);
+    const generationStep = steps[4];
+    if(generationStep){
+      generationStep.classList.remove('doing');
+      generationStep.classList.add('failed');
+    }
+    alert('The paid generation result could not be confirmed. No fallback was created. Refresh your wallet and cards before retrying.');
+    throw e;
   }
 
   // Stage 6: Render
@@ -3363,7 +3401,7 @@ async function saveGenerated(){
   if(!state.lastDraft) return;
   const proj = state.projects.find(p => p.id === state.lastProjectId);
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/slides`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/slides`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         ...state.lastDraft,
@@ -3406,7 +3444,7 @@ async function submitEdit(e){
   const patch = {};
   for(const [k,v] of fd.entries()) if(k !== 'slide_id' && v) patch[k] = v;
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/slides/${slideId}/edit`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/slides/${slideId}/edit`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(patch)
     });
@@ -3420,7 +3458,7 @@ async function submitEdit(e){
 
 async function setStatus(slideId, status){
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/slides/${slideId}/status`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/slides/${slideId}/status`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({status})
     });
@@ -3431,7 +3469,7 @@ async function setStatus(slideId, status){
 
 async function topup(usd){
   try{
-    const r = await fetch(`/api/advertiser/${advId()}/checkout`, {
+    const r = await authFetch(`/api/advertiser/${advId()}/checkout`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({tier: String(usd)})
     });
@@ -3444,7 +3482,7 @@ async function topup(usd){
 // Subscribe to a named plan (gold/diamond) — delegates to topup() with the
 // right USD amount. For non-logged-in users, route through signup first.
 async function subscribe(plan, usd){
-  if(!window.__supa || !(await window.__supa.auth.getUser()).data.user){
+  if(!session?.user){
     // Not logged in yet — send to Google sign-in; user will land on checkout
     // after auth once we persist the pending plan.
     try{ sessionStorage.setItem('pending_plan', JSON.stringify({plan, usd})); }catch(_){}
