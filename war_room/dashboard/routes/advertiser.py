@@ -27,6 +27,43 @@ logger = logging.getLogger("war_room.dashboard.advertiser")
 
 router = APIRouter(tags=["advertiser"])
 
+_SUBSCRIPTION_TIER_PRICE_ENV = {
+    "gold": "ADCLAW_PRICE_USD_25",
+    "25": "ADCLAW_PRICE_USD_25",
+    "diamond": "ADCLAW_PRICE_USD_50",
+    "50": "ADCLAW_PRICE_USD_50",
+    "subscription": "ADCLAW_PRICE_USD_50",
+    "gold_annual": "ADCLAW_PRICE_USD_250",
+    "diamond_annual": "ADCLAW_PRICE_USD_500",
+}
+_SUBSCRIPTION_TIER_CANONICAL = {
+    "gold": "gold",
+    "25": "gold",
+    "gold_annual": "gold",
+    "diamond": "diamond",
+    "50": "diamond",
+    "subscription": "diamond",
+    "diamond_annual": "diamond",
+}
+_ANNUAL_TIERS = {"gold_annual", "diamond_annual"}
+
+
+def _subscription_price_id(tier: str) -> tuple[str, str]:
+    price_env = _SUBSCRIPTION_TIER_PRICE_ENV[tier]
+    price_id = os.environ.get(price_env, "").strip()
+    if not price_id and tier not in _ANNUAL_TIERS:
+        price_id = os.environ.get("STRIPE_PRICE_SUBSCRIPTION", "").strip()
+    return price_env, price_id
+
+
+def _subscription_tier_from_price(price_id: str) -> str:
+    gold_prices = {
+        os.environ.get("ADCLAW_PRICE_USD_25", "").strip(),
+        os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+    }
+    gold_prices.discard("")
+    return "gold" if price_id in gold_prices else "diamond"
+
 
 # ---------------------------------------------------------------------------
 # Supabase helper
@@ -564,25 +601,11 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
             customer_id = customer.id
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json={"stripe_customer_id": customer_id})
 
-        # Map tier label → Stripe Price ID.
-        # Accepts: "gold", "diamond", "25", "50" (legacy), "subscription" (legacy → diamond).
-        _tier_price_env = {
-            "gold": "ADCLAW_PRICE_USD_25",
-            "25": "ADCLAW_PRICE_USD_25",
-            "diamond": "ADCLAW_PRICE_USD_50",
-            "50": "ADCLAW_PRICE_USD_50",
-            "subscription": "ADCLAW_PRICE_USD_50",
-        }
-        _tier_canonical = {
-            "gold": "gold",
-            "25": "gold",
-            "diamond": "diamond",
-            "50": "diamond",
-            "subscription": "diamond",
-        }
-        if tier in _tier_price_env:
-            price_env = _tier_price_env[tier]
-            price_id = os.environ.get(price_env, "").strip() or os.environ.get("STRIPE_PRICE_SUBSCRIPTION", "").strip()
+        # Map subscription tiers to distinct Stripe prices. Annual plans must
+        # never fall back to a monthly price because that would mischarge the
+        # advertised $250/$500 checkout.
+        if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+            price_env, price_id = _subscription_price_id(tier)
             if not price_id:
                 return JSONResponse({"error": f"subscription price not configured ({price_env})"}, status_code=503)
             session = stripe.checkout.Session.create(
@@ -593,7 +616,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
                 metadata={
                     "advertiser_id": advertiser_id,
-                    "tier": _tier_canonical.get(tier, "diamond"),
+                    "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
                 },
             )
         else:
@@ -673,8 +696,8 @@ async def api_advertiser_stripe_webhook(request: Request):
             try:
                 line = (obj.get("lines", {}).get("data") or [{}])[0]
                 price_id = (line.get("price") or {}).get("id", "")
-                if price_id and price_id == os.environ.get("ADCLAW_PRICE_USD_25", "").strip():
-                    tier = "gold"
+                if price_id:
+                    tier = _subscription_tier_from_price(price_id)
             except Exception:
                 pass
             # Period end (unix seconds) → ISO
