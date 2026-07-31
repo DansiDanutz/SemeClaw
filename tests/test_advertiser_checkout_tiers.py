@@ -226,3 +226,17 @@ def test_current_stripe_price_shape_and_legacy_mint_permissions_are_hardened():
         )
         assert f"grant execute on function {signature} to service_role;" in migration
 
+
+
+def test_active_subscription_is_rejected_before_another_stripe_checkout():
+    repo_root = Path(__file__).resolve().parents[1]
+    route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
+    checkout = route[
+        route.index("async def api_advertiser_checkout") :
+        route.index("async def api_advertiser_stripe_webhook")
+    ]
+
+    assert 'adv.get("is_subscribed")' in checkout
+    assert "active subscription must be changed or canceled" in checkout
+    assert checkout.index('adv.get("is_subscribed")') < checkout.index("stripe.Customer.create(")
+    assert checkout.index('adv.get("is_subscribed")') < checkout.index("stripe.checkout.Session.create(")
