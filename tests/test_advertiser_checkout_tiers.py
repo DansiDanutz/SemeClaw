@@ -261,7 +261,10 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert store_rpc in checkout
     assert checkout.index(reserve_rpc) < checkout.index("stripe.Customer.create(")
     assert checkout.index(reserve_rpc) < checkout.index("stripe.checkout.Session.create(")
-    assert checkout.index("checkout_url") < checkout.index("stripe.checkout.Session.create(")
+    assert "stripe.checkout.Session.retrieve" in checkout
+    assert 'session_status == "open"' in checkout
+    assert 'session_status == "complete"' in checkout
+    assert 'session_status != "expired"' in checkout
     assert "adclaw-subscription-checkout:{advertiser_id}:{reservation_token}" in checkout
     assert checkout.index("stripe.checkout.Session.create(") < checkout.index(store_rpc)
 
@@ -293,6 +296,9 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert "subscription_checkout_token = null" in migration
     assert "subscription_checkout_price_id = null" in migration
     assert "stripe.checkout.Session.expire" in checkout
+    assert "reservation_data.get(\"reserved_price_id\", \"\")" in checkout
+    assert 'cleared_data.get("cleared") is not True' in checkout
+    assert "'reserved_until', v_reserved_until" in migration
     assert "rpc/adclaw_clear_subscription_checkout" in checkout
     assert '"reservation_token": str(reservation_token)' in checkout
     assert "checkout.session.expired" in route
