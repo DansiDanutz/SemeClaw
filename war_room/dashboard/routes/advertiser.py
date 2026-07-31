@@ -65,6 +65,15 @@ def _subscription_tier_from_price(price_id: str) -> str:
     return "gold" if price_id in gold_prices else "diamond"
 
 
+def _subscription_benefit_months_from_price(price_id: str) -> int:
+    annual_prices = {
+        os.environ.get("ADCLAW_PRICE_USD_250", "").strip(),
+        os.environ.get("ADCLAW_PRICE_USD_500", "").strip(),
+    }
+    annual_prices.discard("")
+    return 12 if price_id in annual_prices else 1
+
+
 # ---------------------------------------------------------------------------
 # Supabase helper
 # ---------------------------------------------------------------------------
@@ -691,13 +700,15 @@ async def api_advertiser_stripe_webhook(request: Request):
             advertiser_id = await _adv_from_customer(customer_id)
             if not advertiser_id:
                 return JSONResponse({"ok": True, "note": "no matching advertiser"})
-            # Tier from price id on the line item
+            # Tier and benefit period from the invoiced Stripe price.
             tier = "diamond"
+            benefit_months = 1
             try:
                 line = (obj.get("lines", {}).get("data") or [{}])[0]
                 price_id = (line.get("price") or {}).get("id", "")
                 if price_id:
                     tier = _subscription_tier_from_price(price_id)
+                    benefit_months = _subscription_benefit_months_from_price(price_id)
             except Exception:
                 pass
             # Period end (unix seconds) → ISO
@@ -707,10 +718,14 @@ async def api_advertiser_stripe_webhook(request: Request):
             if expires_iso:
                 patch["sub_expires_at"] = expires_iso
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json=patch)
-            # Grant subscription credits: Gold 300 (250+50), Diamond 750 (500+250)
-            await _supa(
-                "post", "rpc/adclaw_grant_subscription_credits", json={"p_advertiser_id": advertiser_id, "p_tier": tier}
-            )
+            # Grant the advertised monthly benefit for every prepaid month.
+            # Monthly invoices grant once; annual invoices grant all 12 months up front.
+            for _ in range(benefit_months):
+                await _supa(
+                    "post",
+                    "rpc/adclaw_grant_subscription_credits",
+                    json={"p_advertiser_id": advertiser_id, "p_tier": tier},
+                )
 
         elif etype == "checkout.session.completed":
             # One-time credit top-up: $1 = 10 credits. Amount comes from metadata.credits
