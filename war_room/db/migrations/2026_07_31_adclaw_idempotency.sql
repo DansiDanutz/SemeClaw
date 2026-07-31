@@ -1,5 +1,5 @@
 -- Atomic, replay-safe billing and paid draft generation for AdClaw.
--- Applied after 2026_04_23_adclaw_credits.sql.
+-- Applied after the full ordered AdClaw schema sequence documented in AGENTS.md.
 
 create table if not exists adclaw_stripe_credit_grants (
   invoice_id    text primary key,
