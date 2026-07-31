@@ -252,6 +252,7 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     for column in (
         "subscription_checkout_reserved_until",
         "subscription_checkout_token",
+        "subscription_checkout_price_id",
         "stripe_checkout_session_id",
         "stripe_checkout_url",
     ):
@@ -260,18 +261,22 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert "for update" in migration.lower()
     assert "interval '24 hours'" in migration
     assert "gen_random_uuid()" in migration
+    assert "p_price_id text" in migration
+    assert "v_price_id is distinct from p_price_id" in migration
+    assert '"p_price_id": subscription_price_id' in checkout
     assert "as $reserve$" in migration
     assert "$reserve$;" in migration
     assert "as $store$" in migration
     assert "$store$;" in migration
     assert "subscription_checkout_reserved_until = null" in migration
     assert "subscription_checkout_token = null" in migration
+    assert "subscription_checkout_price_id = null" in migration
     assert (
-        "revoke all on function adclaw_reserve_subscription_checkout(uuid) "
+        "revoke all on function adclaw_reserve_subscription_checkout(uuid, text) "
         "from public, anon, authenticated;"
     ) in migration
     assert (
-        "grant execute on function adclaw_reserve_subscription_checkout(uuid) "
+        "grant execute on function adclaw_reserve_subscription_checkout(uuid, text) "
         "to service_role;"
     ) in migration
     assert (
