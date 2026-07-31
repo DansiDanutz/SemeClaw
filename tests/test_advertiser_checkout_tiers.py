@@ -172,8 +172,10 @@ def test_invoice_fulfillment_validates_identity_and_is_one_database_transaction(
         repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
     ).read_text(encoding="utf-8")
 
-    assert "missing its subscription price" in webhook
-    assert webhook.index("if not price_id:") < webhook.index("rpc/adclaw_grant_subscription_invoice_credits")
+    assert "missing its subscription price" in route
+    assert webhook.index("_configured_subscription_invoice_line") < webhook.index(
+        "rpc/adclaw_grant_subscription_invoice_credits"
+    )
     assert '"p_expires_at": expires_iso' in webhook
     assert '_supa("patch"' not in webhook
     assert "tier = p_tier" in migration
@@ -227,10 +229,10 @@ def test_current_stripe_price_shape_and_legacy_mint_permissions_are_hardened():
         route.index('if etype == "invoice.paid":') :
         route.index('elif etype == "checkout.session.completed":')
     ]
-    assert 'line.get("pricing")' in webhook
-    assert '.get("price_details")' in webhook
-    assert 'line.get("price")' in webhook
-    assert "current_price_id or legacy_price_id" in webhook
+    assert 'line.get("pricing")' in route
+    assert '.get("price_details")' in route
+    assert 'line.get("price")' in route
+    assert "current_price_id or legacy_price_id" in route
 
     for signature in (
         "adclaw_topup_credits(uuid, int, text)",
