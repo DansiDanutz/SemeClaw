@@ -87,7 +87,9 @@ begin
       return jsonb_build_object(
         'ok', false,
         'error', 'a checkout for a different subscription plan is already active',
-        'reserved_price_id', v_price_id
+        'reserved_price_id', v_price_id,
+        'reservation_token', v_token,
+        'session_id', v_session_id
       );
     end if;
     return jsonb_build_object(
@@ -159,6 +161,38 @@ begin
   );
 end;
 $store$;
+
+create or replace function adclaw_clear_subscription_checkout(
+  p_advertiser_id uuid,
+  p_reservation_token uuid,
+  p_session_id text
+) returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public, pg_temp
+as $clear$
+begin
+  if nullif(trim(p_session_id), '') is null then
+    return jsonb_build_object('ok', false, 'error', 'checkout identity required');
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('adclaw-subscription-checkout:' || p_advertiser_id::text, 0)
+  );
+
+  update adclaw_advertisers
+     set subscription_checkout_reserved_until = null,
+         subscription_checkout_token = null,
+         subscription_checkout_price_id = null,
+         stripe_checkout_session_id = null,
+         stripe_checkout_url = null
+   where id = p_advertiser_id
+     and subscription_checkout_token = p_reservation_token
+     and stripe_checkout_session_id = p_session_id;
+
+  return jsonb_build_object('ok', true, 'cleared', found);
+end;
+$clear$;
 
 create or replace function adclaw_grant_subscription_invoice_credits(
   p_invoice_id    text,
@@ -332,6 +366,8 @@ revoke all on function adclaw_reserve_subscription_checkout(uuid, text) from pub
 grant execute on function adclaw_reserve_subscription_checkout(uuid, text) to service_role;
 revoke all on function adclaw_store_subscription_checkout(uuid, uuid, text, text) from public, anon, authenticated;
 grant execute on function adclaw_store_subscription_checkout(uuid, uuid, text, text) to service_role;
+revoke all on function adclaw_clear_subscription_checkout(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function adclaw_clear_subscription_checkout(uuid, uuid, text) to service_role;
 revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
 revoke all on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) from public;
 grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) to service_role;
