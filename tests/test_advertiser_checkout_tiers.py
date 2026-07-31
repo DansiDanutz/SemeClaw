@@ -247,6 +247,8 @@ def test_subscription_checkout_uses_an_atomic_database_reservation():
     assert "pg_advisory_xact_lock" in migration
     assert "for update" in migration.lower()
     assert "interval '24 hours'" in migration
+    assert "as $" + "$" in migration
+    assert "end;\n$" + "$;" in migration
     assert "subscription_checkout_reserved_until = null" in migration
     assert (
         "revoke all on function adclaw_reserve_subscription_checkout(uuid) "
