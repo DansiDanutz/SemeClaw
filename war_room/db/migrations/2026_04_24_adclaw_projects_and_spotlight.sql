@@ -14,6 +14,7 @@ create table if not exists adclaw_projects (
   github_url      text,
   webpage_url     text,
   description     text,
+  status          text not null default 'active',
   notes           text,
   ad_goal         text,
   target_audience text,
@@ -28,6 +29,7 @@ create index if not exists adclaw_projects_adv_idx on adclaw_projects(advertiser
 -- Forward-compat: if a prior partial deploy created the table without the
 -- newer columns, add them.
 alter table adclaw_projects
+  add column if not exists status          text not null default 'active',
   add column if not exists notes           text,
   add column if not exists problem_solved  text,
   add column if not exists tagline         text,
