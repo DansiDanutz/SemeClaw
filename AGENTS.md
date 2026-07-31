@@ -66,8 +66,15 @@ Parse `/tmp/doctor.json`. The shape is:
 ### 1d. Apply database migrations before deployment (only if Supabase is configured)
 If `DLS_TEAM_SUPABASE_URL` is set in `.env`, apply these migrations in order:
 
-1. `war_room/db/migrations/2026_04_24_semeclaw_tasks.sql`
-2. `war_room/db/migrations/2026_07_31_adclaw_idempotency.sql`
+1. `war_room/db/migrations/2026_04_23_adclaw_00_base.sql`
+2. `war_room/db/migrations/2026_04_23_adclaw_credits.sql`
+3. `war_room/db/migrations/2026_04_23_adclaw_deduct_backfill.sql`
+4. `war_room/db/migrations/2026_04_23_adclaw_special.sql`
+5. `war_room/db/migrations/2026_04_23_adclaw_tier.sql`
+6. `war_room/db/migrations/2026_04_23_adclaw_weekly_bonus.sql`
+7. `war_room/db/migrations/2026_04_24_adclaw_projects_and_spotlight.sql`
+8. `war_room/db/migrations/2026_04_24_semeclaw_tasks.sql`
+9. `war_room/db/migrations/2026_07_31_adclaw_idempotency.sql`
 
 Apply them through the Supabase SQL editor (safest, human-supervised) or the
 Supabase migration tool with explicit human authorization. Before deploying,
