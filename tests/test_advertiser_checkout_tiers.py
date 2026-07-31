@@ -228,7 +228,7 @@ def test_current_stripe_price_shape_and_legacy_mint_permissions_are_hardened():
 
 
 
-def test_subscription_checkout_uses_an_atomic_database_reservation():
+def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     repo_root = Path(__file__).resolve().parents[1]
     route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
     checkout = route[
@@ -236,22 +236,36 @@ def test_subscription_checkout_uses_an_atomic_database_reservation():
         route.index("async def api_advertiser_stripe_webhook")
     ]
 
-    assert "rpc/adclaw_reserve_subscription_checkout" in checkout
-    assert checkout.index("rpc/adclaw_reserve_subscription_checkout") < checkout.index("stripe.Customer.create(")
-    assert checkout.index(
-        "rpc/adclaw_reserve_subscription_checkout"
-    ) < checkout.index("stripe.checkout.Session.create(")
+    reserve_rpc = "rpc/adclaw_reserve_subscription_checkout"
+    store_rpc = "rpc/adclaw_store_subscription_checkout"
+    assert reserve_rpc in checkout
+    assert store_rpc in checkout
+    assert checkout.index(reserve_rpc) < checkout.index("stripe.Customer.create(")
+    assert checkout.index(reserve_rpc) < checkout.index("stripe.checkout.Session.create(")
+    assert checkout.index("checkout_url") < checkout.index("stripe.checkout.Session.create(")
+    assert "adclaw-subscription-checkout:{advertiser_id}:{reservation_token}" in checkout
+    assert checkout.index("stripe.checkout.Session.create(") < checkout.index(store_rpc)
 
     migration = (
         repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
     ).read_text(encoding="utf-8")
-    assert "subscription_checkout_reserved_until" in migration
+    for column in (
+        "subscription_checkout_reserved_until",
+        "subscription_checkout_token",
+        "stripe_checkout_session_id",
+        "stripe_checkout_url",
+    ):
+        assert column in migration
     assert "pg_advisory_xact_lock" in migration
     assert "for update" in migration.lower()
     assert "interval '24 hours'" in migration
-    assert "as $" + "$" in migration
-    assert "end;\n$" + "$;" in migration
+    assert "gen_random_uuid()" in migration
+    assert "as $reserve$" in migration
+    assert "$reserve$;" in migration
+    assert "as $store$" in migration
+    assert "$store$;" in migration
     assert "subscription_checkout_reserved_until = null" in migration
+    assert "subscription_checkout_token = null" in migration
     assert (
         "revoke all on function adclaw_reserve_subscription_checkout(uuid) "
         "from public, anon, authenticated;"
@@ -259,4 +273,12 @@ def test_subscription_checkout_uses_an_atomic_database_reservation():
     assert (
         "grant execute on function adclaw_reserve_subscription_checkout(uuid) "
         "to service_role;"
+    ) in migration
+    assert (
+        "revoke all on function adclaw_store_subscription_checkout"
+        "(uuid, uuid, text, text) from public, anon, authenticated;"
+    ) in migration
+    assert (
+        "grant execute on function adclaw_store_subscription_checkout"
+        "(uuid, uuid, text, text) to service_role;"
     ) in migration
