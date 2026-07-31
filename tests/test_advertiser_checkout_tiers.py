@@ -265,6 +265,7 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert checkout.index("stripe.checkout.Session.create(") < checkout.index(
         "stripe.checkout.Session.retrieve(session_id)"
     )
+    assert checkout.index("stripe.checkout.Session.retrieve(session_id)") < checkout.index(store_rpc)
     assert 'session_status == "open"' in checkout
     assert 'session_status == "complete"' in checkout
     assert 'session_status != "expired"' in checkout
