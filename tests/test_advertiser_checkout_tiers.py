@@ -282,7 +282,7 @@ def test_subscription_checkout_uses_an_atomic_resumable_database_reservation():
     assert "pg_advisory_xact_lock" in migration
     assert "for update" in migration.lower()
     assert "interval '23 hours'" in migration
-    assert "expires_at=int(datetime.fromisoformat(reservation_data[\"reserved_until\"]).timestamp())" in checkout
+    assert "expires_at=int(datetime.fromisoformat(reserved_until).timestamp())" in checkout
     assert "drop function if exists adclaw_reserve_subscription_checkout(uuid);" in migration
     assert "gen_random_uuid()" in migration
     assert "p_price_id text" in migration
