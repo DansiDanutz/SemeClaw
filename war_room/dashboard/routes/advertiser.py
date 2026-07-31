@@ -636,14 +636,30 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
         # Lookup or create Stripe customer
         adv_rows = await _supa(
             "get",
-            f"adclaw_advertisers?id=eq.{advertiser_id}&select=email,stripe_customer_id,is_subscribed",
+            f"adclaw_advertisers?id=eq.{advertiser_id}&select=email,stripe_customer_id",
         )
         adv = adv_rows[0] if adv_rows else {}
-        if tier in _SUBSCRIPTION_TIER_PRICE_ENV and adv.get("is_subscribed"):
-            return JSONResponse(
-                {"error": "an active subscription must be changed or canceled before starting another checkout"},
-                status_code=409,
+        if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+            reservation = await _supa(
+                "post",
+                "rpc/adclaw_reserve_subscription_checkout",
+                json={"p_advertiser_id": advertiser_id},
             )
+            reservation_data = (
+                reservation
+                if isinstance(reservation, dict)
+                else (reservation[0] if reservation else {})
+            )
+            if reservation_data.get("ok") is not True:
+                return JSONResponse(
+                    {
+                        "error": reservation_data.get(
+                            "error",
+                            "a subscription checkout is already active",
+                        )
+                    },
+                    status_code=409,
+                )
         customer_id = adv.get("stripe_customer_id")
 
         if not customer_id:
