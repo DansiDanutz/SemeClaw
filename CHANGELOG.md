@@ -11,6 +11,8 @@ All notable changes to SemeClaw will be documented in this file.
   bearer instead of unauthenticated browser requests.
 - Restore authenticated checkout and generation paths while keeping the
   backend as the authority boundary.
+- Bind annual Gold and Diamond checkout buttons to dedicated Stripe prices
+  and fail closed instead of silently charging a monthly or credit-pack price.
 - Remove the obsolete Quick Tunnel default from both advertiser console
   entry points.
 
