@@ -52,8 +52,6 @@ _ANNUAL_TIERS = {"gold_annual", "diamond_annual"}
 def _subscription_price_id(tier: str) -> tuple[str, str]:
     price_env = _SUBSCRIPTION_TIER_PRICE_ENV[tier]
     price_id = os.environ.get(price_env, "").strip()
-    if not price_id and tier not in _ANNUAL_TIERS:
-        price_id = os.environ.get("STRIPE_PRICE_SUBSCRIPTION", "").strip()
     return price_env, price_id
 
 
