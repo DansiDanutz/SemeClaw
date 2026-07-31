@@ -92,6 +92,7 @@ begin
         'ok', false,
         'error', 'a checkout for a different subscription plan is already active',
         'reserved_price_id', v_price_id,
+        'reserved_until', v_reserved_until,
         'reservation_token', v_token,
         'session_id', v_session_id
       );
