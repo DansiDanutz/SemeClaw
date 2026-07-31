@@ -401,6 +401,7 @@ async def api_advertiser_generate_card(advertiser_id: str, project_id: str, requ
             status_code=503,
         )
 
+
 # ---------------------------------------------------------------------------
 # Slides CRUD
 # ---------------------------------------------------------------------------
