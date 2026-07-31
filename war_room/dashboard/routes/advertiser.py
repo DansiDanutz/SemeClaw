@@ -740,7 +740,11 @@ async def api_advertiser_stripe_webhook(request: Request):
                 raise ValueError("signed Stripe invoice is missing its immutable id")
             try:
                 line = (obj.get("lines", {}).get("data") or [])[0]
-                price_id = str((line.get("price") or {}).get("id") or "").strip()
+                legacy_price = line.get("price") or {}
+                legacy_price_id = legacy_price.get("id") if isinstance(legacy_price, dict) else legacy_price
+                current_price = ((line.get("pricing") or {}).get("price_details") or {}).get("price")
+                current_price_id = current_price.get("id") if isinstance(current_price, dict) else current_price
+                price_id = str(current_price_id or legacy_price_id or "").strip()
                 if not price_id:
                     raise ValueError("signed Stripe invoice is missing its subscription price")
                 tier = _subscription_tier_from_price(price_id)
