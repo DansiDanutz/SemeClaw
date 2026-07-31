@@ -32,6 +32,10 @@ alter table adclaw_advertisers
   add column if not exists stripe_checkout_session_id text,
   add column if not exists stripe_checkout_url text;
 
+-- Remove the superseded overload so upgraded databases cannot retain a
+-- public/default-executable one-argument reservation entry point.
+drop function if exists adclaw_reserve_subscription_checkout(uuid);
+
 create or replace function adclaw_reserve_subscription_checkout(
   p_advertiser_id uuid,
   p_price_id text
@@ -103,7 +107,7 @@ begin
     );
   end if;
 
-  v_reserved_until := now() + interval '24 hours';
+  v_reserved_until := now() + interval '23 hours';
   v_token := gen_random_uuid();
   update adclaw_advertisers
      set subscription_checkout_reserved_until = v_reserved_until,
