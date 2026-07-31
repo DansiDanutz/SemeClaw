@@ -15,6 +15,11 @@ All notable changes to SemeClaw will be documented in this file.
   and fail closed instead of silently charging a monthly or credit-pack price.
 - Remove the obsolete Quick Tunnel default from both advertiser console
   entry points.
+- Make paid draft generation atomic and retry-safe by persisting the request UUID,
+  debit, and generated draft in one Supabase transaction.
+- Make monthly and annual Stripe invoice grants atomic and idempotent by immutable
+  invoice ID, including the full twelve-month benefit for annual plans.
+- Document the required server-side Supabase JWT secret and AdClaw Stripe price IDs.
 
 
 ## [0.10.16] - 2026-07-25
