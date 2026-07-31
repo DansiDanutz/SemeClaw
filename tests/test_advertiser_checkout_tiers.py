@@ -66,3 +66,49 @@ def test_paid_generation_never_renders_an_unconfirmed_fallback():
         assert "throw e" in block
 
     assert rendered_blocks[0] == rendered_blocks[1]
+
+
+def test_paid_operations_use_database_idempotency_contracts():
+    repo_root = Path(__file__).resolve().parents[1]
+    route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
+    migration = (
+        repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "rpc/adclaw_generate_card_once" in route
+    assert "rpc/adclaw_grant_subscription_invoice_credits" in route
+    assert '"p_invoice_id": invoice_id' in route
+    assert '"p_request_id": request_id' in route
+    assert 'for _ in range(benefit_months)' not in route
+    assert "pg_advisory_xact_lock" in migration
+    assert "adclaw_stripe_credit_grants" in migration
+    assert "adclaw_generated_drafts" in migration
+    assert "already_processed" in migration
+    assert "for update" in migration.lower()
+
+
+def test_generation_request_identity_survives_ambiguous_responses():
+    repo_root = Path(__file__).resolve().parents[1]
+    sources = [
+        (repo_root / relative).read_text(encoding="utf-8")
+        for relative in ("ad-semeclaw/advertiser.html", "ad-semeclaw/index.html")
+    ]
+    for source in sources:
+        assert "generationRequestStorageKey" in source
+        assert "localStorage.getItem(storageKey)" in source
+        assert "crypto.randomUUID()" in source
+        assert "idempotency_key:requestId" in source
+        assert "localStorage.removeItem(storageKey)" in source
+        assert source.index("localStorage.removeItem(storageKey)") > source.index("if(!d.draft)")
+
+    assert sources[0] == sources[1]
+
+
+def test_advertiser_jwt_requirement_is_deployable_and_documented():
+    repo_root = Path(__file__).resolve().parents[1]
+    env_example = (repo_root / ".env.example").read_text(encoding="utf-8")
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+
+    assert "SUPABASE_JWT_SECRET=" in env_example
+    assert "SUPABASE_JWT_SECRET" in readme
+    assert "ownership checks fail closed" in readme
