@@ -24,6 +24,60 @@ alter table adclaw_generated_drafts enable row level security;
 revoke all on adclaw_stripe_credit_grants from anon, authenticated;
 revoke all on adclaw_generated_drafts from anon, authenticated;
 
+
+alter table adclaw_advertisers
+  add column if not exists subscription_checkout_reserved_until timestamptz;
+
+create or replace function adclaw_reserve_subscription_checkout(
+  p_advertiser_id uuid
+) returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public, pg_temp
+as $
+declare
+  v_is_subscribed boolean;
+  v_reserved_until timestamptz;
+begin
+  perform pg_advisory_xact_lock(
+    hashtextextended('adclaw-subscription-checkout:' || p_advertiser_id::text, 0)
+  );
+
+  select is_subscribed, subscription_checkout_reserved_until
+    into v_is_subscribed, v_reserved_until
+    from adclaw_advertisers
+   where id = p_advertiser_id
+   for update;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'advertiser not found');
+  end if;
+  if coalesce(v_is_subscribed, false) then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'an active subscription must be changed or canceled before starting another checkout'
+    );
+  end if;
+  if v_reserved_until is not null and v_reserved_until > now() then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'a subscription checkout is already active',
+      'reserved_until', v_reserved_until
+    );
+  end if;
+
+  v_reserved_until := now() + interval '24 hours';
+  update adclaw_advertisers
+     set subscription_checkout_reserved_until = v_reserved_until
+   where id = p_advertiser_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'reserved_until', v_reserved_until
+  );
+end;
+$;
+
 create or replace function adclaw_grant_subscription_invoice_credits(
   p_invoice_id    text,
   p_advertiser_id uuid,
@@ -64,7 +118,8 @@ begin
      set wallet_credits = wallet_credits + v_total,
          tier = p_tier,
          is_subscribed = true,
-         sub_expires_at = coalesce(p_expires_at, sub_expires_at)
+         sub_expires_at = coalesce(p_expires_at, sub_expires_at),
+         subscription_checkout_reserved_until = null
    where id = p_advertiser_id;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'advertiser not found');
@@ -187,6 +242,8 @@ grant execute on function adclaw_topup_credits(uuid, int, text) to service_role;
 grant execute on function adclaw_grant_subscription_credits(uuid, text) to service_role;
 grant execute on function adclaw_record_topup(uuid, int, text) to service_role;
 
+revoke all on function adclaw_reserve_subscription_checkout(uuid) from public, anon, authenticated;
+grant execute on function adclaw_reserve_subscription_checkout(uuid) to service_role;
 revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
 revoke all on function adclaw_generate_card_once(uuid, uuid, uuid, int, jsonb) from public;
 grant execute on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) to service_role;
