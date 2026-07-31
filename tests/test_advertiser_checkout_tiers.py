@@ -39,6 +39,7 @@ def test_annual_gold_webhook_classification(monkeypatch):
 
     assert advertiser._subscription_tier_from_price("price_gold_annual") == "gold"
     assert advertiser._subscription_tier_from_price("price_diamond_annual") == "diamond"
+    assert advertiser._subscription_tier_from_price("price_unknown") is None
     assert advertiser._subscription_benefit_months_from_price("price_gold_annual") == 12
     assert advertiser._subscription_benefit_months_from_price("price_diamond_annual") == 12
 
