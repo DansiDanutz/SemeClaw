@@ -645,11 +645,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 "rpc/adclaw_reserve_subscription_checkout",
                 json={"p_advertiser_id": advertiser_id},
             )
-            reservation_data = (
-                reservation
-                if isinstance(reservation, dict)
-                else (reservation[0] if reservation else {})
-            )
+            reservation_data = reservation if isinstance(reservation, dict) else (reservation[0] if reservation else {})
             if reservation_data.get("ok") is not True:
                 return JSONResponse(
                     {
