@@ -8,6 +8,7 @@ import os
 import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Request
@@ -346,41 +347,59 @@ GENERATE_CARD_COST = 10  # credits to generate one ad card
 @router.post("/api/advertiser/{advertiser_id}/projects/{project_id}/generate-card")
 async def api_advertiser_generate_card(advertiser_id: str, project_id: str, request: Request):
     await require_advertiser_owner(request, advertiser_id)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    raw_request_id = str(body.get("idempotency_key") or "").strip()
+    try:
+        request_id = str(UUID(raw_request_id))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "valid idempotency_key required"}, status_code=400)
+
     try:
         rows = await _supa("get", f"adclaw_projects?id=eq.{project_id}&advertiser_id=eq.{advertiser_id}&select=*")
         if not rows:
             return JSONResponse({"error": "project not found"}, status_code=404)
 
-        # Deduct credits atomically (RPC checks balance and rejects if insufficient)
-        try:
-            result = await _supa(
-                "post",
-                "rpc/adclaw_deduct_credits",
-                json={
-                    "p_advertiser_id": advertiser_id,
-                    "p_credits": GENERATE_CARD_COST,
-                    "p_description": f"Generated ad card for project {project_id[:8]}",
-                },
-            )
-            rd = result if isinstance(result, dict) else (result[0] if result else {})
-            if rd.get("ok") is False:
-                return JSONResponse(
-                    {
-                        "error": rd.get("error", "insufficient credits"),
-                        "cost": GENERATE_CARD_COST,
-                        "wallet_credits": rd.get("wallet_credits", 0),
-                    },
-                    status_code=402,
-                )
-        except Exception as e:
-            logger.warning("deduct_credits failed, continuing: %s", e)
-
+        # Compose before charging, then persist the draft and debit atomically.
         draft = _compose_draft(rows[0])
-        return JSONResponse({"draft": draft, "cost": GENERATE_CARD_COST})
+        result = await _supa(
+            "post",
+            "rpc/adclaw_generate_card_once",
+            json={
+                "p_request_id": request_id,
+                "p_advertiser_id": advertiser_id,
+                "p_project_id": project_id,
+                "p_cost": GENERATE_CARD_COST,
+                "p_draft": draft,
+            },
+        )
+        rd = result if isinstance(result, dict) else (result[0] if result else {})
+        if rd.get("ok") is not True:
+            status = 402 if rd.get("error") == "insufficient credits" else 409
+            return JSONResponse(
+                {
+                    "error": rd.get("error", "generation could not be committed"),
+                    "cost": GENERATE_CARD_COST,
+                    "wallet_credits": rd.get("wallet_credits"),
+                },
+                status_code=status,
+            )
+        return JSONResponse(
+            {
+                "draft": rd.get("draft", draft),
+                "cost": rd.get("cost", GENERATE_CARD_COST),
+                "already_processed": bool(rd.get("already_processed")),
+            }
+        )
     except Exception as e:
         logger.warning("generate-card error: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
+        return JSONResponse(
+            {"error": "paid generation unavailable; retry with the same idempotency key"},
+            status_code=503,
+        )
 
 # ---------------------------------------------------------------------------
 # Slides CRUD
@@ -718,14 +737,23 @@ async def api_advertiser_stripe_webhook(request: Request):
             if expires_iso:
                 patch["sub_expires_at"] = expires_iso
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json=patch)
-            # Grant the advertised monthly benefit for every prepaid month.
-            # Monthly invoices grant once; annual invoices grant all 12 months up front.
-            for _ in range(benefit_months):
-                await _supa(
-                    "post",
-                    "rpc/adclaw_grant_subscription_credits",
-                    json={"p_advertiser_id": advertiser_id, "p_tier": tier},
-                )
+            # Grant the complete invoice benefit atomically and exactly once.
+            invoice_id = str(obj.get("id") or "").strip()
+            if not invoice_id:
+                raise ValueError("signed Stripe invoice is missing its immutable id")
+            result = await _supa(
+                "post",
+                "rpc/adclaw_grant_subscription_invoice_credits",
+                json={
+                    "p_invoice_id": invoice_id,
+                    "p_advertiser_id": advertiser_id,
+                    "p_tier": tier,
+                    "p_months": benefit_months,
+                },
+            )
+            grant = result if isinstance(result, dict) else (result[0] if result else {})
+            if grant.get("ok") is not True:
+                raise RuntimeError(grant.get("error", "subscription credit grant failed"))
 
         elif etype == "checkout.session.completed":
             # One-time credit top-up: $1 = 10 credits. Amount comes from metadata.credits
