@@ -228,7 +228,7 @@ def test_current_stripe_price_shape_and_legacy_mint_permissions_are_hardened():
 
 
 
-def test_active_subscription_is_rejected_before_another_stripe_checkout():
+def test_subscription_checkout_uses_an_atomic_database_reservation():
     repo_root = Path(__file__).resolve().parents[1]
     route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
     checkout = route[
@@ -236,7 +236,23 @@ def test_active_subscription_is_rejected_before_another_stripe_checkout():
         route.index("async def api_advertiser_stripe_webhook")
     ]
 
-    assert 'adv.get("is_subscribed")' in checkout
-    assert "active subscription must be changed or canceled" in checkout
-    assert checkout.index('adv.get("is_subscribed")') < checkout.index("stripe.Customer.create(")
-    assert checkout.index('adv.get("is_subscribed")') < checkout.index("stripe.checkout.Session.create(")
+    assert "rpc/adclaw_reserve_subscription_checkout" in checkout
+    assert checkout.index("rpc/adclaw_reserve_subscription_checkout") < checkout.index("stripe.Customer.create(")
+    assert checkout.index("rpc/adclaw_reserve_subscription_checkout") < checkout.index("stripe.checkout.Session.create(")
+
+    migration = (
+        repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
+    ).read_text(encoding="utf-8")
+    assert "subscription_checkout_reserved_until" in migration
+    assert "pg_advisory_xact_lock" in migration
+    assert "for update" in migration.lower()
+    assert "interval '24 hours'" in migration
+    assert "subscription_checkout_reserved_until = null" in migration
+    assert (
+        "revoke all on function adclaw_reserve_subscription_checkout(uuid) "
+        "from public, anon, authenticated;"
+    ) in migration
+    assert (
+        "grant execute on function adclaw_reserve_subscription_checkout(uuid) "
+        "to service_role;"
+    ) in migration
