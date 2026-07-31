@@ -744,6 +744,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 line_items=[{"price": subscription_price_id, "quantity": 1}],
                 success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
+                expires_at=int(datetime.fromisoformat(reservation_data["reserved_until"]).timestamp()),
                 metadata={
                     "advertiser_id": advertiser_id,
                     "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
