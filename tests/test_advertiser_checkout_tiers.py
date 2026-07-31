@@ -181,3 +181,21 @@ def test_fresh_database_runbook_orders_every_schema_prerequisite():
     for column in ("stripe_customer_id", "is_subscribed", "sub_expires_at"):
         assert f"add column if not exists {column}" in bridge_sql
 
+def test_project_status_and_price_documentation_match_runtime_contracts():
+    repo_root = Path(__file__).resolve().parents[1]
+    projects = (
+        repo_root / "war_room/db/migrations/2026_04_24_adclaw_projects_and_spotlight.sql"
+    ).read_text(encoding="utf-8")
+    env_example = (repo_root / ".env.example").read_text(encoding="utf-8")
+
+    assert "status          text not null default 'active'" in projects
+    assert "add column if not exists status" in projects
+    assert "STRIPE_PRICE_SUBSCRIPTION" not in env_example
+    for variable in (
+        "ADCLAW_PRICE_USD_25=",
+        "ADCLAW_PRICE_USD_50=",
+        "ADCLAW_PRICE_USD_250=",
+        "ADCLAW_PRICE_USD_500=",
+    ):
+        assert variable in env_example
+
