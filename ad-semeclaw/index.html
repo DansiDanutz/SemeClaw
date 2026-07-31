@@ -3302,21 +3302,22 @@ async function generate(projectId){
     return analyzeSources(project, githubData, webpageData);
   });
 
-  // Stage 5: Generate draft
+  // Stage 5: Generate the paid draft. Once the backend request starts, a
+  // timeout has an unknown debit/result state, so never replace it with a
+  // local draft that could be mistaken for the paid result.
   let draft = null;
   try {
     draft = await stage(4, 'Composing hook + headline', async () => {
-      // Backend first: authenticated, CORS-clean, deducts credits server-side.
-      try { return await fetchBackendDraft(projectId); }
-      catch(err) { console.warn('[gen] Backend failed:', err.message); }
-      // Optional local Ollama (only if configured at runtime via updateOllamaUrl).
-      try { return await fetchOllamaDraft(project, analysis); }
-      catch(err) { console.warn('[gen] Ollama failed:', err.message); }
-      // Last resort: deterministic template from the project fields.
-      return composeDraftClientSide(project, analysis);
+      return await fetchBackendDraft(projectId);
     });
   } catch(e) {
-    draft = composeDraftClientSide(project, analysis);
+    const generationStep = steps[4];
+    if(generationStep){
+      generationStep.classList.remove('doing');
+      generationStep.classList.add('failed');
+    }
+    alert('The paid generation result could not be confirmed. No fallback was created. Refresh your wallet and cards before retrying.');
+    throw e;
   }
 
   // Stage 6: Render
