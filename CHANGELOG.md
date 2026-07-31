@@ -2,6 +2,19 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+
+## [0.10.22] - 2026-07-31
+
+### Security
+
+- Route all advertiser console API calls through the live Supabase session
+  bearer instead of unauthenticated browser requests.
+- Restore authenticated checkout and generation paths while keeping the
+  backend as the authority boundary.
+- Remove the obsolete Quick Tunnel default from both advertiser console
+  entry points.
+
+
 ## [0.10.16] - 2026-07-25
 
 ### Security
