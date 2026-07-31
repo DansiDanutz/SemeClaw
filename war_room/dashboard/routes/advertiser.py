@@ -674,9 +674,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 "metadata": {"advertiser_id": advertiser_id},
             }
             if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
-                customer_kwargs["idempotency_key"] = (
-                    f"adclaw-subscription-customer:{advertiser_id}"
-                )
+                customer_kwargs["idempotency_key"] = f"adclaw-subscription-customer:{advertiser_id}"
             customer = stripe.Customer.create(**customer_kwargs)
             customer_id = customer.id
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json={"stripe_customer_id": customer_id})
@@ -695,9 +693,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                     "advertiser_id": advertiser_id,
                     "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
                 },
-                idempotency_key=(
-                    f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}"
-                ),
+                idempotency_key=(f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}"),
             )
             stored = await _supa(
                 "post",
@@ -711,9 +707,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
             )
             stored_data = stored if isinstance(stored, dict) else (stored[0] if stored else {})
             if stored_data.get("ok") is not True:
-                raise RuntimeError(
-                    stored_data.get("error", "failed to persist subscription checkout")
-                )
+                raise RuntimeError(stored_data.get("error", "failed to persist subscription checkout"))
         else:
             # One-time credit top-up
             credits = int(body.get("credits", 100))
