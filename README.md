@@ -246,13 +246,14 @@ Detailed diagrams + storage model: [**docs/ARCHITECTURE.md**](./docs/ARCHITECTUR
 
 ## 🔑 Environment variables
 
-All of these are **optional**. The system works without any of them.
+The core local system works without these values. Features that are explicitly enabled—such as the authenticated advertiser API—require their listed security configuration.
 
 | Var | Purpose | Default |
 |---|---|---|
 | `OPENROUTER_API_KEY` | LLM for agents + orchestrator decisions. Without it, deterministic templates fire. | unset |
 | `ELEVENLABS_API_KEY` | Premium TTS. Falls back to `edge-tts`. | unset |
 | `DLS_TEAM_SUPABASE_URL` + `DLS_TEAM_SUPABASE_SERVICE_ROLE_KEY` | Persistent task storage. Without it, in-memory only. | unset |
+| `SUPABASE_JWT_SECRET` | Required server-side to verify advertiser Supabase access tokens; advertiser ownership checks fail closed when unset. | unset |
 | `SEMECLAW_API_KEY` | Bearer token for write endpoints. Unset permits writes only for direct loopback requests on a loopback-only deployment. | unset |
 | `SEMECLAW_TENANT_ID` | Tenant identifier in manifest + logs. | `default` |
 | `SEMECLAW_PUBLIC_URL` | External URL baked into embeds + manifest. | `http://127.0.0.1:8765` |
