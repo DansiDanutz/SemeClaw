@@ -3191,17 +3191,35 @@ async function fetchOllamaDraft(project, analysis){
   }
 }
 
+function generationRequestStorageKey(projectId){
+  return `adclaw:generation:${advId()}:${projectId}`;
+}
+
+function retainedGenerationRequestId(projectId){
+  const storageKey = generationRequestStorageKey(projectId);
+  let requestId = localStorage.getItem(storageKey);
+  if(!requestId){
+    requestId = crypto.randomUUID();
+    localStorage.setItem(storageKey, requestId);
+  }
+  return { storageKey, requestId };
+}
+
 async function fetchBackendDraft(projectId){
+  const { storageKey, requestId } = retainedGenerationRequestId(projectId);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GEN_CONFIG.backendTimeout);
   try{
     const r = await authFetch(`/api/advertiser/${advId()}/projects/${projectId}/generate-card`, {
       method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({idempotency_key:requestId}),
       signal: controller.signal
     });
-    if(!r.ok) throw new Error('Backend HTTP ' + r.status);
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(d.error || ('Backend HTTP ' + r.status));
     if(!d.draft) throw new Error(d.error || 'no draft in response');
+    localStorage.removeItem(storageKey);
     d.draft._source = 'backend';
     return d.draft;
   }finally{
