@@ -28,11 +28,13 @@ revoke all on adclaw_generated_drafts from anon, authenticated;
 alter table adclaw_advertisers
   add column if not exists subscription_checkout_reserved_until timestamptz,
   add column if not exists subscription_checkout_token uuid,
+  add column if not exists subscription_checkout_price_id text,
   add column if not exists stripe_checkout_session_id text,
   add column if not exists stripe_checkout_url text;
 
 create or replace function adclaw_reserve_subscription_checkout(
-  p_advertiser_id uuid
+  p_advertiser_id uuid,
+  p_price_id text
 ) returns jsonb
   language plpgsql
   security definer
@@ -42,6 +44,7 @@ declare
   v_is_subscribed boolean;
   v_reserved_until timestamptz;
   v_token uuid;
+  v_price_id text;
   v_session_id text;
   v_checkout_url text;
 begin
@@ -53,12 +56,14 @@ begin
       is_subscribed,
       subscription_checkout_reserved_until,
       subscription_checkout_token,
+      subscription_checkout_price_id,
       stripe_checkout_session_id,
       stripe_checkout_url
     into
       v_is_subscribed,
       v_reserved_until,
       v_token,
+      v_price_id,
       v_session_id,
       v_checkout_url
     from adclaw_advertisers
@@ -68,6 +73,9 @@ begin
   if not found then
     return jsonb_build_object('ok', false, 'error', 'advertiser not found');
   end if;
+  if nullif(trim(p_price_id), '') is null then
+    return jsonb_build_object('ok', false, 'error', 'subscription price required');
+  end if;
   if coalesce(v_is_subscribed, false) then
     return jsonb_build_object(
       'ok', false,
@@ -75,11 +83,19 @@ begin
     );
   end if;
   if v_reserved_until is not null and v_reserved_until > now() then
+    if v_price_id is distinct from p_price_id then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'a checkout for a different subscription plan is already active',
+        'reserved_price_id', v_price_id
+      );
+    end if;
     return jsonb_build_object(
       'ok', true,
       'already_reserved', true,
       'reserved_until', v_reserved_until,
       'reservation_token', v_token,
+      'price_id', v_price_id,
       'session_id', v_session_id,
       'checkout_url', v_checkout_url
     );
@@ -90,6 +106,7 @@ begin
   update adclaw_advertisers
      set subscription_checkout_reserved_until = v_reserved_until,
          subscription_checkout_token = v_token,
+         subscription_checkout_price_id = p_price_id,
          stripe_checkout_session_id = null,
          stripe_checkout_url = null
    where id = p_advertiser_id;
@@ -98,7 +115,8 @@ begin
     'ok', true,
     'already_reserved', false,
     'reserved_until', v_reserved_until,
-    'reservation_token', v_token
+    'reservation_token', v_token,
+    'price_id', p_price_id
   );
 end;
 $reserve$;
@@ -185,6 +203,7 @@ begin
          sub_expires_at = coalesce(p_expires_at, sub_expires_at),
          subscription_checkout_reserved_until = null,
          subscription_checkout_token = null,
+         subscription_checkout_price_id = null,
          stripe_checkout_session_id = null,
          stripe_checkout_url = null
    where id = p_advertiser_id;
@@ -309,8 +328,8 @@ grant execute on function adclaw_topup_credits(uuid, int, text) to service_role;
 grant execute on function adclaw_grant_subscription_credits(uuid, text) to service_role;
 grant execute on function adclaw_record_topup(uuid, int, text) to service_role;
 
-revoke all on function adclaw_reserve_subscription_checkout(uuid) from public, anon, authenticated;
-grant execute on function adclaw_reserve_subscription_checkout(uuid) to service_role;
+revoke all on function adclaw_reserve_subscription_checkout(uuid, text) from public, anon, authenticated;
+grant execute on function adclaw_reserve_subscription_checkout(uuid, text) to service_role;
 revoke all on function adclaw_store_subscription_checkout(uuid, uuid, text, text) from public, anon, authenticated;
 grant execute on function adclaw_store_subscription_checkout(uuid, uuid, text, text) to service_role;
 revoke all on function adclaw_grant_subscription_invoice_credits(text, uuid, text, int, timestamptz) from public;
