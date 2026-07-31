@@ -618,6 +618,15 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
         return JSONResponse({"error": "stripe not configured"}, status_code=503)
     body = await request.json()
     tier = body.get("tier", "standard")  # standard | subscription
+    subscription_price_env = ""
+    subscription_price_id = ""
+    if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+        subscription_price_env, subscription_price_id = _subscription_price_id(tier)
+        if not subscription_price_id:
+            return JSONResponse(
+                {"error": f"subscription price not configured ({subscription_price_env})"},
+                status_code=503,
+            )
     try:
         await _ensure_advertiser(advertiser_id)
         import stripe
@@ -641,13 +650,10 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
         # never fall back to a monthly price because that would mischarge the
         # advertised $250/$500 checkout.
         if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
-            price_env, price_id = _subscription_price_id(tier)
-            if not price_id:
-                return JSONResponse({"error": f"subscription price not configured ({price_env})"}, status_code=503)
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 mode="subscription",
-                line_items=[{"price": price_id, "quantity": 1}],
+                line_items=[{"price": subscription_price_id, "quantity": 1}],
                 success_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=success",
                 cancel_url=f"{ADCLAW_PUBLIC_URL}/advertiser?checkout=cancel",
                 metadata={
@@ -727,33 +733,30 @@ async def api_advertiser_stripe_webhook(request: Request):
             advertiser_id = await _adv_from_customer(customer_id)
             if not advertiser_id:
                 return JSONResponse({"ok": True, "note": "no matching advertiser"})
-            # Tier and benefit period from the invoiced Stripe price.
-            tier = "diamond"
-            benefit_months = 1
+            # Validate immutable invoice identity and the exact configured Stripe
+            # price before any subscription or credit mutation.
+            invoice_id = str(obj.get("id") or "").strip()
+            if not invoice_id:
+                raise ValueError("signed Stripe invoice is missing its immutable id")
             try:
-                line = (obj.get("lines", {}).get("data") or [{}])[0]
-                price_id = (line.get("price") or {}).get("id", "")
-                if price_id:
-                    configured_tier = _subscription_tier_from_price(price_id)
-                    if configured_tier is None:
-                        raise ValueError("invoice price is not an enabled AdClaw subscription price")
-                    tier = configured_tier
-                    benefit_months = _subscription_benefit_months_from_price(price_id)
+                line = (obj.get("lines", {}).get("data") or [])[0]
+                price_id = str((line.get("price") or {}).get("id") or "").strip()
+                if not price_id:
+                    raise ValueError("signed Stripe invoice is missing its subscription price")
+                tier = _subscription_tier_from_price(price_id)
+                if tier is None:
+                    raise ValueError("invoice price is not an enabled AdClaw subscription price")
+                benefit_months = _subscription_benefit_months_from_price(price_id)
             except ValueError:
                 raise
             except Exception as error:
                 raise ValueError("invoice subscription price could not be validated") from error
-            # Period end (unix seconds) → ISO
-            period_end = obj.get("lines", {}).get("data", [{}])[0].get("period", {}).get("end")
+
+            period_end = (line.get("period") or {}).get("end")
             expires_iso = datetime.fromtimestamp(period_end, tz=timezone.utc).isoformat() if period_end else None
-            patch = {"tier": tier, "is_subscribed": True}
-            if expires_iso:
-                patch["sub_expires_at"] = expires_iso
-            await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json=patch)
-            # Grant the complete invoice benefit atomically and exactly once.
-            invoice_id = str(obj.get("id") or "").strip()
-            if not invoice_id:
-                raise ValueError("signed Stripe invoice is missing its immutable id")
+
+            # Persist subscription state, invoice identity, credits, and ledger
+            # entry atomically and exactly once inside PostgreSQL.
             result = await _supa(
                 "post",
                 "rpc/adclaw_grant_subscription_invoice_credits",
@@ -762,6 +765,7 @@ async def api_advertiser_stripe_webhook(request: Request):
                     "p_advertiser_id": advertiser_id,
                     "p_tier": tier,
                     "p_months": benefit_months,
+                    "p_expires_at": expires_iso,
                 },
             )
             grant = result if isinstance(result, dict) else (result[0] if result else {})
