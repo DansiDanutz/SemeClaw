@@ -843,9 +843,7 @@ async def api_advertiser_stripe_webhook(request: Request):
             if not invoice_id:
                 raise ValueError("signed Stripe invoice is missing its immutable id")
             try:
-                line, price_id, tier = _configured_subscription_invoice_line(
-                    obj.get("lines", {}).get("data") or []
-                )
+                line, price_id, tier = _configured_subscription_invoice_line(obj.get("lines", {}).get("data") or [])
                 benefit_months = _subscription_benefit_months_from_price(price_id)
             except ValueError:
                 raise
