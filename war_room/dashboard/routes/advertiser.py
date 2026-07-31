@@ -713,6 +713,10 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 idempotency_key=f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}",
             )
             session_id = _stripe_value(session, "id")
+            # Stripe can replay the original creation response from its
+            # idempotency cache, so retrieve the current session before
+            # persisting or returning any URL/status from that response.
+            session = stripe.checkout.Session.retrieve(session_id)
             checkout_url = _stripe_value(session, "url")
             stored = await _supa(
                 "post",
@@ -828,6 +832,23 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 )
 
             session = await _create_and_store_subscription_session(reservation_data, subscription_price_id)
+            session_id = _stripe_value(session, "id")
+            session_status = _stripe_value(session, "status")
+            if session_status == "expired":
+                await _clear_subscription_reservation(reservation_data, session_id)
+                reservation_data = await _reserve_requested_subscription()
+                session = await _create_and_store_subscription_session(reservation_data, subscription_price_id)
+                session_status = _stripe_value(session, "status")
+            if session_status == "complete":
+                return JSONResponse(
+                    {"error": "subscription checkout completed; awaiting invoice fulfillment"},
+                    status_code=409,
+                )
+            if session_status != "open":
+                return JSONResponse(
+                    {"error": "subscription checkout state could not be verified"},
+                    status_code=409,
+                )
         else:
             credits = int(body.get("credits", 100))
             unit_amount = max(100, credits * 10)  # $1 = 10 credits, in cents
