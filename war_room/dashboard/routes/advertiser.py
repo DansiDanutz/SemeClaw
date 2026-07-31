@@ -656,13 +656,28 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                     },
                     status_code=409,
                 )
+            if reservation_data.get("checkout_url"):
+                return JSONResponse(
+                    {
+                        "url": reservation_data["checkout_url"],
+                        "session_id": reservation_data.get("session_id"),
+                    }
+                )
+            reservation_token = reservation_data.get("reservation_token")
+            if not reservation_token:
+                raise RuntimeError("subscription checkout reservation token missing")
         customer_id = adv.get("stripe_customer_id")
 
         if not customer_id:
-            customer = stripe.Customer.create(
-                email=adv.get("email", ""),
-                metadata={"advertiser_id": advertiser_id},
-            )
+            customer_kwargs = {
+                "email": adv.get("email", ""),
+                "metadata": {"advertiser_id": advertiser_id},
+            }
+            if tier in _SUBSCRIPTION_TIER_PRICE_ENV:
+                customer_kwargs["idempotency_key"] = (
+                    f"adclaw-subscription-customer:{advertiser_id}"
+                )
+            customer = stripe.Customer.create(**customer_kwargs)
             customer_id = customer.id
             await _supa("patch", f"adclaw_advertisers?id=eq.{advertiser_id}", json={"stripe_customer_id": customer_id})
 
@@ -680,7 +695,25 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                     "advertiser_id": advertiser_id,
                     "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
                 },
+                idempotency_key=(
+                    f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}"
+                ),
             )
+            stored = await _supa(
+                "post",
+                "rpc/adclaw_store_subscription_checkout",
+                json={
+                    "p_advertiser_id": advertiser_id,
+                    "p_reservation_token": reservation_token,
+                    "p_session_id": session.id,
+                    "p_checkout_url": session.url,
+                },
+            )
+            stored_data = stored if isinstance(stored, dict) else (stored[0] if stored else {})
+            if stored_data.get("ok") is not True:
+                raise RuntimeError(
+                    stored_data.get("error", "failed to persist subscription checkout")
+                )
         else:
             # One-time credit top-up
             credits = int(body.get("credits", 100))
