@@ -199,3 +199,30 @@ def test_project_status_and_price_documentation_match_runtime_contracts():
     ):
         assert variable in env_example
 
+def test_current_stripe_price_shape_and_legacy_mint_permissions_are_hardened():
+    repo_root = Path(__file__).resolve().parents[1]
+    route = (repo_root / "war_room/dashboard/routes/advertiser.py").read_text(encoding="utf-8")
+    migration = (
+        repo_root / "war_room/db/migrations/2026_07_31_adclaw_idempotency.sql"
+    ).read_text(encoding="utf-8")
+
+    webhook = route[
+        route.index('if etype == "invoice.paid":') :
+        route.index('elif etype == "checkout.session.completed":')
+    ]
+    assert 'line.get("pricing")' in webhook
+    assert '.get("price_details")' in webhook
+    assert 'line.get("price")' in webhook
+    assert "current_price_id or legacy_price_id" in webhook
+
+    for signature in (
+        "adclaw_topup_credits(uuid, int, text)",
+        "adclaw_grant_subscription_credits(uuid, text)",
+        "adclaw_record_topup(uuid, int, text)",
+    ):
+        assert (
+            f"revoke all on function {signature} from public, anon, authenticated;"
+            in migration
+        )
+        assert f"grant execute on function {signature} to service_role;" in migration
+
