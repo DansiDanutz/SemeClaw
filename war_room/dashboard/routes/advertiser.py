@@ -82,6 +82,26 @@ def _subscription_benefit_months_from_price(price_id: str) -> int:
     return 12 if price_id in annual_prices else 1
 
 
+def _configured_subscription_invoice_line(lines: list[dict]) -> tuple[dict, str, str]:
+    """Return the invoice line carrying an enabled AdClaw subscription price."""
+    saw_price = False
+    for line in lines:
+        legacy_price = line.get("price") or {}
+        legacy_price_id = legacy_price.get("id") if isinstance(legacy_price, dict) else legacy_price
+        current_price = ((line.get("pricing") or {}).get("price_details") or {}).get("price")
+        current_price_id = current_price.get("id") if isinstance(current_price, dict) else current_price
+        price_id = str(current_price_id or legacy_price_id or "").strip()
+        if not price_id:
+            continue
+        saw_price = True
+        tier = _subscription_tier_from_price(price_id)
+        if tier is not None:
+            return line, price_id, tier
+    if not saw_price:
+        raise ValueError("signed Stripe invoice is missing its subscription price")
+    raise ValueError("invoice has no enabled AdClaw subscription price")
+
+
 # ---------------------------------------------------------------------------
 # Supabase helper
 # ---------------------------------------------------------------------------
@@ -649,6 +669,38 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 },
             )
             reservation_data = reservation if isinstance(reservation, dict) else (reservation[0] if reservation else {})
+            if (
+                reservation_data.get("ok") is not True
+                and reservation_data.get("error") == "a checkout for a different subscription plan is already active"
+                and reservation_data.get("session_id")
+                and reservation_data.get("reservation_token")
+            ):
+                # Invalidate the abandoned Stripe session before clearing its
+                # matching database reservation, then reserve the new plan.
+                stripe.checkout.Session.expire(reservation_data["session_id"])
+                cleared = await _supa(
+                    "post",
+                    "rpc/adclaw_clear_subscription_checkout",
+                    json={
+                        "p_advertiser_id": advertiser_id,
+                        "p_reservation_token": reservation_data["reservation_token"],
+                        "p_session_id": reservation_data["session_id"],
+                    },
+                )
+                cleared_data = cleared if isinstance(cleared, dict) else (cleared[0] if cleared else {})
+                if cleared_data.get("ok") is not True:
+                    raise RuntimeError(cleared_data.get("error", "failed to clear abandoned checkout"))
+                reservation = await _supa(
+                    "post",
+                    "rpc/adclaw_reserve_subscription_checkout",
+                    json={
+                        "p_advertiser_id": advertiser_id,
+                        "p_price_id": subscription_price_id,
+                    },
+                )
+                reservation_data = (
+                    reservation if isinstance(reservation, dict) else (reservation[0] if reservation else {})
+                )
             if reservation_data.get("ok") is not True:
                 return JSONResponse(
                     {
@@ -695,6 +747,7 @@ async def api_advertiser_checkout(advertiser_id: str, request: Request):
                 metadata={
                     "advertiser_id": advertiser_id,
                     "tier": _SUBSCRIPTION_TIER_CANONICAL.get(tier, "diamond"),
+                    "reservation_token": str(reservation_token),
                 },
                 idempotency_key=(f"adclaw-subscription-checkout:{advertiser_id}:{reservation_token}"),
             )
@@ -789,17 +842,9 @@ async def api_advertiser_stripe_webhook(request: Request):
             if not invoice_id:
                 raise ValueError("signed Stripe invoice is missing its immutable id")
             try:
-                line = (obj.get("lines", {}).get("data") or [])[0]
-                legacy_price = line.get("price") or {}
-                legacy_price_id = legacy_price.get("id") if isinstance(legacy_price, dict) else legacy_price
-                current_price = ((line.get("pricing") or {}).get("price_details") or {}).get("price")
-                current_price_id = current_price.get("id") if isinstance(current_price, dict) else current_price
-                price_id = str(current_price_id or legacy_price_id or "").strip()
-                if not price_id:
-                    raise ValueError("signed Stripe invoice is missing its subscription price")
-                tier = _subscription_tier_from_price(price_id)
-                if tier is None:
-                    raise ValueError("invoice price is not an enabled AdClaw subscription price")
+                line, price_id, tier = _configured_subscription_invoice_line(
+                    obj.get("lines", {}).get("data") or []
+                )
                 benefit_months = _subscription_benefit_months_from_price(price_id)
             except ValueError:
                 raise
@@ -825,6 +870,23 @@ async def api_advertiser_stripe_webhook(request: Request):
             grant = result if isinstance(result, dict) else (result[0] if result else {})
             if grant.get("ok") is not True:
                 raise RuntimeError(grant.get("error", "subscription credit grant failed"))
+
+        elif etype == "checkout.session.expired":
+            if obj.get("mode") == "subscription":
+                meta = obj.get("metadata") or {}
+                advertiser_id = meta.get("advertiser_id")
+                session_id = str(obj.get("id") or "").strip()
+                reservation_token = meta.get("reservation_token")
+                if advertiser_id and session_id and reservation_token:
+                    await _supa(
+                        "post",
+                        "rpc/adclaw_clear_subscription_checkout",
+                        json={
+                            "p_advertiser_id": advertiser_id,
+                            "p_reservation_token": reservation_token,
+                            "p_session_id": session_id,
+                        },
+                    )
 
         elif etype == "checkout.session.completed":
             # One-time credit top-up: $1 = 10 credits. Amount comes from metadata.credits
