@@ -130,6 +130,15 @@ jobs:
         with:
           ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
+      - name: Require AdClaw idempotency migration
+        env:
+          APPLIED_MIGRATION: ${{ vars.ADCLAW_IDEMPOTENCY_MIGRATION_APPLIED }}
+        run: |
+          if [ "$APPLIED_MIGRATION" != "2026_07_31" ]; then
+            echo "::error::Apply war_room/db/migrations/2026_07_31_adclaw_idempotency.sql in Supabase, verify both RPCs, then set repository variable ADCLAW_IDEMPOTENCY_MIGRATION_APPLIED=2026_07_31."
+            exit 1
+          fi
+
       - name: Setup Flyctl
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master 2026-07-25
 
