@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.35] - 2026-08-11
+
+### Added
+
+- Mac Studio ops goal prompt (`scripts/mac-studio-ops-goal.md`) — version-controlled
+  copy of the persistent audit/repair/secure/organize goal for a local Claude Code
+  session on the Mac Studio.
+- Launcher script (`scripts/run_mac_studio_goal.sh`) that unsets the stale
+  `ANTHROPIC_*` overrides for the launched process and starts an interactive
+  Claude Code session with the goal prompt.
+
+
 ## [0.10.23] - 2026-07-31
 
 ### Security
