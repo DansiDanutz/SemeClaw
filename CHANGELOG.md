@@ -2,6 +2,18 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.36] - 2026-08-11
+
+### Security
+
+- Upgrade locked `cryptography` 49.0.0 → 50.0.0 (PYSEC-2026-3552) and
+  `h2` 4.4.0 → 4.4.1 (PYSEC-2026-3628); `pip-audit` now reports no known
+  vulnerabilities in the default dependency set.
+- The remaining advisory (`chromadb` 1.1.1, PYSEC-2026-311) has no fixed
+  release and stays quarantined in the optional CrewAI extra, outside the
+  default install, as documented in 0.10.16.
+
+
 ## [0.10.35] - 2026-08-11
 
 ### Added
