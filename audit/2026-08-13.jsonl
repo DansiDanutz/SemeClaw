@@ -1,0 +1,1 @@
+{"ts":"2026-08-13T20:35:39.292122+00:00","request_id":"c4a709e1d6e2","tenant_id":"default","actor":"anonymous","route":"/api/telegram/webhook","method":"POST","status":503,"request_hash":"44136fa355b3678a","latency_ms":4,"client_ip":"testclient"}
