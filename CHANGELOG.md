@@ -2,7 +2,14 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
-## [0.10.39] - 2026-08-14
+## [0.10.41] - 2026-08-16
+
+### Fixed
+
+- Repair the update manifest's stuck `version` field (frozen at 0.7.14 since the
+  daily-release sed only matched when it equaled the pyproject version) by
+  syncing it to the currently published release and making the workflow's
+  replacement pattern-based so it cannot wedge again.
 
 ### Security
 
