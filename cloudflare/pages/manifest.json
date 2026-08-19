@@ -3,9 +3,9 @@
   "name": "SemeClaw",
   "version": "0.10.42",
   "channel": "stable",
-  "released_at": "2026-08-18T06:33:36Z",
-  "download_url": "https://github.com/DansiDanutz/SemeClaw/archive/refs/tags/v0.10.42.zip",
-  "docker_image": "ghcr.io/dansidanutz/semeclaw:0.10.42",
+  "released_at": "2026-08-19T06:34:16Z",
+  "download_url": "https://github.com/DansiDanutz/SemeClaw/archive/refs/tags/v0.10.43.zip",
+  "docker_image": "ghcr.io/dansidanutz/semeclaw:0.10.43",
   "checksums": {
     "sha256": ""
   },
