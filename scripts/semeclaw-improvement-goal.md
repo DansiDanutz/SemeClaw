@@ -24,7 +24,7 @@ single source of truth for what remains.
 | # | Item | Finding | Status |
 |---|------|---------|--------|
 | 0.1 | Disable the `daily-release` workflow for one cycle (Actions tab), merge PR #41, re-enable | SC-02, SC-04 | ⬜ owner |
-| 0.2 | Decide Greptile: pay, or remove from required checks | SC-08 | ⬜ owner |
+| 0.2 | Greptile: owner decided not to pay. `greptile.json` removed from the repo (PR #44); it was never a branch-protection required check. Remaining owner step: uninstall the Greptile GitHub App (github.com → Settings → Applications → Greptile → Uninstall) to stop the per-push trial notices | SC-08 | 🟡 config removed; app uninstall = owner |
 
 ## Phase 1 — release integrity (done in PR #41)
 
