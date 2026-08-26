@@ -2,6 +2,37 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Extracted the voice surface (`/api/tts`, `/api/stt`, `/api/voices/map`,
+  `/api/voices/clone`) plus the voice engine (default speaker map, ElevenLabs
+  key/model/voice-id cache, per-tenant overrides, text naturalizer) from
+  `server.py` into `war_room/dashboard/routes/voice.py` — first slice of the
+  server.py breakup (improvement goal 3.1). ~550 lines removed from the
+  monolith; no route paths or behavior changed.
+- Extracted the reports surface (`GET/POST/DELETE /api/reports`,
+  `/api/reports/content`, `/api/reports/upload`) into
+  `war_room/dashboard/routes/reports.py` (slice 2), replacing the stub.
+  Shared report/meeting helpers stay in `server.py` until the meeting
+  surface is extracted. Monolith now 5,363 lines (from 6,096).
+
+### Removed
+
+- Dead voice-era code orphaned by the multi-lingual removal: the unused
+  edge-tts `_AGENT_VOICES` table, `_DEFAULT_TTS`, `_AGENT_GENDER`, and
+  `_LANG_VOICE_MAP` (zero references).
+- Greptile code-review configuration (`greptile.json`) — the trial ended and
+  the owner opted not to subscribe; CI (lint, format, coverage floor, full
+  suite) and human review remain the merge gates. The Greptile GitHub App
+  itself is uninstalled separately in repository settings.
+- Two unreachable function bodies left behind by earlier route extractions
+  (`api_agent_manifest`, `api_board` — their `@app` decorators were commented
+  out with "MOVED to routes/…" markers but ~200 lines of dead body remained;
+  the live versions in `routes/agents.py` and `routes/health.py` serve the
+  requests). Monolith now 5,161 lines.
+
 ## [0.10.51] - 2026-08-26
 
 ### Added
