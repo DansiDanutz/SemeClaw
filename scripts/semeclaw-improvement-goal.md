@@ -57,7 +57,7 @@ single source of truth for what remains.
 | # | Item | Finding | Status |
 |---|------|---------|--------|
 | 3.1 | Extract `APIRouter` modules from `server.py` (6,094 lines / 83 routes) by surface: meetings, voice-agents, embed, tts, admin — one PR each, until `server.py` is app assembly + middleware only. Pattern exists: `routes/advertiser.py`, `routes/assistant.py` | SC-05 | ⬜ |
-| 3.2 | Deduplicate module state while extracting (e.g. `SEMECLAW_API_KEY` read twice: lines 77 and 435) into one config module | SC-05 | ⬜ |
+| 3.2 | Deduplicate module config: the top-of-module block is now the single normalized source for `SEMECLAW_API_KEY` / `CORS_ORIGINS` / `FRAME_ANCESTORS` / `TENANT_ID` / `PUBLIC_URL`; the shadowing second read is gone | SC-05 | ✅ PR #41 |
 | 3.3 | Split `index.html` (5,475 lines) into static JS/CSS files | SC-05 | ⬜ |
 | 3.4 | Dependency slimming: extras for `semeclaw[voice]` (kokoro, faster-whisper, onnxruntime, soundfile), `[media]` (yt-dlp), `[aws]` (boto3); port `competitor_dashboard.py` off Flask so `flask`/`flask-cors` drop from the default install; re-run `pip-audit` on the slimmed set | SC-06 | ⬜ |
 | 3.5 | Decide the mono-repo question: `apps/` + `packages/` with per-package versioning, or extract `adclaw`/`nervix_platform`/`sentinel`/`coordinator`/`kpis`/`website` — deliberate either way | SC-10 | ⬜ |
@@ -67,10 +67,10 @@ single source of truth for what remains.
 
 | # | Item | Finding | Status |
 |---|------|---------|--------|
-| 4.1 | Per-IP rate limits on open read endpoints; stricter on `/api/tts` (unauthenticated ElevenLabs spend) | SC-11 | ⬜ |
+| 4.1 | Per-IP rate limits on expensive open endpoints — **review correction:** a dependency-free sliding-window limiter already exists in `server.py` covering `/api/tts` (60/min), `/api/stt`, meeting audio/script, spotlight clicks. Residual: make limits env-tunable and consider covering cheap read surfaces | SC-11 | 🟡 mostly pre-existing |
 | 4.2 | Audit open read endpoints for tenant-scoped data; require tenant tokens where found | SC-11 | ⬜ |
 | 4.3 | Enforce minimum JWT signing-secret length (≥32 bytes) at startup, fail closed like `SEMECLAW_API_KEY`; fix short keys in tests (owner sign-off — verify prod key length first so boot doesn't break) | SC-12 | ⬜ |
-| 4.4 | `pytest --cov` in CI with a ratcheting floor (start at current, never lower) | SC-13 | ⬜ |
+| 4.4 | `pytest --cov` in CI with a ratcheting floor — measured 55%, floor set at 54 (`--cov-fail-under=54`); raise the floor whenever coverage rises, never lower it | SC-13 | ✅ PR #41 |
 | 4.5 | Error tracking (Sentry or self-hosted GlitchTip) wired into the FastAPI app | SC-13 | ⬜ |
 | 4.6 | OpenAPI contract tests asserting `INTEGRATION.md`'s public surface never breaks | SC-11 | ⬜ |
 | 4.7 | Ratchet mypy module-by-module, starting with `war_room/v1/` (billing deserves types) | SC-09 | ⬜ |

@@ -70,7 +70,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Run full pytest suite
-        run: uv run pytest -q
+        run: uv run pytest -q --cov=src --cov=war_room --cov=adclaw --cov=nervix_platform --cov-report=term --cov-fail-under=54
 
       - name: Smoke test — meeting_skill module
         run: |

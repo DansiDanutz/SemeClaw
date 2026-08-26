@@ -15,6 +15,14 @@ All notable changes to SemeClaw will be documented in this file.
 - Release-time verification that the deployed update manifest actually
   advertises the new release with a non-empty checksum (the stuck-manifest
   failure mode previously went unnoticed for months).
+- Coverage floor in CI: the full suite now runs under `pytest --cov` with
+  `--cov-fail-under=54` (measured 55% at introduction) so coverage can only
+  ratchet upward.
+- Dashboard config is read once: the duplicated environment block in
+  `server.py` (which re-read `SEMECLAW_API_KEY`/`FRAME_ANCESTORS`/`TENANT_ID`/
+  `PUBLIC_URL` with different normalization and silently shadowed the first
+  read) is collapsed into a single normalized source; the CORS middleware
+  now uses it too.
 
 ### Removed
 
