@@ -118,3 +118,8 @@ war_room/assistant/
 # is misdirected; never commit audit shards.
 /audit/
 /configured-secret/
+
+# pytest-cov data files
+.coverage
+.coverage.*
+htmlcov/
