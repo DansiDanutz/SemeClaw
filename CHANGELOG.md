@@ -2,6 +2,23 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Extracted the voice surface (`/api/tts`, `/api/stt`, `/api/voices/map`,
+  `/api/voices/clone`) plus the voice engine (default speaker map, ElevenLabs
+  key/model/voice-id cache, per-tenant overrides, text naturalizer) from
+  `server.py` into `war_room/dashboard/routes/voice.py` — first slice of the
+  server.py breakup (improvement goal 3.1). ~550 lines removed from the
+  monolith; no route paths or behavior changed.
+
+### Removed
+
+- Dead voice-era code orphaned by the multi-lingual removal: the unused
+  edge-tts `_AGENT_VOICES` table, `_DEFAULT_TTS`, `_AGENT_GENDER`, and
+  `_LANG_VOICE_MAP` (zero references).
+
 ## [0.10.51] - 2026-08-26
 
 ### Added

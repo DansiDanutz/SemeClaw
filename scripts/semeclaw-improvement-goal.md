@@ -56,7 +56,7 @@ single source of truth for what remains.
 
 | # | Item | Finding | Status |
 |---|------|---------|--------|
-| 3.1 | Extract `APIRouter` modules from `server.py` (6,094 lines / 83 routes) by surface: meetings, voice-agents, embed, tts, admin — one PR each, until `server.py` is app assembly + middleware only. Pattern exists: `routes/advertiser.py`, `routes/assistant.py` | SC-05 | ⬜ |
+| 3.1 | Extract `APIRouter` modules from `server.py` by surface, one PR each, until it is app assembly + middleware only. Done: **voice** (tts/stt/voices → `routes/voice.py`, −550 lines, dead edge-tts era code dropped). Remaining surfaces by size: meeting (26 routes), reports (5), agent manifest/health (5), paperclip (4), webhooks (3), admin (3), misc | SC-05 | 🟡 in progress |
 | 3.2 | Deduplicate module config: the top-of-module block is now the single normalized source for `SEMECLAW_API_KEY` / `CORS_ORIGINS` / `FRAME_ANCESTORS` / `TENANT_ID` / `PUBLIC_URL`; the shadowing second read is gone | SC-05 | ✅ PR #41 |
 | 3.3 | Split `index.html` (5,475 lines) into static JS/CSS files | SC-05 | ⬜ |
 | 3.4 | Dependency slimming: extras for `semeclaw[voice]` (kokoro, faster-whisper, onnxruntime, soundfile), `[media]` (yt-dlp), `[aws]` (boto3); port `competitor_dashboard.py` off Flask so `flask`/`flask-cors` drop from the default install; re-run `pip-audit` on the slimmed set | SC-06 | ⬜ |
