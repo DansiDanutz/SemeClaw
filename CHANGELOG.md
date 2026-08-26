@@ -6,6 +6,13 @@ All notable changes to SemeClaw will be documented in this file.
 
 ### Changed
 
+- Extracted the agent-fleet surface (`/api/agent/run-start`, `run-complete`,
+  `health/probe`, `health`, `history/{agent_name}`) plus the droplet
+  connectivity-probe machinery and its background loop into
+  `war_room/dashboard/routes/fleet.py` (server.py breakup slice 4).
+  server.py now 4,757 lines (from 6,096 at the start of the breakup);
+  no route paths or behavior changed.
+
 - Extracted the voice surface (`/api/tts`, `/api/stt`, `/api/voices/map`,
   `/api/voices/clone`) plus the voice engine (default speaker map, ElevenLabs
   key/model/voice-id cache, per-tenant overrides, text naturalizer) from
