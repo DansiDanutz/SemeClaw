@@ -12,6 +12,11 @@ All notable changes to SemeClaw will be documented in this file.
   `server.py` into `war_room/dashboard/routes/voice.py` — first slice of the
   server.py breakup (improvement goal 3.1). ~550 lines removed from the
   monolith; no route paths or behavior changed.
+- Extracted the reports surface (`GET/POST/DELETE /api/reports`,
+  `/api/reports/content`, `/api/reports/upload`) into
+  `war_room/dashboard/routes/reports.py` (slice 2), replacing the stub.
+  Shared report/meeting helpers stay in `server.py` until the meeting
+  surface is extracted. Monolith now 5,363 lines (from 6,096).
 
 ### Removed
 
