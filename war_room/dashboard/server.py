@@ -54,7 +54,11 @@ try:
     from adclaw.server import get_next_slide as _adclaw_get_next_slide
 except Exception as _adclaw_import_err:
     _adclaw_get_next_slide = None  # type: ignore
-    logger.warning("AdClaw module not available for in-process serving: %s", _adclaw_import_err)
+    # Module-level `logger` is not defined yet at import time — a bare
+    # `logger.warning` here crashed server boot whenever the import failed.
+    logging.getLogger("war_room.dashboard.server").warning(
+        "AdClaw module not available for in-process serving: %s", _adclaw_import_err
+    )
 
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
@@ -72,13 +76,15 @@ from war_room.dashboard.websocket_manager import manager
 
 manager.set_before_broadcast_hook(meeting_log.record)
 # ---------------------------------------------------------------------------
-# Config from environment
+# Config from environment — single source of truth; do not re-read these
+# names elsewhere in the module (a second read once shadowed this block
+# with differently-normalized values).
 # ---------------------------------------------------------------------------
 SEMECLAW_API_KEY = os.environ.get("SEMECLAW_API_KEY", "").strip()
-SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*")
-SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*")
-SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default")
-SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765")
+SEMECLAW_CORS_ORIGINS = os.environ.get("SEMECLAW_CORS_ORIGINS", "*").strip()
+SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*").strip()
+SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default").strip()
+SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
 
 
 def _parse_trusted_proxy_networks(value: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
@@ -419,8 +425,9 @@ except Exception as e:
 try:
     from fastapi.middleware.cors import CORSMiddleware
 
-    _cors_origins = os.environ.get("SEMECLAW_CORS_ORIGINS", "*").strip()
-    _allowed = ["*"] if _cors_origins == "*" else [o.strip() for o in _cors_origins.split(",") if o.strip()]
+    _allowed = (
+        ["*"] if SEMECLAW_CORS_ORIGINS == "*" else [o.strip() for o in SEMECLAW_CORS_ORIGINS.split(",") if o.strip()]
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed,
@@ -432,10 +439,8 @@ try:
 except Exception as _cors_err:
     logging.getLogger(__name__).warning("CORS setup failed: %s", _cors_err)
 
-SEMECLAW_API_KEY = os.environ.get("SEMECLAW_API_KEY", "").strip()
-SEMECLAW_FRAME_ANCESTORS = os.environ.get("SEMECLAW_FRAME_ANCESTORS", "*").strip()
-SEMECLAW_TENANT_ID = os.environ.get("SEMECLAW_TENANT_ID", "default").strip()
-SEMECLAW_PUBLIC_URL = os.environ.get("SEMECLAW_PUBLIC_URL", "http://127.0.0.1:8765").rstrip("/")
+# (SEMECLAW_API_KEY / FRAME_ANCESTORS / TENANT_ID / PUBLIC_URL are defined
+# once in the config block at the top of this module.)
 
 # Central AdClaw ad server — when set, loading slides are served from there
 # and impressions are logged server-side (unfakeable even in open-source forks).
@@ -4928,11 +4933,9 @@ async def api_meeting_task_comment(meeting_id: str, request: Request):
         "streaming": False,
         "ts": ts,
     }
-    for ws in list(_ws_clients):
-        try:
-            await ws.send_text(json.dumps(msg))
-        except Exception:
-            pass
+    # `_ws_clients` never existed — this raised NameError on every user
+    # comment; broadcast through the shared manager like every other route.
+    await manager.broadcast(msg)
 
     # Also signal the meeting loop if it's waiting for a user answer
     # (comment can act as an implicit answer)

@@ -2,6 +2,70 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [0.10.51] - 2026-08-26
+
+### Added
+
+- Release-integrity hardening in the daily-release pipeline: releases are now
+  gated on the full lint + test suite, skipped entirely when nothing
+  substantive changed since the last tag, and the published update manifest
+  carries the sha256 of the exact release ZIP so clients can verify downloads.
+- `scripts/semeclaw-improvement-goal.md` — persistent improvement goal tracking
+  the 2026-08-26 engineering review findings (SC-01…SC-13) across four phases.
+- Release-time verification that the deployed update manifest actually
+  advertises the new release with a non-empty checksum (the stuck-manifest
+  failure mode previously went unnoticed for months).
+- Coverage floor in CI: the full suite now runs under `pytest --cov` with
+  `--cov-fail-under=54` (measured 55% at introduction) so coverage can only
+  ratchet upward.
+- Dashboard config is read once: the duplicated environment block in
+  `server.py` (which re-read `SEMECLAW_API_KEY`/`FRAME_ANCESTORS`/`TENANT_ID`/
+  `PUBLIC_URL` with different normalization and silently shadowed the first
+  read) is collapsed into a single normalized source; the CORS middleware
+  now uses it too.
+
+### Removed
+
+- The per-PR version-bump gate (`scripts/check_version_bumped.sh`). Version
+  assignment is now centralized in the daily-release pipeline, which promotes
+  `## [Unreleased]` changelog sections, refreshes the README badge, and can
+  never race an open PR for version numbers. See `VERSIONING.md`.
+
+### Fixed
+
+- Repair the update manifest's stuck `version` field (frozen at 0.7.14 since the
+  daily-release sed only matched when it equaled the pyproject version) by
+  syncing it to the currently published release and making the workflow's
+  replacement pattern-based so it cannot wedge again.
+- Server boot no longer crashes when the AdClaw import fails (the fallback
+  logged through a `logger` name that did not exist yet at import time).
+- Posting a user comment into a live meeting no longer raises `NameError` —
+  the broadcast iterated a `_ws_clients` variable that never existed; it now
+  goes through the shared WebSocket manager like every other route.
+- Webhook fail-closed tests no longer monkey-patch `os.environ.get` globally,
+  which had redirected the v1 data dir into the repository working tree and
+  sprayed audit shards into the repo root.
+
+### Changed
+
+- `pytest`/`pytest-asyncio` moved out of the production dependency set into the
+  dev group; installers of the package no longer receive test tooling.
+- Ruff's `F821` (undefined name) is enforced globally again — it immediately
+  caught the two latent `NameError` crashes above; the fixture exemption is now
+  scoped to test directories only.
+- Removed the stale `ad-semeclaw.bak.1776944225/` Vercel build backup;
+  gitignored the runtime `audit/` data roots.
+
+### Security
+
+- Upgrade locked `cryptography` 49.0.0 → 50.0.0 (PYSEC-2026-3552) and
+  `h2` 4.4.0 → 4.4.1 (PYSEC-2026-3628); `pip-audit` now reports no known
+  vulnerabilities in the default dependency set.
+- The remaining advisory (`chromadb` 1.1.1, PYSEC-2026-311) has no fixed
+  release and stays quarantined in the optional CrewAI extra, outside the
+  default install, as documented in 0.10.16.
+
+
 ## [0.10.35] - 2026-08-11
 
 ### Added

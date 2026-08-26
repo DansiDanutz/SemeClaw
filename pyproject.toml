@@ -1,6 +1,6 @@
 [project]
 name = "semeclaw"
-version = "0.10.50"
+version = "0.10.51"
 description = "SemeClaw — embeddable AI War Room agent powering cinematic multi-agent meetings for NERVIX + Paperclip companies."
 requires-python = ">=3.10"
 
@@ -21,8 +21,6 @@ dependencies = [
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
     "trafilatura>=1.6.0",
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.23.0",
     "yt-dlp>=2024.1.1",
     "supabase>=2.0.0",
     "beautifulsoup4>=4.12.0",
@@ -67,6 +65,9 @@ semeclaw = "semeclaw.cli.main:app"
 dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.ruff]
@@ -107,13 +108,16 @@ ignore = [
     "B005",  # strip with multi-characters (intentional in a few places)
     "B007",  # unused loop control variable
     "B905",  # zip without explicit strict=
-    "F821",  # undefined name (raised by test fixtures imported from conftest)
     "W293",  # blank line with whitespace
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"war_room/tests/*" = ["B011"]  # assert False is fine in tests
-"tests/*" = ["B011"]
+# F821 stays on globally (it catches real NameErrors); only test modules may
+# reference fixtures injected from conftest without importing them.
+"war_room/tests/*" = ["B011", "F821"]  # assert False is fine in tests
+"tests/*" = ["B011", "F821"]
+"war_room/v1/tests/*" = ["B011", "F821"]
+"conftest.py" = ["F821"]
 
 [tool.ruff.format]
 # Black-compatible defaults; no action needed
