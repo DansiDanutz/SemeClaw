@@ -23,6 +23,11 @@ All notable changes to SemeClaw will be documented in this file.
 - Dead voice-era code orphaned by the multi-lingual removal: the unused
   edge-tts `_AGENT_VOICES` table, `_DEFAULT_TTS`, `_AGENT_GENDER`, and
   `_LANG_VOICE_MAP` (zero references).
+- Two unreachable function bodies left behind by earlier route extractions
+  (`api_agent_manifest`, `api_board` — their `@app` decorators were commented
+  out with "MOVED to routes/…" markers but ~200 lines of dead body remained;
+  the live versions in `routes/agents.py` and `routes/health.py` serve the
+  requests). Monolith now 5,161 lines.
 
 ## [0.10.51] - 2026-08-26
 
