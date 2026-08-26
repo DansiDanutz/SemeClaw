@@ -7,7 +7,7 @@
 - [ ] `uv run ruff check src/ war_room/ adclaw/ nervix_platform/`
 - [ ] `uv run ruff format --check src/ war_room/ adclaw/ nervix_platform/`
 - [ ] `uv run pytest -q`
-- [ ] Version/changelog updated for non-doc changes
+- [ ] CHANGELOG entry added under `## [Unreleased]` for non-doc changes (versions are assigned by the release pipeline, not in PRs)
 
 ## Notes
 

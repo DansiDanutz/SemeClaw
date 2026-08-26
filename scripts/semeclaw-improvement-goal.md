@@ -9,8 +9,9 @@ single source of truth for what remains.
 **Operating rules**
 
 - Follow `AGENTS.md` and the conventions in `CLAUDE.md`.
-- Every change ships with tests where testable, a `CHANGELOG.md` entry, and the
-  version gate satisfied (`bash scripts/check_version_bumped.sh origin/main`).
+- Every change ships with tests where testable and a `CHANGELOG.md` entry under
+  `## [Unreleased]` (versions are assigned by the release pipeline, not PRs —
+  see `VERSIONING.md`).
 - Never point `cloudflare/pages/manifest.json` at unpublished artifacts — the
   manifest advertises only releases whose tag and Docker image already exist.
 - Never commit runtime data (`audit/`, `configured-secret/`, `data/`).
@@ -46,9 +47,9 @@ single source of truth for what remains.
 
 | # | Item | Finding | Status |
 |---|------|---------|--------|
-| 2.1 | Move version assignment to merge time (release-please or tag-on-merge); the daily cron becomes a redeploy check, not a version mint | SC-02 | ⬜ |
-| 2.2 | Delete `scripts/check_version_bumped.sh` PR gate once 2.1 lands | SC-02 | ⬜ |
-| 2.3 | CI smoke test: fetch the live update manifest, assert `version` equals the newest git tag and `sha256` is non-empty (this failure mode went unnoticed for months) | SC-03 | ⬜ |
+| 2.1 | Centralize version assignment in the release pipeline: PRs stop bumping versions; the daily pipeline (test-gated, skip-if-unchanged) mints versions, promotes `[Unreleased]` changelog sections, and refreshes the badge | SC-02 | ✅ PR #41 |
+| 2.2 | Delete `scripts/check_version_bumped.sh` PR gate; PR template asks for an `[Unreleased]` changelog entry instead | SC-02 | ✅ PR #41 |
+| 2.3 | Release-time smoke test: after deploying, fetch the live manifest from the Pages deployment URL and assert `version` equals the new release and `sha256` is non-empty (this failure mode went unnoticed for months) | SC-03 | ✅ PR #41 |
 | 2.4 | Consider cosign signatures for the GHCR image | SC-03 | ⬜ |
 
 ## Phase 3 — architecture (next month, incremental)

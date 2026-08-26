@@ -12,6 +12,16 @@ All notable changes to SemeClaw will be documented in this file.
   carries the sha256 of the exact release ZIP so clients can verify downloads.
 - `scripts/semeclaw-improvement-goal.md` — persistent improvement goal tracking
   the 2026-08-26 engineering review findings (SC-01…SC-13) across four phases.
+- Release-time verification that the deployed update manifest actually
+  advertises the new release with a non-empty checksum (the stuck-manifest
+  failure mode previously went unnoticed for months).
+
+### Removed
+
+- The per-PR version-bump gate (`scripts/check_version_bumped.sh`). Version
+  assignment is now centralized in the daily-release pipeline, which promotes
+  `## [Unreleased]` changelog sections, refreshes the README badge, and can
+  never race an open PR for version numbers. See `VERSIONING.md`.
 
 ### Fixed
 

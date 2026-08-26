@@ -25,12 +25,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0  # needed so check_version_bumped can see origin/main
 
-      - name: Enforce version bump (PRs only)
-        if: github.event_name == 'pull_request'
-        run: bash scripts/check_version_bumped.sh origin/${{ github.base_ref }}
+      # Version assignment is centralized in the daily-release pipeline
+      # (test-gated, skip-if-unchanged). PRs no longer bump versions, so
+      # they can never race the release bot for version numbers.
 
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0

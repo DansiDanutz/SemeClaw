@@ -101,7 +101,14 @@ jobs:
           sed -i "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" pyproject.toml
           uv lock 2>/dev/null || true
 
-          git add pyproject.toml uv.lock
+          # Versions are assigned here, not in PRs: promote any pending
+          # [Unreleased] changelog section and refresh the README badge.
+          if grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            sed -i "s/^## \[Unreleased\].*/## [$NEW_VERSION] - $(date -u +%Y-%m-%d)/" CHANGELOG.md
+          fi
+          sed -i "s/badge\/version-[0-9.]*-/badge\/version-$NEW_VERSION-/" README.md
+
+          git add pyproject.toml uv.lock CHANGELOG.md README.md
           git commit -m "chore(release): bump version to $NEW_VERSION [daily]"
           git tag "$NEW_TAG"
           git push origin main --tags
@@ -181,6 +188,7 @@ jobs:
           ref: ${{ needs.bump-and-tag.outputs.manifest_sha }}
 
       - name: Publish to Cloudflare Pages
+        id: publish
         uses: cloudflare/pages-action@f0a1cd58cd66095dee69bfa18fa5efd1dde93bca # v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -188,6 +196,29 @@ jobs:
           projectName: updates-semeclaw
           directory: cloudflare/pages
           branch: main
+
+      - name: Verify live manifest
+        env:
+          DEPLOY_URL: ${{ steps.publish.outputs.url }}
+          EXPECTED_VERSION: ${{ needs.bump-and-tag.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          # The manifest version-gate failure sat unnoticed for months
+          # (clients saw 0.7.14 forever). Prove the deployed manifest
+          # advertises this release, with a verifiable checksum.
+          for attempt in 1 2 3 4 5 6; do
+            LIVE=$(curl -fsSL "$DEPLOY_URL/manifest.json" || echo '{}')
+            VERSION=$(echo "$LIVE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || echo "")
+            SHA=$(echo "$LIVE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('checksums',{}).get('sha256',''))" 2>/dev/null || echo "")
+            if [ "$VERSION" = "$EXPECTED_VERSION" ] && [ -n "$SHA" ]; then
+              echo "OK: live manifest advertises $VERSION with sha256 $SHA"
+              exit 0
+            fi
+            echo "attempt $attempt: live version='$VERSION' (want $EXPECTED_VERSION), sha256='${SHA:+set}' — retrying"
+            sleep 20
+          done
+          echo "::error::Deployed manifest does not advertise $EXPECTED_VERSION with a checksum."
+          exit 1
 
   deploy-fly:
     runs-on: ubuntu-latest

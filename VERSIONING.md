@@ -1,7 +1,6 @@
 # Versioning policy
 
-SemeClaw follows [Semantic Versioning 2.0](https://semver.org/). Every change
-to the codebase bumps the version.
+SemeClaw follows [Semantic Versioning 2.0](https://semver.org/).
 
 The canonical version lives in `pyproject.toml`:
 
@@ -13,41 +12,43 @@ and is propagated to `war_room/dashboard/server.py` (`APP_VERSION`) and to
 HTTP responses via the `X-SemeClaw-Version` header and the
 `GET /api/agent/manifest` payload.
 
-## Bumping rules
+## Who assigns versions
 
-| Bump | When |
-|---|---|
-| **PATCH** (0.7.14 → 0.7.15) | Bug fix, hygiene, perf improvement, docs, tests |
-| **MINOR** (0.7.15 → 0.8.0) | New feature, new endpoint, new config knob, behaviour change that's backwards-compat |
-| **MAJOR** (0.7.15 → 1.0.0) | Breaking API change, removed endpoint, changed required env var name, changed DB schema in a non-additive way |
+**The release pipeline, not pull requests.** Versions are minted exclusively
+by the daily-release workflow (`.github/workflows/daily-release.yml`), which:
 
-**Every PR must bump the version.** CI enforces this via
-`scripts/check_version_bumped.sh`, which compares the `pyproject.toml`
-version on the PR branch to the one on `main`. If the version is the same,
-CI fails.
+1. runs the full lint + test suite (nothing untested is ever tagged),
+2. **skips the release entirely** when nothing substantive changed since the
+   last tag — no more identical-code releases,
+3. bumps the patch version in `pyproject.toml` (skipping already-used tags),
+4. promotes any `## [Unreleased]` section in `CHANGELOG.md` to the new
+   version, refreshes the README badge, commits, tags, and pushes,
+5. hashes the exact release ZIP and publishes the update manifest with its
+   `sha256`, then verifies the *deployed* manifest advertises the new
+   version with a checksum.
 
-## How to bump
+PRs therefore **do not bump versions** and can never race the release bot
+for version numbers. (The old `check_version_bumped.sh` PR gate is gone —
+its interaction with the daily bot forced open PRs into daily manual
+version leapfrogs; see PR #41's history for the case study.)
 
-Use the existing helper:
+## What a PR does instead
 
-```bash
-python scripts/bump_version.py patch    # 0.7.15 -> 0.7.16
-python scripts/bump_version.py minor    # 0.7.15 -> 0.8.0
-python scripts/bump_version.py major    # 0.7.15 -> 1.0.0
-python scripts/bump_version.py 0.9.3    # set explicitly
-```
+Add a changelog entry under a top-level `## [Unreleased]` heading using
+keep-a-changelog sections (`### Added`, `### Changed`, `### Fixed`,
+`### Removed`, `### Security`). The next release run stamps it with the
+version and date automatically.
 
-Then append a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` describing
-what changed. Keep a short bulleted list under `### Added`, `### Changed`,
-`### Fixed`, `### Removed` headings (keep-a-changelog conventions).
+MINOR/MAJOR bumps (new surface, breaking change) are deliberate acts: set
+the base version in `pyproject.toml` in the PR that introduces the change
+(e.g. `0.11.0`), and the pipeline continues patching from there.
 
 ## Release flow
 
-1. Merge a version-bumped PR into `main`.
-2. The daily-release workflow (`.github/workflows/daily-release.yml`) or a
-   manual `git tag vX.Y.Z && git push --tags` kicks the release workflow
-   (`ci.yml`), which builds & pushes the image to GHCR and runs
-   `flyctl deploy`.
+1. Merge PRs into `main` freely — no version choreography.
+2. At 06:00 UTC (or on `workflow_dispatch`) the daily-release pipeline
+   tests, decides whether anything shipped-worthy changed, and if so
+   tags/builds/deploys and publishes a checksummed manifest.
 3. `fly.toml` pins no version — the latest GHCR tag is what lands. Users
    can point at a specific tag via `image = "ghcr.io/dansidanutz/semeclaw:X.Y.Z"`.
 
@@ -62,22 +63,10 @@ version = "0.8.0rc1"
 Pre-release suffixes (`rc1`, `beta2`, `dev0`, etc.) are not released by the
 tag workflow. Remove the suffix before tagging.
 
-## What counts as "didn't bump"?
-
-CI fails the version-bump check if:
-
-- `pyproject.toml` version on the PR is **lexicographically equal** to the
-  version on `main`, AND
-- the PR touches any file under `src/`, `war_room/`, `adclaw/`,
-  `nervix_platform/`, `scripts/`, `integrations/`, or the project root
-  `*.py`, `*.toml`, `*.sh`.
-
-Pure documentation PRs (README/CHANGELOG/docs/*.md only) skip the check —
-CI detects them and passes the step.
-
 ## Why
 
 Every user — internal operator, API consumer, embedded iframe host —
 should be able to point at `X-SemeClaw-Version` or `/api/agent/manifest`
-and know exactly what code is running. Without a bump per PR, "latest"
-becomes meaningless and `fly deploy` surprises happen.
+and know exactly what code is running, and verify what they downloaded
+matches what was released. Centralizing version assignment in one tested
+pipeline keeps that guarantee without taxing every PR.
