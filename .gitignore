@@ -113,3 +113,8 @@ war_room/voice_agents/
 
 # Digital Assistant — transcripts + memory are personal runtime data
 war_room/assistant/
+
+# Runtime data roots — the v1 store writes here when SEMECLAW_V1_DATA_DIR
+# is misdirected; never commit audit shards.
+/audit/
+/configured-secret/

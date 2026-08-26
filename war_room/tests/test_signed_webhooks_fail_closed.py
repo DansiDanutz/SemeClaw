@@ -6,17 +6,22 @@ from starlette.testclient import TestClient
 
 from war_room.dashboard.server import app
 
+# Patch only TELEGRAM_WEBHOOK_SECRET. Patching ``os.environ.get`` on the
+# route module hijacks env lookups process-wide (``routes.telegram.os`` is
+# the shared ``os`` module) — it once redirected the v1 storage data dir
+# into the repository root mid-test.
+
 
 def test_telegram_webhook_requires_configured_secret() -> None:
-    with TestClient(app) as client, patch.dict("os.environ", {}, clear=False):
-        with patch("war_room.dashboard.routes.telegram.os.environ.get", return_value=""):
+    with TestClient(app) as client:
+        with patch.dict("os.environ", {"TELEGRAM_WEBHOOK_SECRET": ""}):
             response = client.post("/api/telegram/webhook", json={})
     assert response.status_code == 503
 
 
 def test_telegram_webhook_rejects_wrong_secret() -> None:
     with TestClient(app) as client:
-        with patch("war_room.dashboard.routes.telegram.os.environ.get", return_value="configured-secret"):
+        with patch.dict("os.environ", {"TELEGRAM_WEBHOOK_SECRET": "configured-secret"}):
             response = client.post(
                 "/api/telegram/webhook",
                 json={},

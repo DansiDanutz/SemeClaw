@@ -14,16 +14,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Never ship what hasn't passed the suite — the release pipeline runs the
+  # same checks as PR CI before anything is tagged or deployed.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.1"
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev || uv sync --group dev
+
+      - name: Lint
+        run: |
+          uv run ruff check src/ war_room/ adclaw/ nervix_platform/
+          uv run ruff format --check src/ war_room/ adclaw/ nervix_platform/
+
+      - name: Tests
+        run: uv run pytest -q
+
   bump-and-tag:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: test
     outputs:
       new_version: ${{ steps.bump.outputs.NEW_VERSION }}
       new_tag: ${{ steps.bump.outputs.NEW_TAG }}
+      changed: ${{ steps.bump.outputs.CHANGED }}
+      manifest_sha: ${{ steps.bump.outputs.MANIFEST_SHA }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -38,6 +66,24 @@ jobs:
       - name: Bump patch version
         id: bump
         run: |
+          set -euo pipefail
+
+          # Skip the release entirely when nothing substantive changed since
+          # the last tag — release-metadata churn (version fields, manifest,
+          # lockfile version, badges, changelog headers) does not count.
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ] && git diff --quiet "$LAST_TAG"..HEAD -- . \
+              ':(exclude)pyproject.toml' \
+              ':(exclude)uv.lock' \
+              ':(exclude)cloudflare/pages/manifest.json' \
+              ':(exclude)CHANGELOG.md' \
+              ':(exclude)README.md'; then
+            echo "No substantive changes since $LAST_TAG — skipping release."
+            echo "CHANGED=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "CHANGED=true" >> "$GITHUB_OUTPUT"
+
           CURRENT=$(grep -oP '^version = "\K[^"]+' pyproject.toml)
           MAJOR=$(echo "$CURRENT" | cut -d. -f1)
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
@@ -53,46 +99,43 @@ jobs:
           NEW_TAG="v${NEW_VERSION}"
 
           sed -i "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" pyproject.toml
+          uv lock 2>/dev/null || true
 
-          # Update manifest version
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" cloudflare/pages/manifest.json
-          sed -i "s/\"download_url\": \"[^\"]*\"/\"download_url\": \"https:\/\/github.com\/DansiDanutz\/SemeClaw\/archive\/refs\/tags\/$NEW_TAG.zip\"/" cloudflare/pages/manifest.json
-          sed -i "s/\"docker_image\": \"[^\"]*\"/\"docker_image\": \"ghcr.io\/dansidanutz\/semeclaw:$NEW_VERSION\"/" cloudflare/pages/manifest.json
-          sed -i "s/\"released_at\": \"[^\"]*\"/\"released_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"/" cloudflare/pages/manifest.json
-
-          git add pyproject.toml cloudflare/pages/manifest.json
+          git add pyproject.toml uv.lock
           git commit -m "chore(release): bump version to $NEW_VERSION [daily]"
           git tag "$NEW_TAG"
           git push origin main --tags
 
+          # The tag exists — hash the exact source archive clients will
+          # download, then publish a manifest that lets them verify it.
+          sleep 5
+          ZIP_URL="https://github.com/DansiDanutz/SemeClaw/archive/refs/tags/$NEW_TAG.zip"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL "$ZIP_URL" -o /tmp/release.zip; then break; fi
+            sleep $((attempt * 5))
+          done
+          SHA256=$(sha256sum /tmp/release.zip | cut -d' ' -f1)
+
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" cloudflare/pages/manifest.json
+          sed -i "s/\"download_url\": \"[^\"]*\"/\"download_url\": \"https:\/\/github.com\/DansiDanutz\/SemeClaw\/archive\/refs\/tags\/$NEW_TAG.zip\"/" cloudflare/pages/manifest.json
+          sed -i "s/\"docker_image\": \"[^\"]*\"/\"docker_image\": \"ghcr.io\/dansidanutz\/semeclaw:$NEW_VERSION\"/" cloudflare/pages/manifest.json
+          sed -i "s/\"released_at\": \"[^\"]*\"/\"released_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"/" cloudflare/pages/manifest.json
+          sed -i "s/\"sha256\": \"[^\"]*\"/\"sha256\": \"$SHA256\"/" cloudflare/pages/manifest.json
+
+          git add cloudflare/pages/manifest.json
+          git commit -m "chore(release): publish manifest for $NEW_VERSION [daily]"
+          git push origin main
+          echo "MANIFEST_SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
           echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_OUTPUT"
-          echo "Bumped $CURRENT → $NEW_VERSION"
-
-  deploy-manifest:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # build-and-push must finish first so the manifest never advertises a
-    # Docker image tag that has not been pushed yet.
-    needs: [bump-and-tag, build-and-push]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ needs.bump-and-tag.outputs.new_tag }}
-
-      - name: Publish to Cloudflare Pages
-        uses: cloudflare/pages-action@f0a1cd58cd66095dee69bfa18fa5efd1dde93bca # v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: updates-semeclaw
-          directory: cloudflare/pages
-          branch: main
+          echo "Bumped $CURRENT → $NEW_VERSION (zip sha256 $SHA256)"
 
   build-and-push:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: bump-and-tag
+    if: needs.bump-and-tag.outputs.changed == 'true'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -123,10 +166,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy-manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # build-and-push must finish first so the manifest never advertises a
+    # Docker image tag that has not been pushed yet.
+    needs: [bump-and-tag, build-and-push]
+    if: needs.bump-and-tag.outputs.changed == 'true'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The manifest (with checksum) lives in the commit made after the
+          # tag — deploy exactly that commit, not the tag.
+          ref: ${{ needs.bump-and-tag.outputs.manifest_sha }}
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@f0a1cd58cd66095dee69bfa18fa5efd1dde93bca # v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: updates-semeclaw
+          directory: cloudflare/pages
+          branch: main
+
   deploy-fly:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [bump-and-tag, build-and-push]
+    if: needs.bump-and-tag.outputs.changed == 'true'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -153,6 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [bump-and-tag, build-and-push]
+    if: needs.bump-and-tag.outputs.changed == 'true'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

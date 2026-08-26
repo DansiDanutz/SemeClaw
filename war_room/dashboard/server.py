@@ -54,7 +54,11 @@ try:
     from adclaw.server import get_next_slide as _adclaw_get_next_slide
 except Exception as _adclaw_import_err:
     _adclaw_get_next_slide = None  # type: ignore
-    logger.warning("AdClaw module not available for in-process serving: %s", _adclaw_import_err)
+    # Module-level `logger` is not defined yet at import time — a bare
+    # `logger.warning` here crashed server boot whenever the import failed.
+    logging.getLogger("war_room.dashboard.server").warning(
+        "AdClaw module not available for in-process serving: %s", _adclaw_import_err
+    )
 
 # FastAPI — installed with: pip install fastapi uvicorn websockets
 try:
@@ -4928,11 +4932,9 @@ async def api_meeting_task_comment(meeting_id: str, request: Request):
         "streaming": False,
         "ts": ts,
     }
-    for ws in list(_ws_clients):
-        try:
-            await ws.send_text(json.dumps(msg))
-        except Exception:
-            pass
+    # `_ws_clients` never existed — this raised NameError on every user
+    # comment; broadcast through the shared manager like every other route.
+    await manager.broadcast(msg)
 
     # Also signal the meeting loop if it's waiting for a user answer
     # (comment can act as an implicit answer)

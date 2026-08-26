@@ -5184,8 +5184,6 @@ dependencies = [
     { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "pyjwt" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "python-telegram-bot" },
@@ -5210,6 +5208,8 @@ crewai = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
 
@@ -5235,8 +5235,6 @@ requires-dist = [
     { name = "prometheus-client", specifier = ">=0.20.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.8.0" },
-    { name = "pytest", specifier = ">=7.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "python-telegram-bot", specifier = ">=20.0" },
@@ -5257,6 +5255,8 @@ provides-extras = ["crewai"]
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.11.0" },
+    { name = "pytest", specifier = ">=7.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "ruff", specifier = ">=0.6.0" },
 ]
 
