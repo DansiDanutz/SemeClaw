@@ -2,7 +2,7 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
-## [Unreleased]
+## [0.10.52] - 2026-08-27
 
 ### Changed
 
