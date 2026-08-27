@@ -1,13 +1,13 @@
 {
   "id": "semeclaw",
   "name": "SemeClaw",
-  "version": "0.10.50",
+  "version": "0.10.52",
   "channel": "stable",
-  "released_at": "2026-08-26T06:38:11Z",
-  "download_url": "https://github.com/DansiDanutz/SemeClaw/archive/refs/tags/v0.10.50.zip",
-  "docker_image": "ghcr.io/dansidanutz/semeclaw:0.10.50",
+  "released_at": "2026-08-27T09:17:44Z",
+  "download_url": "https://github.com/DansiDanutz/SemeClaw/archive/refs/tags/v0.10.52.zip",
+  "docker_image": "ghcr.io/dansidanutz/semeclaw:0.10.52",
   "checksums": {
-    "sha256": ""
+    "sha256": "52c0b6280661888132b8e61f19a7d2919b475f99fa0c5bf9eb157ed26f50abab"
   },
   "changelog_url": "https://github.com/DansiDanutz/SemeClaw/blob/main/CHANGELOG.md",
   "assets": {

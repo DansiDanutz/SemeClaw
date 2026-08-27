@@ -13,6 +13,10 @@ All notable changes to SemeClaw will be documented in this file.
   server.py now 4,757 lines (from 6,096 at the start of the breakup);
   no route paths or behavior changed.
 
+## [0.10.52] - 2026-08-27
+
+### Changed
+
 - Extracted the voice surface (`/api/tts`, `/api/stt`, `/api/voices/map`,
   `/api/voices/clone`) plus the voice engine (default speaker map, ElevenLabs
   key/model/voice-id cache, per-tenant overrides, text naturalizer) from
