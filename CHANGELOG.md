@@ -20,6 +20,16 @@ All notable changes to SemeClaw will be documented in this file.
   server.py now 4,757 lines (from 6,096 at the start of the breakup);
   no route paths or behavior changed.
 
+### Fixed
+
+- Extracted routers now honor the `WAR_ROOM_DIR` data-dir override like
+  `server.py` does (they previously read the package tree), while bundled
+  resources and version metadata stay on the checkout root.
+- `server.py` loads as a single module instance whether started via
+  `python server.py`, imported as `server`, or via the package path;
+  previously extracted routes could see a second copy (fleet health
+  broadcasts reached no WebSocket clients under `python server.py`).
+
 ## [0.10.52] - 2026-08-27
 
 ### Changed
