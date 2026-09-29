@@ -44,7 +44,9 @@ RESEARCH_DIR = WAR_ROOM_DIR / "research"
 AGENTS_DIR = WAR_ROOM_DIR / "agents"
 CONFIG_FILE = WAR_ROOM_DIR / "config.json"
 
-ROOT = WAR_ROOM_DIR.parent
+# Checkout root for bundled resources and source metadata (pyproject, ads) —
+# deliberately independent of the WAR_ROOM_DIR data override.
+ROOT = Path(__file__).parent.parent.parent.parent
 
 logger = logging.getLogger("war_room.dashboard")
 

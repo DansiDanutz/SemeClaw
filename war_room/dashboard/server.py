@@ -40,6 +40,12 @@ _REPO_ROOT = Path(__file__).parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# One module instance however this file is loaded (as __main__ via
+# `python server.py`, as `server` with the dashboard dir on sys.path, or as
+# the package module): extracted routers resolve shared state lazily through
+# `war_room.dashboard.server`, which must not import a second copy.
+sys.modules.setdefault("war_room.dashboard.server", sys.modules[__name__])
+
 import httpx
 
 try:
