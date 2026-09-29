@@ -6,6 +6,13 @@ All notable changes to SemeClaw will be documented in this file.
 
 ### Changed
 
+- Extracted the meeting media surface (`/api/meeting/script`, `audio`, `list`,
+  `pin`, `unpin`) plus the shared retention/audio-cache helpers
+  (`_find_report`, `_prune_old`, `_build_meeting_mp3`, the meeting/report
+  dirs) into `war_room/dashboard/routes/meeting_media.py` (server.py breakup
+  slice 5); `routes/reports.py` now imports those helpers from their new home.
+  server.py at 4,418 lines (from 6,096 at the start of the breakup); no route
+  paths or behavior changed.
 - Extracted the agent-fleet surface (`/api/agent/run-start`, `run-complete`,
   `health/probe`, `health`, `history/{agent_name}`) plus the droplet
   connectivity-probe machinery and its background loop into

@@ -86,7 +86,7 @@ def test_write_endpoints_open_on_loopback_when_no_api_key(client):
     with (
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
         patch("war_room.dashboard.server._is_loopback_request", return_value=True),
-        patch("war_room.dashboard.server._build_meeting_mp3", return_value=None),
+        patch("war_room.dashboard.routes.meeting_media._build_meeting_mp3", return_value=None),
     ):
         r = client.post("/api/meeting/pin", params={"name": "x.md"})
         # _build_meeting_mp3 returns None for missing report → 500
@@ -163,7 +163,7 @@ def test_public_spotlight_click_is_rate_limited(client):
 def test_write_endpoints_require_bearer_when_key_set(client):
     with (
         patch("war_room.dashboard.server.SEMECLAW_API_KEY", "secret123"),
-        patch("war_room.dashboard.server._build_meeting_mp3", return_value=None),
+        patch("war_room.dashboard.routes.meeting_media._build_meeting_mp3", return_value=None),
     ):
         # No auth header
         r = client.post("/api/meeting/pin", params={"name": "x.md"})

@@ -8,12 +8,12 @@ Extracted from server.py (Phase 3.1 of the improvement goal, slice 2). Owns:
     POST   /api/reports/upload   — multipart .md upload
     DELETE /api/reports          — delete a report + cached meeting audio
 
-Shared helpers that also serve the meeting surface (`_find_report`,
-`_prune_old`, `_build_meeting_mp3`, `_safe_report_name`,
-`_report_dir_for_tenant`, `_dispatch_webhook`, and the audio dirs) still
-live in server.py and are imported lazily at call time — they migrate when
-the meeting surface is extracted. server.py imports this module at startup,
-so module-level imports back into it would be circular.
+Retention/audio helpers (`_find_report`, `_prune_old`, `_build_meeting_mp3`,
+the meeting/report dirs) live in routes/meeting_media.py (slice 5). Helpers
+that remain in server.py (`_safe_report_name`, `_report_dir_for_tenant`,
+`_dispatch_webhook`) are imported lazily at call time — server.py imports
+this module at startup, so module-level imports back into it would be
+circular.
 """
 
 from __future__ import annotations
@@ -26,6 +26,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from war_room.dashboard.routes.deps import RESEARCH_DIR, _tenant_id
+from war_room.dashboard.routes.meeting_media import (
+    MEETINGS_DIR,
+    MEETINGS_SAVED,
+    RESEARCH_SAVED,
+    _build_meeting_mp3,
+    _find_report,
+    _prune_old,
+)
 
 logger = logging.getLogger("war_room.dashboard.reports")
 router = APIRouter(tags=["reports"])
@@ -41,13 +49,13 @@ def _srv():
 @router.get("/api/reports")
 async def api_reports():
     srv = _srv()
-    srv._prune_old()  # enforce retention on listing
+    _prune_old()  # enforce retention on listing
     files = []
-    for d, saved in ((srv.RESEARCH_SAVED, True), (RESEARCH_DIR, False)):
+    for d, saved in ((RESEARCH_SAVED, True), (RESEARCH_DIR, False)):
         for f in d.glob("*.md"):
             if not f.is_file():
                 continue
-            if d == RESEARCH_DIR and f.parent == srv.RESEARCH_SAVED:
+            if d == RESEARCH_DIR and f.parent == RESEARCH_SAVED:
                 continue  # skip dir-ception
             files.append((f, saved))
     files.sort(key=lambda t: t[0].stat().st_mtime, reverse=True)
@@ -70,11 +78,11 @@ async def api_reports():
 async def api_report_content(name: str):
     """Return the full markdown content of a report (checks saved/ first, then rolling)."""
     srv = _srv()
-    path = srv._find_report(name)
+    path = _find_report(name)
     if not path or path.suffix != ".md":
         return JSONResponse({"error": "not found"}, status_code=404)
     try:
-        saved = path.parent == srv.RESEARCH_SAVED
+        saved = path.parent == RESEARCH_SAVED
         return JSONResponse({"name": path.name, "saved": saved, "content": path.read_text(encoding="utf-8")})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -125,7 +133,7 @@ async def api_reports_create(request: Request):
     # Optional: generate the audio now
     audio_url = None
     if data.get("auto_audio"):
-        mp3 = await srv._build_meeting_mp3(name)
+        mp3 = await _build_meeting_mp3(name)
         if mp3:
             audio_url = f"/api/meeting/audio?name={name}"
 
@@ -180,7 +188,7 @@ async def api_reports_upload(request: Request):
 
     audio_url = None
     if (form.get("auto_audio") or "").lower() in ("1", "true", "yes"):
-        mp3 = await srv._build_meeting_mp3(name)
+        mp3 = await _build_meeting_mp3(name)
         if mp3:
             audio_url = f"/api/meeting/audio?name={name}"
 
@@ -211,7 +219,7 @@ async def api_reports_upload(request: Request):
 async def api_reports_delete(name: str):
     """Delete a report and its cached meeting audio (if any)."""
     srv = _srv()
-    path = srv._find_report(name)
+    path = _find_report(name)
     if not path:
         return JSONResponse({"error": "not found"}, status_code=404)
     try:
@@ -220,7 +228,7 @@ async def api_reports_delete(name: str):
         return JSONResponse({"error": str(e)}, status_code=500)
     # Also remove any cached meeting MP3 whose stem matches this report
     removed_audio = 0
-    for d in (srv.MEETINGS_DIR, srv.MEETINGS_SAVED):
+    for d in (MEETINGS_DIR, MEETINGS_SAVED):
         for f in d.glob("*.mp3"):
             if path.stem in f.stem:
                 try:
