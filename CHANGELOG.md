@@ -2,6 +2,17 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Extracted the agent-fleet surface (`/api/agent/run-start`, `run-complete`,
+  `health/probe`, `health`, `history/{agent_name}`) plus the droplet
+  connectivity-probe machinery and its background loop into
+  `war_room/dashboard/routes/fleet.py` (server.py breakup slice 4).
+  server.py now 4,757 lines (from 6,096 at the start of the breakup);
+  no route paths or behavior changed.
+
 ## [0.10.52] - 2026-08-27
 
 ### Changed
