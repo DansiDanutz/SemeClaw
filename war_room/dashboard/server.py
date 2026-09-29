@@ -44,7 +44,9 @@ if str(_REPO_ROOT) not in sys.path:
 # `python server.py`, as `server` with the dashboard dir on sys.path, or as
 # the package module): extracted routers resolve shared state lazily through
 # `war_room.dashboard.server`, which must not import a second copy.
-sys.modules.setdefault("war_room.dashboard.server", sys.modules[__name__])
+_this_module = sys.modules.get(__name__)
+if _this_module is not None:
+    sys.modules.setdefault("war_room.dashboard.server", _this_module)
 
 import httpx
 
