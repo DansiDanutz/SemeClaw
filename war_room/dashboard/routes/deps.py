@@ -35,7 +35,9 @@ SEMECLAW_MANIFEST_URL = os.environ.get(
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-WAR_ROOM_DIR = Path(__file__).parent.parent.parent
+# Same environment override as server.py — both must resolve identical paths
+# or the extracted routers read/write a different tree than the monolith.
+WAR_ROOM_DIR = Path(os.environ.get("WAR_ROOM_DIR", str(Path(__file__).parent.parent.parent)))
 STATE_FILE = WAR_ROOM_DIR / "shared_state.json"
 LOGS_DIR = WAR_ROOM_DIR / "logs"
 RESEARCH_DIR = WAR_ROOM_DIR / "research"
