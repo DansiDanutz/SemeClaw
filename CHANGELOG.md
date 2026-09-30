@@ -11,14 +11,8 @@ All notable changes to SemeClaw will be documented in this file.
   (`_find_report`, `_prune_old`, `_build_meeting_mp3`, the meeting/report
   dirs) into `war_room/dashboard/routes/meeting_media.py` (server.py breakup
   slice 5); `routes/reports.py` now imports those helpers from their new home.
-  server.py at 4,418 lines (from 6,096 at the start of the breakup); no route
+  server.py at 4,426 lines (from 6,096 at the start of the breakup); no route
   paths or behavior changed.
-- Extracted the agent-fleet surface (`/api/agent/run-start`, `run-complete`,
-  `health/probe`, `health`, `history/{agent_name}`) plus the droplet
-  connectivity-probe machinery and its background loop into
-  `war_room/dashboard/routes/fleet.py` (server.py breakup slice 4).
-  server.py now 4,757 lines (from 6,096 at the start of the breakup);
-  no route paths or behavior changed.
 
 ### Fixed
 
@@ -29,6 +23,17 @@ All notable changes to SemeClaw will be documented in this file.
   `python server.py`, imported as `server`, or via the package path;
   previously extracted routes could see a second copy (fleet health
   broadcasts reached no WebSocket clients under `python server.py`).
+
+## [0.10.53] - 2026-09-30
+
+### Changed
+
+- Extracted the agent-fleet surface (`/api/agent/run-start`, `run-complete`,
+  `health/probe`, `health`, `history/{agent_name}`) plus the droplet
+  connectivity-probe machinery and its background loop into
+  `war_room/dashboard/routes/fleet.py` (server.py breakup slice 4).
+  server.py now 4,757 lines (from 6,096 at the start of the breakup);
+  no route paths or behavior changed.
 
 ## [0.10.52] - 2026-08-27
 
