@@ -2,6 +2,28 @@
 
 All notable changes to SemeClaw will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Extracted the meeting media surface (`/api/meeting/script`, `audio`, `list`,
+  `pin`, `unpin`) plus the shared retention/audio-cache helpers
+  (`_find_report`, `_prune_old`, `_build_meeting_mp3`, the meeting/report
+  dirs) into `war_room/dashboard/routes/meeting_media.py` (server.py breakup
+  slice 5); `routes/reports.py` now imports those helpers from their new home.
+  server.py at 4,426 lines (from 6,096 at the start of the breakup); no route
+  paths or behavior changed.
+
+### Fixed
+
+- Extracted routers now honor the `WAR_ROOM_DIR` data-dir override like
+  `server.py` does (they previously read the package tree), while bundled
+  resources and version metadata stay on the checkout root.
+- `server.py` loads as a single module instance whether started via
+  `python server.py`, imported as `server`, or via the package path;
+  previously extracted routes could see a second copy (fleet health
+  broadcasts reached no WebSocket clients under `python server.py`).
+
 ## [0.10.53] - 2026-09-30
 
 ### Changed

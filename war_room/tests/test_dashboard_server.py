@@ -21,14 +21,21 @@ from war_room.dashboard.server import app
 def client(tmp_path):
     from starlette.testclient import TestClient
 
-    # Isolate research dir and state file for tests
-    with patch("war_room.dashboard.server.RESEARCH_DIR", tmp_path / "research"):
-        with patch("war_room.dashboard.server.STATE_FILE", tmp_path / "state.json"):
-            with patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""):
-                with patch("war_room.dashboard.server._is_loopback_request", return_value=True):
-                    (tmp_path / "research").mkdir(exist_ok=True)
-                    with TestClient(app) as c:
-                        yield c
+    # Isolate research dir and state file for tests. The retention helpers
+    # (_find_report, _prune_old) live in routes/meeting_media.py, so its
+    # module globals are patched alongside the server's re-exported names.
+    with (
+        patch("war_room.dashboard.server.RESEARCH_DIR", tmp_path / "research"),
+        patch("war_room.dashboard.routes.meeting_media.RESEARCH_DIR", tmp_path / "research"),
+        patch("war_room.dashboard.routes.meeting_media.RESEARCH_SAVED", tmp_path / "research" / "saved"),
+        patch("war_room.dashboard.server.STATE_FILE", tmp_path / "state.json"),
+        patch("war_room.dashboard.routes.meeting_media.STATE_FILE", tmp_path / "state.json"),
+        patch("war_room.dashboard.server.SEMECLAW_API_KEY", ""),
+        patch("war_room.dashboard.server._is_loopback_request", return_value=True),
+    ):
+        (tmp_path / "research").mkdir(exist_ok=True)
+        with TestClient(app) as c:
+            yield c
 
 
 def test_tts_health_returns_neural_when_edge_ready(client):
@@ -92,7 +99,7 @@ def test_meeting_finalize_appends_qa_and_verdict(client, tmp_path):
 
 
 def test_meeting_pin(client, tmp_path):
-    with patch("war_room.dashboard.server._build_meeting_mp3", return_value=None):
+    with patch("war_room.dashboard.routes.meeting_media._build_meeting_mp3", return_value=None):
         r = client.post("/api/meeting/pin", params={"name": "launch-review.md"})
         # _build_meeting_mp3 returns None for missing report → 500
         assert r.status_code in (200, 500)

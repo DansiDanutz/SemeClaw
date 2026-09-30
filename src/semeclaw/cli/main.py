@@ -321,11 +321,14 @@ def war_room(
 
     import uvicorn
 
-    spec = importlib.util.spec_from_file_location("dashboard_server", str(dashboard_script))
+    # Register under the package name so routers that import
+    # war_room.dashboard.server share this instance instead of loading a copy.
+    spec = importlib.util.spec_from_file_location("war_room.dashboard.server", str(dashboard_script))
     if spec is None:
         console.print(f"[red]Could not load dashboard server from {dashboard_script}[/red]")
         raise typer.Exit(1)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     uvicorn.run(module.app, host=host, port=port, log_level="info")
 
